@@ -117,6 +117,10 @@ Find what its row says:
 **An agent shows a dialog** (a permission prompt, a question with choices): the chat says so. Press `Enter` to go into the
 agent and answer it there.
 
+**A review fails as `Needs a login`** before any reviewer tab opened: the reviewer's program says it is signed out on
+this machine (`codex login status`). Run what the failure names (`codex login`) in a terminal, then retry; or set a
+`reviewer.fallback` that is signed in ([the reviewer's own start-up screens](how-work-gets-done.md#the-reviewers-own-start-up-screens)).
+
 **An agent asked a question in plain words and stopped**: the board takes that as finished and reviews it. Reply to the
 agent, and it goes on ([an agent that waits for you](waiting-for-you.md)).
 

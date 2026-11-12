@@ -68,5 +68,41 @@ fn a_signed_out_codex_hands_the_review_to_the_fallback_as_logged_out() {
     assert_eq!(t.s("stage"), "approval", "{} {}", t.s("msg"), t.at("failure"));
     assert!(starts_of(&w, "codex").is_empty(), "{:?}", starts_of(&w, "codex"));
     assert_eq!(starts_of(&w, "claude").len(), 2, "the worker, and claude reviewing in codex's place");
-    assert_eq!(handovers(&t).iter().map(handover_line).collect::<Vec<_>>(), vec!["claude took over from codex: logged out"]);
+    assert_eq!(handovers(&t).iter().map(handover_line).collect::<Vec<_>>(), vec!["claude took over the review from codex: logged out"]);
+}
+
+#[test]
+fn the_attempts_picker_on_codex_also_starts_with_its_hooks_off() {
+    let w = reviewed_by(json!({ "merge.by": "itself", "merge.pr": false }));
+    w.patch(|s| s["hooksToReview"] = json!(["codex"]));
+    w.script(json!({ "worker": [step(1), step(2)], "picker": [{ "comparison": { "pick": "b", "why": "B is the smallest change." } }] }));
+    let id = w.add("Picked past a new hook");
+    delegate_with(&id, json!({ "attempts.by": "claude, pi", "attempts.pick": "reviewer" }));
+    let t = settle_all(&id);
+    assert_eq!(t.at("picked").s("letter"), "B", "{} {} {}", t.s("stage"), t.at("comparison"), t.at("failure"));
+    let starts = starts_of(&w, "codex");
+    assert!(!starts.is_empty() && starts.iter().all(|c| c.contains(" -c features.hooks=false")), "{starts:?}");
+}
+
+#[test]
+fn a_signed_out_codex_is_not_started_to_pick_and_the_comparison_says_to_sign_in() {
+    let w = reviewed_by(json!({ "merge.by": "itself", "merge.pr": false }));
+    codex_signed_out(&w);
+    w.script(json!({ "worker": [step(1), step(2)], "picker": [{ "comparison": { "pick": "b", "why": "B is the smallest change." } }] }));
+    let id = w.add("Pick while signed out");
+    delegate_with(&id, json!({ "attempts.by": "claude, pi", "attempts.pick": "reviewer" }));
+    let t = settle_all(&id);
+    assert!(starts_of(&w, "codex").is_empty(), "{:?}", starts_of(&w, "codex"));
+    assert!(t.at("picked").is_null(), "nothing was picked: {}", t.at("picked"));
+    assert_eq!(t.at("comparison").s("error"), "codex is not signed in here (`codex login status` says so): run `codex login` in a terminal here, then pick again", "{} {}", t.s("stage"), t.at("comparison"));
+}
+
+#[test]
+fn only_a_role_that_looks_is_started_with_its_hooks_off() {
+    let _w = world();
+    let args = |k: &str, no_hooks: bool| sw::agents::start::start_args(k, &sw::agents::start::StartOpts { no_hooks, ..Default::default() }).unwrap();
+    assert!(args("codex", true).windows(2).any(|a| a == ["-c", "features.hooks=false"]), "{:?}", args("codex", true));
+    // A worker keeps your hooks (herdr's own integration is one), and a program with no such switch starts as it is.
+    assert!(!args("codex", false).iter().any(|a| a.contains("hooks")), "{:?}", args("codex", false));
+    assert_eq!(args("claude", true), args("claude", false));
 }

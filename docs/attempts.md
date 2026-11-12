@@ -64,6 +64,9 @@ attempts fan out (attempts.by)
    - **Several, `attempts.pick reviewer`:** the reviewer compares them the same way, and the one it names goes on by
      itself. If it names none (it failed or timed out), or there is no reviewer, the task waits for your pick and says
      why.
+   - The picker starts as the reviewer does: with your own hooks off, and not at all when its program says it is
+     signed out here; the comparison then says what to run ([the reviewer's own start-up
+     screens](how-work-gets-done.md#the-reviewers-own-start-up-screens)).
 4. **Only the chosen one is reviewed.** It becomes the task: its worktree, branch, agent and conversation are the task's
    from then on. It alone gets the full review loop, is pushed, gets a pull request and is merged, exactly like a task
    done once ([how work gets done](how-work-gets-done.md)). Its check does not run again on the same commit, unless
