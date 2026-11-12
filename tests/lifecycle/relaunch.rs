@@ -64,7 +64,7 @@ fn a_working_agent_whose_terminal_went_comes_back_by_itself_in_its_own_conversat
     // nothing more while it runs
     later(&w, &id, 120_000);
     assert_eq!(starts(&w).len(), 2);
-    // ten minutes of it running after the try: its tries count from none again
+    // ten minutes of it running without a break: its tries count from none again
     let t = later(&w, &id, 600_000);
     assert!(!t.b("relaunched"), "{}", t.at("relaunched"));
 }
@@ -159,4 +159,93 @@ fn nor_an_attempt_whose_agent_went_it_is_out_as_before() {
     assert_eq!(starts(&w).len(), before);
     assert!(!kid(&id, "A").b("relaunched"));
     assert_eq!(sw::attempts::words::standing_of(&kid(&id, "A"), sw::clock::now()), "out");
+}
+
+#[test]
+fn a_restart_asked_for_and_not_run_yet_leaves_a_task_you_stopped_meanwhile_alone() {
+    let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
+    w.script(json!({ "worker": [{ "status": "working" }, { "status": "working" }] }));
+    let id = working(&w, "Stopped before its restart ran");
+    exits(&w, &id);
+    keep(&w);
+    sw::clock::advance(21_000);
+    // a hook in a plan's sandbox asks the keeper for the restart, which runs it a while later
+    unsafe { std::env::set_var("HERDR_PROJECTS_BOXED", "1"); }
+    keep(&w);
+    unsafe { std::env::remove_var("HERDR_PROJECTS_BOXED"); }
+    assert!(sw::runner::outside::asked().iter().any(|j| j.0 == "restart" && j.1 == id));
+    assert_eq!(task(&id).at("relaunched").i("tries"), 1);
+    // you stop it meanwhile: the restart, when it runs, does nothing
+    sw::actions::talk::stop(&id).unwrap();
+    sw::runner::outside::start_asked();
+    let t = settle(&id);
+    assert_eq!((starts(&w).len(), t.t("stage")), (1, "stopped".into()));
+    // and its words are not left for a later start: a reply starts it with yours alone
+    sw::actions::talk::tell(&id, "Go on with the docs.", false).unwrap();
+    let t = settle(&id);
+    assert_eq!(starts(&w).len(), 2);
+    let said = prompts(&w, t.at("link").s("pane")).join("\n");
+    assert!(said.contains("Go on with the docs.") && !said.contains("the board started it again"), "{said}");
+}
+
+#[test]
+fn a_pane_id_herdr_gave_to_another_agent_is_left_alone_and_the_task_comes_back_in_a_pane_of_its_own() {
+    let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
+    w.script(json!({ "worker": [{ "status": "working" }, { "status": "working" }] }));
+    let id = working(&w, "Its pane id given away");
+    let pane = task(&id).at("link").t("pane");
+    // herdr restarted and handed the task's pane id to another terminal, another agent in another folder
+    let elsewhere = w.base.join("other-project").display().to_string();
+    w.patch(|s| { for p in s["panes"].as_array_mut().unwrap() { if p.s("pane_id") == pane { p["terminal_id"] = json!("term-of-another"); p["cwd"] = json!(elsewhere); p["agent"]["name"] = json!("another-agent"); p["agent"]["prompts"] = json!([]); } } });
+    keep(&w);
+    assert_eq!(row(&id).t("note"), "The agent's terminal is gone");
+    let t = later(&w, &id, 21_000);
+    assert!(prompts(&w, &pane).is_empty(), "the other agent was told: {:?}", prompts(&w, &pane));
+    assert_eq!(starts(&w).len(), 2);
+    assert_ne!(t.at("link").t("pane"), pane);
+    assert!(prompts(&w, t.at("link").s("pane")).last().unwrap().contains("the board started it again"));
+}
+
+#[test]
+fn herdr_not_answering_about_the_agent_changes_nothing() {
+    let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
+    w.script(json!({ "worker": [{ "status": "working" }] }));
+    let id = working(&w, "herdr times out");
+    let last = task(&id).at("last").clone();
+    w.patch(|s| s["agentGetFails"] = json!(true));
+    keep(&w);
+    let t = later(&w, &id, 21_000);
+    later(&w, &id, 400_000);
+    assert_eq!((t.t("stage"), starts(&w).len(), t.b("relaunched"), t.b("exitedAt")), ("working".into(), 1, false, false), "{}", t.at("failure"));
+    assert_eq!(task(&id).at("last"), &last);
+    w.patch(|s| s["agentGetFails"] = json!(false));
+    keep(&w);
+    assert_eq!((row(&id).t("state"), task(&id).t("stage")), ("working".into(), "working".into()));
+}
+
+#[test]
+fn a_moment_of_running_between_two_stops_does_not_count_its_tries_from_none_ten_minutes_without_a_break_does() {
+    let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
+    w.script(json!({ "worker": [{ "status": "working" }, { "status": "working" }] }));
+    let id = working(&w, "Up and down");
+    exits(&w, &id);
+    keep(&w);
+    later(&w, &id, 21_000);
+    let pane = task(&id).at("link").t("pane");
+    let agent = agent_of(&w, &pane);
+    // it runs for almost ten minutes, stops, and comes back by itself a moment later
+    later(&w, &id, 30_000);
+    sw::clock::advance(560_000);
+    exits(&w, &id);
+    keep(&w);
+    sw::clock::advance(11_000);
+    w.patch(|s| { for p in s["panes"].as_array_mut().unwrap() { if p.s("pane_id") == pane { p["agent"] = agent.clone(); } } });
+    keep(&w);
+    assert_eq!(task(&id).at("relaunched").i("tries"), 1, "its tries counted from none after a break");
+    // nine minutes more without a break: still its first try
+    later(&w, &id, 540_000);
+    assert_eq!(task(&id).at("relaunched").i("tries"), 1);
+    // ten minutes since it came back: from none again
+    let t = later(&w, &id, 61_000);
+    assert!(!t.b("relaunched"), "{}", t.at("relaunched"));
 }

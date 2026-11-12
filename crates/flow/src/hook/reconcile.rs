@@ -25,7 +25,8 @@ pub fn reconcile(t: &Task, api: &Herdr) {
     let theirs = |p: &Value| crate::flow::pane_owner::coordinators_pane(t.at("link").s("socket"), p.s("pane_id"), p.s("terminal_id"));
     let mut pane = api.pane_get(t.at("link").s("pane")).filter(|p| crate::flow::live::owns_pane(t, p) && !theirs(p));
     if pane.is_none() { pane = relink(t, api); }
-    let agent = pane.as_ref().and_then(|p| api.agent_get(p.s("pane_id")).ok().flatten());
+    // A lookup herdr did not answer says nothing about the agent: the task is left as it is until one that does.
+    let agent = match pane.as_ref().map(|p| api.agent_get(p.s("pane_id"))) { Some(Err(_)) => return, Some(Ok(a)) => a, None => None };
     if agent.is_none() { check_sent(id, None, api); } // gone with typed text not taken: not started, the text kept
     // Gone, or exited: a working task's agent is started again by itself, a few times at most (hook/relaunch.rs).
     let Some(_) = pane else {

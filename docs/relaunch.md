@@ -14,7 +14,13 @@ The board looks at every task's agent on each of its rounds (the keeper's, with 
   ([linking](linking.md)). The row says `The agent's terminal is gone`.
 - **Its program exited.** The pane is there, at its shell, with no agent in it. The row says `The agent has exited`.
 
-Nothing is started while Herdr does not answer: a pane it did not report is no reason to start a second copy.
+**Nothing is done on a look Herdr did not answer.** An agent lookup that timed out leaves the task as it was. Before a
+try, the board asks Herdr again for every pane and every agent, and starts nothing unless all of that answers and none
+of it is the task's agent. So a slow Herdr never makes a second copy, nor fails a task whose agent still runs.
+
+**A pane id Herdr handed to another is not the task's.** After a restart Herdr may give the task's old pane id to
+another terminal. The board neither types into it nor ends what runs there: the task comes back in a new pane of its
+space.
 
 ## The tries
 
@@ -34,7 +40,11 @@ has it, and is told:
 With no conversation to resume, it starts afresh with the task, told that it worked on it before.
 
 **The count is kept on the task** (`relaunched`). It starts again from none after a reply, a new delegation, or ten
-minutes of the agent running after its last try.
+minutes of the agent running without a break: seen down once in between, those ten minutes start again.
+
+**A try that runs late is still checked.** A restart asked for from inside a plan's sandbox runs a while later, from
+the keeper. When it runs, it goes ahead only if the task is still at work and still counted for a try: a task you
+stopped, replied to or archived meanwhile is left alone.
 
 ## When it keeps stopping
 
