@@ -515,9 +515,10 @@ requests, starts queued tasks, runs the Watcher, and keeps Herdr's sidebar curre
   two entries, the agent's and the reviewer's: they are two agents. The sidebar shows only tasks with a live agent pane;
   the others (queued, your own) are on the board only.
 - **The agent's last words, tokens and model** while it works come from its saved conversation, looked at every five
-  seconds: its last 768 KB. The file is read again only when its size or time changed, and then only what was written
-  since. What was read is kept in memory while the agent works and let go a minute after; a file replaced, cut shorter
-  or changed in place is read from its end again (`crates/core/src/agents/read_kept.rs`).
+  seconds: its last 768 KB. The file is read again only when its size or time changed, and then only the bytes written
+  since, also when they go on a line still being written. What was read is kept in memory while the agent works and let
+  go a minute after; a file replaced, cut shorter or changed in place is read from its end again, and more than 768 KB
+  added at once is read as its last 768 KB (`crates/core/src/agents/read_kept.rs`).
 - **No notifications.** It raises no pop-up or sound: what needs you is on the board and in Herdr's sidebar.
 - **Its life.** Herdr starts it with its server. Any Herdr event, or opening the board, starts it again if it died. It
   replaces itself when the plugin is updated, and exits when Herdr is gone. It looks after this machine's tasks only.
