@@ -2,13 +2,14 @@
 //! it out while a turn is going, so a missing one while the agent works means "in a turn", never "none finished yet".
 use crate::json::*;
 
-/// Still in the turn that began after `mark` was read at rest (its `seq`: herdr's completion_seq then): the same
-/// completion, or none while it works. Where the turn was seen going right after its words went in (`work`: its
-/// state_change_seq then, `working_seq`), it must still be that one: a turn that ended unseen, with another typed
-/// straight into the terminal after it, has a later one. A mark without it (an older one, a turn not seen to start)
-/// is judged by the completion alone.
+/// Still in the turn that began after `mark` was read at rest (its `seq`: herdr's completion_seq then). At rest: the
+/// same completion. While it works herdr leaves the completion out, and the turn is told by `work`: herdr's
+/// state_change_seq when it was seen going right after its words went in (`working_seq`). A turn that ended unseen,
+/// with another typed straight into the terminal after it, has a later one; a turn never seen going (`work` null) is
+/// not known to be this one. A mark from before `work` was kept is judged as it was then: any turn going.
 pub fn same_turn(a: &Value, mark: &Value) -> bool {
-    *a.at("completion_seq") == *mark.at("seq") || (working_seq(a).is_some() && (!mark.has("work") || a.at("state_change_seq") == mark.at("work")))
+    if working_seq(a).is_some() { return mark.as_object().is_some_and(|m| !m.contains_key("work")) || a.at("state_change_seq") == mark.at("work"); }
+    *a.at("completion_seq") == *mark.at("seq")
 }
 /// herdr's number for the state an agent is in, while it works on a turn that has not ended: None at rest.
 pub fn working_seq(a: &Value) -> Option<Value> {

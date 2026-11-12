@@ -213,7 +213,7 @@ fn run_pump(co: &Co, taken: &mut HashSet<String>) -> Res<()> {
                 let mut l = c.arr("where").to_vec();
                 for x in l.iter_mut() { if x.s("id") == id { if let Some(o) = x.as_object_mut() { o.put("sentAt", now()); } } }
                 c.put("where", trimmed(&l));
-                c.put("mark", json!({ "run": run, "seq": seq, "rest": at_rest }));
+                c.put("mark", json!({ "run": run, "seq": seq, "rest": at_rest, "work": null }));
                 c.put("intro", false); c.put("rulesHash", rules_hash.clone()); c.put("sentAt", now());
                 if !m.b("autopilot") { c.put("last", m.at("said").clone()); c.put("over", over.clone()); c.put("overId", over_id.clone()); } // a wake is no words of yours
                 // Who its turn is on: a task's agent that sent it (coordinator tell), and an autopilot wake (autopilot/).

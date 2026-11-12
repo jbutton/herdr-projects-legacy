@@ -54,3 +54,20 @@ fn a_turn_typed_right_after_the_wakes_ended_is_not_autopilots_though_nothing_saw
     assert!(!sw::autopilot::turn::autopilot_turn(&co), "a turn after the wake's is not autopilot's");
     in_pane(&w, "");
 }
+
+/// The same when the wake is the first thing it is given (autopilot started it): herdr has no completion for it yet,
+/// before and after.
+#[test]
+fn a_turn_typed_right_after_its_first_wakes_ended_is_not_autopilots_either() {
+    let w = pilot_world();
+    let co = proj(&w);
+    w.script(json!({ "coordinator": [{ "status": "working" }] }));
+    ok(&["autopilot", "on", "--project", "proj", "--goal", "Docs", "--autopilot.scope", "all", "--autopilot.every", "none"]);
+    tick(&w);
+    in_pane(&w, &pane_of(&co));
+    assert!(sw::autopilot::turn::autopilot_turn(&co), "the wake's turn is still going");
+    end_turn(&w, &co);
+    busy(&w, &co);
+    assert!(!sw::autopilot::turn::autopilot_turn(&co), "a turn after the wake's is not autopilot's");
+    in_pane(&w, "");
+}

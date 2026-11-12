@@ -223,12 +223,12 @@ fn a_check_run_again_is_judged_by_its_newest_run_and_another_runs_failure_still_
     }
 }
 
-/// Two outside CIs that each call their check `build`: one's pass, begun after the other's failure, is not that check
-/// run again. The same CI's own run again is.
+/// Two outside CIs, or two pipelines of one, that each call their check `build`: one's pass, begun after the other's
+/// failure, is not that check run again. Only one with the very same link is.
 #[test]
 fn another_ci_s_check_of_the_same_name_is_its_own_check_and_its_failure_still_counts() {
     let outside = |conclusion: &str, url: &str, from: u8, to: u8| { let mut c = rerun(conclusion, url, from, to); c["workflowName"] = json!(""); c };
-    for (second, lands) in [("https://ci-b.example/build/2", false), ("https://ci-a.example/build/2", true), ("", false)] {
+    for (second, lands) in [("https://ci-b.example/build/2", false), ("https://ci-a.example/build/2", false), ("https://ci-a.example/independent-pipeline/build/2", false), ("https://ci-a.example/build/1", true), ("", false)] {
         let w = pr_world(json!({ "review.rounds": 0 }));
         let id = to_approval(&w, "Two CIs");
         let head = task(&id).t("prHead");
