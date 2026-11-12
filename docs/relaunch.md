@@ -43,8 +43,9 @@ With no conversation to resume, it starts afresh with the task, told that it wor
 minutes of the agent running without a break: seen down once in between, those ten minutes start again.
 
 **A try that runs late is still checked.** A restart asked for from inside a plan's sandbox runs a while later, from
-the keeper. When it runs, it goes ahead only if the task is still at work and still counted for a try: a task you
-stopped, replied to or archived meanwhile is left alone.
+the keeper. When it runs, it goes ahead only if the task is still at work and still counted for a try (a task you
+stopped, replied to or archived meanwhile is left alone), and only once Herdr, asked again, answers and shows the agent
+still down.
 
 ## When it keeps stopping
 
@@ -53,8 +54,10 @@ says how it stopped and what the board did. `board.notify` tells you, as for any
 
 - **A reply** starts it again, and the count starts from none.
 - **Retry** (`Ctrl+L`) tells it to continue, and does the same.
-- A start that fails outright (Herdr refused, the program is not installed) fails at once with
-  [what went wrong](could-not-start.md), with no more tries.
+- **A try that could not start it** (Herdr did not answer or refused, the program would not come up) fails nothing at
+  once: it was that try, and the next comes on time. When the board gives up, the task panel says what the last try ran
+  into. A start you asked for yourself, by a reply, still fails at once with
+  [what went wrong](could-not-start.md).
 
 ## Never started again
 
@@ -73,4 +76,4 @@ From Shepherdr's SHE-254 (63a8be4b, #441) and SHEP-30 (d5f0bc62, #622), rewritte
 - `crates/flow/src/hook/relaunch.rs`: when to try, the count, giving up;
 - `crates/flow/src/hook/reconcile.rs`: where a gone or exited agent is seen;
 - `crates/flow/src/delegate/jobs.rs` (`restart_job`): the restart itself;
-- `tests/lifecycle/relaunch.rs`.
+- `tests/lifecycle/relaunch.rs`, `tests/lifecycle/relaunch_fails.rs`.

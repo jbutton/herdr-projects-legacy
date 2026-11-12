@@ -174,13 +174,17 @@ fn delegate_steps(id: &str, g: &mut Guard, mut t: Task) -> Res<()> {
 }
 /// Restarting an exited agent: the same pane (or a new one in the task's workspace, reopened from the worktree if the
 /// workspace was closed). It resumes the same conversation where it can; otherwise it starts fresh with the task.
-/// `relaunch`: the board's own restart of a working agent that went (hook/relaunch.rs), told why.
+/// `relaunch`: the board's own restart of a working agent that went (hook/relaunch.rs), told why. One that fails fails
+/// nothing: it was that try, and the next one comes on time.
 pub fn restart_job(id: &str, relaunch: bool) {
     let Ok(Some(t)) = claim(id, "restart", |_| {}) else { return };
     let mut g = Guard::new(id);
     g.expect(&t, &[]);
-    if let Err(e) = restart_steps(id, &mut g, t, relaunch) {
-        if !is_aborted(&e) { fail_start(id, "Could not restart the agent", &e.msg, &format!("reply, or delegate again ({})", key_name("delegate"))); }
+    match restart_steps(id, &mut g, t, relaunch) {
+        Err(e) if is_aborted(&e) => {}
+        Err(e) if relaunch => crate::hook::relaunch::not_started(id, &e.msg),
+        Err(e) => fail_start(id, "Could not restart the agent", &e.msg, &format!("reply, or delegate again ({})", key_name("delegate"))),
+        Ok(()) => {}
     }
     release(id, false);
 }
@@ -191,6 +195,8 @@ fn restart_steps(id: &str, g: &mut Guard, mut t: Task, relaunch: bool) -> Res<()
     // it was asked for (a sandboxed hook leaves it to the keeper, a while later) leaves the task alone.
     if relaunch && !crate::hook::relaunch::still_due(&t) { return Ok(()); }
     let api = flow::task::h(&t);
+    // herdr asked again as it runs: one that does not answer, or the agent there after all, leaves the task as it is.
+    if relaunch && !crate::hook::relaunch::really_down(&t, &api) { return Ok(()); }
     let root = folder_of(t.s("id"));
     let mut pane = if t.at("link").b("pane") { api.pane_get(t.at("link").s("pane")).filter(|p| own_pane(&t, p)) } else { None };
     // Its box may still hold the text it never started on: the program is ended, and started again in the same pane.

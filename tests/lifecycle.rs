@@ -10,6 +10,8 @@ use sw::json::*;
 mod start_lost;
 /// A working agent whose terminal went or whose program exited comes back by itself, three tries at most.
 mod relaunch;
+/// The same when herdr does not answer or the program will not start.
+mod relaunch_fails;
 /// A stop ends what the agent started (a command, a dev server, what runs from its folders) and keeps the agent.
 mod stop;
 

@@ -8,17 +8,17 @@ use sw::housekeeping::{housekeeping, Force};
 use sw::json::*;
 use sw::store::tasks::patch;
 
-fn keep(w: &World) { housekeeping(&w.socket, Force::Yes); }
+pub(super) fn keep(w: &World) { housekeeping(&w.socket, Force::Yes); }
 /// The worker's starts so far (not a reviewer's), as herdr was asked for them.
-fn starts(w: &World) -> Vec<String> { calls(w).into_iter().filter(|c| c.starts_with("agent start") && !c.contains("-r ")).collect() }
+pub(super) fn starts(w: &World) -> Vec<String> { calls(w).into_iter().filter(|c| c.starts_with("agent start") && !c.contains("-r ")).collect() }
 /// Its conversation, saved where Claude Code keeps it: what it resumes.
-fn saved(t: &Obj) {
+pub(super) fn saved(t: &Obj) {
     let dir = std::path::Path::new(&std::env::var("CLAUDE_CONFIG_DIR").unwrap()).join("projects").join("-work");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join(format!("{}.jsonl", t.s("session"))), format!("{}\n", json!({ "type": "user", "message": { "role": "user", "content": "Work board task" } }))).unwrap();
 }
 /// A task whose agent is at work, its conversation saved.
-fn working(w: &World, title: &str) -> String {
+pub(super) fn working(w: &World, title: &str) -> String {
     let id = w.add(title);
     delegate(&id);
     let t = settle(&id);
@@ -27,17 +27,17 @@ fn working(w: &World, title: &str) -> String {
     id
 }
 /// Its program ends, to the pane's shell.
-fn exits(w: &World, id: &str) {
+pub(super) fn exits(w: &World, id: &str) {
     let pane = task(id).at("link").t("pane");
     w.patch(|s| { for p in s["panes"].as_array_mut().unwrap() { if p.s("pane_id") == pane { p["agent"] = Value::Null; } } });
 }
 /// Its terminal closes, and with it its space, as herdr leaves no empty one.
-fn closes(w: &World, id: &str) {
+pub(super) fn closes(w: &World, id: &str) {
     let pane = task(id).at("link").t("pane");
     w.patch(|s| { s["panes"].as_array_mut().unwrap().retain(|p| p.s("pane_id") != pane); common::herdr::FakeHerdr::drop_empty(s); });
 }
 /// Time goes by, and the board looks after its tasks.
-fn later(w: &World, id: &str, ms: i64) -> Obj { sw::clock::advance(ms); keep(w); settle(id) }
+pub(super) fn later(w: &World, id: &str, ms: i64) -> Obj { sw::clock::advance(ms); keep(w); settle(id) }
 
 #[test]
 fn a_working_agent_whose_terminal_went_comes_back_by_itself_in_its_own_conversation() {
@@ -102,7 +102,7 @@ fn one_that_keeps_stopping_is_tried_three_times_further_apart_then_waits_for_you
     let t = later(&w, &id, 21_000);
     assert_eq!(t.s("stage"), "failed");
     assert_eq!(t.at("failure").s("title"), "The agent keeps stopping");
-    assert!(t.at("failure").s("detail").contains("started it again 3 times"), "{}", t.at("failure").s("detail"));
+    assert!(t.at("failure").s("detail").contains("tried 3 times to start it again"), "{}", t.at("failure").s("detail"));
     assert_eq!((row(&id).t("state"), row(&id).t("note")), ("error".into(), "The agent keeps stopping: started again 3 times".into()));
     assert_eq!(sw::notify::event_of(&t), "failed");
     // and that is all: no more tries
@@ -204,23 +204,6 @@ fn a_pane_id_herdr_gave_to_another_agent_is_left_alone_and_the_task_comes_back_i
     assert_eq!(starts(&w).len(), 2);
     assert_ne!(t.at("link").t("pane"), pane);
     assert!(prompts(&w, t.at("link").s("pane")).last().unwrap().contains("the board started it again"));
-}
-
-#[test]
-fn herdr_not_answering_about_the_agent_changes_nothing() {
-    let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
-    w.script(json!({ "worker": [{ "status": "working" }] }));
-    let id = working(&w, "herdr times out");
-    let last = task(&id).at("last").clone();
-    w.patch(|s| s["agentGetFails"] = json!(true));
-    keep(&w);
-    let t = later(&w, &id, 21_000);
-    later(&w, &id, 400_000);
-    assert_eq!((t.t("stage"), starts(&w).len(), t.b("relaunched"), t.b("exitedAt")), ("working".into(), 1, false, false), "{}", t.at("failure"));
-    assert_eq!(task(&id).at("last"), &last);
-    w.patch(|s| s["agentGetFails"] = json!(false));
-    keep(&w);
-    assert_eq!((row(&id).t("state"), task(&id).t("stage")), ("working".into(), "working".into()));
 }
 
 #[test]
