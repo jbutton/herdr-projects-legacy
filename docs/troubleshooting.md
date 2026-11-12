@@ -104,6 +104,8 @@ Find what its row says:
 | `Stopped without a summary` | the agent stopped and the board cannot tell if it finished | `Ctrl+R` tells it to go on; `Ctrl+L` takes the work as it is |
 | `Agent's connection dropped, trying again in 2m` | the provider cut the turn off | nothing: the board retries by itself ([a turn cut off by the provider](provider-errors.md)) |
 | `Agent stopped` | an error waiting cannot fix: a usage limit, a refusal | read the reason in the panel; reply, or `Ctrl+R` |
+| `The agent's terminal is gone` · `The agent has exited` | Herdr or the computer restarted, or the agent's program crashed | nothing: the board starts it again by itself, three tries at most ([an agent that stopped comes back](relaunch.md)) |
+| `The agent keeps stopping: started again 3 times` | it went again after each of the board's three tries | go into the task to see its terminal; reply, or `Ctrl+L` ([an agent that stopped comes back](relaunch.md#when-it-keeps-stopping)) |
 | `Agent stopped: … can't be used with your ChatGPT sign-in` | its program refused its model | choose a model, then `Ctrl+L` ([above](#cant-be-used-with-your-chatgpt-sign-in-while-the-agent-works)) |
 | `Plan ready` · `The plan's review could not run (…): yours to judge` | the reviewer of a plan (`plan.approve reviewer`) could not start or gave no verdict | read the plan; `Ctrl+L` builds it, a reply sends it back, `herdr-projects retry <id>` has the reviewer look again ([a plan first](plan.md#the-reviewers-look)) |
 | `Needs a login` | the agent's program is logged out | log in (go into the agent with `Enter`), then reply or `Ctrl+R` |

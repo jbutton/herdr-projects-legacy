@@ -1,10 +1,11 @@
 //! The housekeeping pass. It rides on every hook run (for any pane, in any task), every board tick and the startup
 //! hook, rate-limited by timestamps in the data folder, so nothing important depends on the board being open:
 //! start the jobs asked for from inside a sandbox or by a command (runner/outside.rs), start queued tasks when a slot is
-//! free (and the ones that wait for others, once those are done: after.rs), reconcile each linked task with herdr, try
-//! a start whose runner was lost again (hook/lost.rs), bring waiting tasks up to date when main moved, archive tasks done
-//! for `archive.doneAfter` (housekeeping/done_after.rs), and poll open pull requests (housekeeping/prs.rs). One pass per
-//! herdr session at a time (housekeeping/once.rs).
+//! free (and the ones that wait for others, once those are done: after.rs), reconcile each linked task with herdr (a
+//! working agent that went is started again: hook/relaunch.rs), try a start whose runner was lost again (hook/lost.rs),
+//! bring waiting tasks up to date when main moved, archive tasks done for `archive.doneAfter`
+//! (housekeeping/done_after.rs), and poll open pull requests (housekeeping/prs.rs). One pass per herdr session at a time
+//! (housekeeping/once.rs).
 mod done_after;
 mod once;
 mod prs;
