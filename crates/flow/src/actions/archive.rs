@@ -12,27 +12,27 @@ use crate::store::tasks::{find, get, remove, update, update_wait, Change, Task};
 
 /// Archive closes the task's own herdr workspace (the agent ends with it) and frees its temporary files; the
 /// worktree, branch and history stay, and so does what runs from the worktree: its line names it for you to end.
-pub fn archive(id: &str) -> Res<Task> {
+pub fn archive(id: &str) -> Res<Task> { archive_on(id, Some(&current_socket()), |_| Ok(())) }
+/// The same, closing its space only in the herdr session at `here` (None: nowhere, its caller closed it first), and
+/// only if `still` lets the task go, asked under its lock: what archives a task by itself asks again what may have
+/// changed since it looked.
+pub fn archive_on(id: &str, here: Option<&str>, still: impl FnOnce(&Task) -> Res<()>) -> Res<Task> {
     let cur = find(id)?;
     if cur.b("archivedAt") { return Ok(cur); }
-    let (mut workspace, mut socket) = (String::new(), String::new());
+    let mut now_archived = false;
     let t = update(cur.s("id"), |t| {
         if t.b("archivedAt") { return Ok(Change::Keep); }
         if runner_alive(t) && t.at("runner").s("job") == "cleanup" { return Err(Error::busy(format!("{} is busy cleaning up after its merge. Try again in a moment.", t.s("id")))); }
         if SLOT_STAGES.contains(&t.s("stage")) || ["queued", "attempts"].contains(&t.s("stage")) || runner_alive(t) || t.b("autoMerge") || t.b("mergeIntent") {
             crate::fail!("{} is still active. Stop its agent first; an automatic merge must finish first.", t.s("id"));
         }
+        still(t)?;
         t.put("archivedAt", crate::clock::now());
-        if t.at("link").b("workspace") && t.at("link").b("ownsWorkspace") { workspace = t.at("link").t("workspace"); socket = t.at("link").t("socket"); }
+        now_archived = true;
         Ok(Change::Write)
     })?;
     let before = crate::land::cleanup_ends::before_archive(&t); // sorted while its panes are there (cleanup_ends.rs)
-    let mut closed = false;
-    if !workspace.is_empty() && same_socket(&socket, &current_socket()) {
-        let h = Herdr::new(Some(socket));
-        closed = h.workspace_close(&workspace).is_ok();
-        flow::spaces::close_repo_space(&h, &folder_of(t.s("id")));
-    }
+    let closed = now_archived && here.and_then(|h| close_space(&t, h)) == Some(true);
     let left = Ended { ended: vec![], left: crate::land::cleanup_ends::still_running(&t, before, closed) };
     // Its agent gone with its space: its temporary files go too, and its line says what that freed.
     let freed = crate::leftovers::sweep::free_ended(&t);
@@ -43,6 +43,16 @@ pub fn archive(id: &str) -> Res<Task> {
         t.put("msg", m);
         Ok(Change::Write)
     })
+}
+/// The task's own space closed, and its repo's space with it when that is left empty, in the herdr session at `here`
+/// only: whether herdr closed it, or None when it has no space of its own there.
+pub fn close_space(t: &Task, here: &str) -> Option<bool> {
+    let link = t.at("link");
+    if !link.b("workspace") || !link.b("ownsWorkspace") || !same_socket(link.s("socket"), here) { return None; }
+    let h = Herdr::new(Some(link.t("socket")));
+    let closed = h.workspace_close(link.s("workspace")).is_ok();
+    flow::spaces::close_repo_space(&h, &folder_of(t.s("id")));
+    Some(closed)
 }
 /// Restore changes nothing in herdr and starts nothing. Its time is kept: a done task counts from it again before it
 /// archives itself (`archive.doneAfter`, housekeeping/done_after.rs).

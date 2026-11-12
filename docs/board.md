@@ -119,7 +119,9 @@ Tasks stand in five groups, in the order they need you:
     with no key pressed; `--repo` sets it for one repo, `--task` for one task ([settings](settings.md)). It takes what
     `archive --done` takes, each as one archive does. A done task waits while its clean-up is still to come or its
     space is in use (a command of yours, its agent at work), and goes once that is over. The housekeeping pass does
-    it, about once a minute, whether the board is open or not.
+    it, about once a minute, whether the board is open or not. Its space is closed first, by the pass of the herdr
+    session it is in, and only then is the task archived: a space herdr does not close keeps it for the next pass, and
+    a task you pin meanwhile stays.
 - **Automations** are a group of their own after the task groups, inside their machine's part of the list (by repo:
   under their repo) ([below](#automations-in-the-list)).
 
