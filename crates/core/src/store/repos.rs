@@ -150,8 +150,10 @@ pub fn folder_for(reference: &str, fallback: &Path) -> Res<PathBuf> {
 }
 /// `git <args>` with its status, output and error output, whatever it ended with; never asks for a password. Stopped
 /// at `timeout_ms`, it says so in git's own name (`git push did not end within 2m`), never as herdr's.
-pub fn git_full(cwd: &Path, args: &[&str], timeout_ms: u64) -> (i32, String, String) {
-    let child = Command::new("git").args(args).current_dir(cwd).env("GIT_TERMINAL_PROMPT", "0").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn();
+pub fn git_full(cwd: &Path, args: &[&str], timeout_ms: u64) -> (i32, String, String) { git_full_env(cwd, args, timeout_ms, &[]) }
+/// `git_full` with these variables in its environment besides this process's own (a repo's tools: tool_env.rs).
+pub fn git_full_env(cwd: &Path, args: &[&str], timeout_ms: u64, env: &[(String, String)]) -> (i32, String, String) {
+    let child = Command::new("git").args(args).current_dir(cwd).envs(env.iter().map(|(k, v)| (k, v))).env("GIT_TERMINAL_PROMPT", "0").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn();
     let late = |e: crate::herdr::cli::HerdrError| if e.code == "timeout" { stopped(&format!("git {}", args.first().unwrap_or(&"")), timeout_ms) } else { e.message };
     match child.map_err(|e| e.to_string()).and_then(|c| crate::herdr::cli::wait_with_timeout(c, timeout_ms).map_err(late)) {
         Ok(r) => (r.status, r.stdout, r.stderr),
@@ -166,8 +168,10 @@ pub fn stopped(what: &str, ms: u64) -> String {
     format!("{what} {TIMED_OUT} {span}")
 }
 /// `git <args>` that may take a while (a fetch, a push): its output, or what it said.
-pub fn git_slow(cwd: &Path, args: &[&str], timeout_ms: u64) -> Res<String> {
-    let (status, out, err) = git_full(cwd, args, timeout_ms);
+pub fn git_slow(cwd: &Path, args: &[&str], timeout_ms: u64) -> Res<String> { git_slow_env(cwd, args, timeout_ms, &[]) }
+/// `git_slow` with these variables in its environment besides this process's own.
+pub fn git_slow_env(cwd: &Path, args: &[&str], timeout_ms: u64, env: &[(String, String)]) -> Res<String> {
+    let (status, out, err) = git_full_env(cwd, args, timeout_ms, env);
     if status != 0 { return Err(crate::err::Error::new([out.trim(), err.trim()].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join("\n"))); }
     Ok(out.trim().to_string())
 }
