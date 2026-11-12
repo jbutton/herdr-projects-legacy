@@ -64,9 +64,9 @@ fn a_close_that_fails_leaves_the_merge_done_and_says_why_on_its_line() {
 fn nothing_is_closed_on_a_merge_that_failed() {
     let w = plain_world();
     let id = closing(&w, "5");
-    std::fs::write(w.root.join("mine.txt"), "unsaved\n").unwrap();
+    std::fs::write(w.root.join("f.txt"), "mine\n").unwrap(); // your own copy of the file the work adds
     sw::actions::finish_line::approve(&id, None, false).unwrap();
     let t = settle(&id);
-    assert_eq!(t.at("failure").s("title"), "Merge needs a clean checkout");
+    assert_eq!(t.at("failure").s("title"), "Merge would overwrite your copy of f.txt");
     assert!(!gh_log(&w).contains("issue close"), "{}", gh_log(&w));
 }
