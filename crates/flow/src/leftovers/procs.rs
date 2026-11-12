@@ -1,9 +1,12 @@
 //! Processes that run from a folder (a dev server a task's agent or reviewer started in its temporary folder), and
 //! stopping them before the folder goes, as stopping a task ends its panes: this user's own processes only, never this
 //! one or one it runs under. A process runs from a folder when its working folder or its program is in it (Linux:
-//! /proc; elsewhere `lsof`).
+//! /proc; elsewhere `lsof`). What was started for a task, and which runs are the board's own, are told by /proc on
+//! Linux and by the system's own process information on macOS (procs/mac.rs).
 #[cfg(target_os = "macos")]
-use std::os::unix::ffi::OsStrExt;
+mod mac;
+#[cfg(target_os = "macos")]
+use mac::{environ, mine};
 use std::path::{Path, PathBuf};
 
 fn inside(p: &Path, dir: &Path) -> bool { p.starts_with(dir) }
@@ -20,13 +23,8 @@ fn line_of(pid: i32) -> Vec<i32> {
 }
 /// The folder a process runs in, where the system tells.
 pub fn folder_of(pid: i32) -> Option<PathBuf> {
-    #[cfg(target_os = "macos")] {
-        let mut i: libc::proc_vnodepathinfo = unsafe { std::mem::zeroed() };
-        let n = std::mem::size_of::<libc::proc_vnodepathinfo>() as i32;
-        if unsafe { libc::proc_pidinfo(pid, libc::PROC_PIDVNODEPATHINFO, 0, &mut i as *mut _ as *mut libc::c_void, n) } != n { return None; }
-        let dir = unsafe { std::ffi::CStr::from_ptr(i.pvi_cdir.vip_path.as_ptr() as *const libc::c_char) };
-        return Some(PathBuf::from(std::ffi::OsStr::from_bytes(dir.to_bytes()))).filter(|d| !d.as_os_str().is_empty());
-    }
+    #[cfg(target_os = "macos")]
+    return mac::folder_of(pid);
     #[cfg(not(target_os = "macos"))]
     std::fs::read_link(format!("/proc/{pid}/cwd")).ok()
 }
@@ -86,27 +84,34 @@ pub fn end(pids: &[i32]) -> Vec<i32> {
     pids.iter().copied().filter(|p| !ended(*p)).collect()
 }
 /// This user's processes started for a task, wherever they run now: their temporary folder (`TMPDIR`, which only a
-/// task's agent and reviewers get, temp.rs) is in `tmp`. This program's own runs are left out. Linux only.
+/// task's agent and reviewers get, temp.rs) is in `tmp`. This program's own runs are left out. macOS shows no other
+/// process the environment of Apple's own programs (`/bin/sh`, `/usr/bin/ruby`): those are not found there.
 pub fn started_in(tmp: &Path) -> Vec<i32> {
-    if !cfg!(target_os = "linux") { return vec![]; }
     let real = std::fs::canonicalize(tmp).unwrap_or_else(|_| tmp.to_path_buf());
     let own = own_line();
-    let me = crate::agents::scratch::uid();
-    let mut out = vec![];
-    for e in std::fs::read_dir("/proc").into_iter().flatten().flatten() {
-        use std::os::unix::fs::MetadataExt;
-        let Some(pid) = e.file_name().to_str().and_then(|n| n.parse::<i32>().ok()) else { continue };
-        if own.contains(&pid) || e.metadata().map(|m| m.uid() != me).unwrap_or(true) || ended(pid) { continue; }
-        if this_program(pid) { continue; }
-        let Ok(env) = std::fs::read(e.path().join("environ")) else { continue };
-        if env.split(|b| *b == 0).any(|v| v.strip_prefix(b"TMPDIR=").map(|d| { let d = PathBuf::from(&*String::from_utf8_lossy(d)); inside(&d, tmp) || inside(&d, &real) }).unwrap_or(false)) { out.push(pid); }
-    }
-    out
+    let for_task = |env: Vec<u8>| env.split(|b| *b == 0).any(|v| v.strip_prefix(b"TMPDIR=").map(|d| { let d = PathBuf::from(&*String::from_utf8_lossy(d)); inside(&d, tmp) || inside(&d, &real) }).unwrap_or(false));
+    mine().into_iter().filter(|p| !own.contains(p) && !ended(*p) && !this_program(*p) && environ(*p).is_some_and(for_task)).collect()
 }
-/// Does the process run this program (the board's own runs: a keeper, a task's runner)? Linux only.
+/// This user's processes now.
+#[cfg(not(target_os = "macos"))]
+fn mine() -> Vec<i32> {
+    use std::os::unix::fs::MetadataExt;
+    let me = crate::agents::scratch::uid();
+    std::fs::read_dir("/proc").into_iter().flatten().flatten().filter(|e| e.metadata().map(|m| m.uid() == me).unwrap_or(false)).filter_map(|e| e.file_name().to_str().and_then(|n| n.parse::<i32>().ok())).collect()
+}
+/// The environment a process was started with, `KEY=value` each ended by a nul.
+#[cfg(not(target_os = "macos"))]
+fn environ(pid: i32) -> Option<Vec<u8>> { std::fs::read(format!("/proc/{pid}/environ")).ok() }
+/// Does the process run this program (the board's own runs: a keeper, a task's runner)? Linux: the program /proc
+/// names; macOS: the one the system started it with.
 pub fn this_program(pid: i32) -> bool {
-    let exe = |p: &str| std::fs::read_link(p).ok();
-    cfg!(target_os = "linux") && exe("/proc/self/exe").is_some() && exe(&format!("/proc/{pid}/exe")) == exe("/proc/self/exe")
+    #[cfg(target_os = "macos")]
+    return mac::program_of(std::process::id() as i32).is_some_and(|me| mac::program_of(pid) == Some(me));
+    #[cfg(not(target_os = "macos"))]
+    {
+        let exe = |p: &str| std::fs::read_link(p).ok();
+        cfg!(target_os = "linux") && exe("/proc/self/exe").is_some() && exe(&format!("/proc/{pid}/exe")) == exe("/proc/self/exe")
+    }
 }
 /// Does the process run under one of `under` (the shells of a task's panes)?
 pub fn runs_under(pid: i32, under: &[i32]) -> bool { line_of(pid).iter().any(|p| under.contains(p)) }

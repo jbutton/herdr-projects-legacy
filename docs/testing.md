@@ -348,7 +348,10 @@ whole check passed there too). A test holds on both when it asks what both have:
 - a temp folder by its real path (`canonicalize`) where a script's `pwd` is compared with it (macOS's is under `/var`,
   which is `/private/var`);
 - this machine's name as the board shows it, cut where it is long (GitHub's macOS runners' names are over 60 letters);
-- a copy of one of the system's programs only where it runs: a Mac may kill it, or kill it once it is signed again.
+- a copy of one of the system's programs only where it runs: a Mac may kill it, or kill it once it is signed again;
+- a program whose environment is read (what was started for a task, by its `TMPDIR`) that is not Apple's own: macOS
+  keeps the environment of `/bin/sleep` and its kin to themselves, and shows a copy of the test program's
+  (`tests/lifecycle/stop.rs`).
 
 A new area of that kind goes in the macOS job's list.
 

@@ -1,9 +1,11 @@
 //! A stop ends what the agent started and keeps the agent for a reply: a command in its pane (in its group or a group
-//! of its own), what runs from its worktree or temporary folder; never the agent's helper or your own checkout. What
-//! was started for it but runs elsewhere is named for you to end.
+//! of its own), what runs from its worktree or temporary folder; never the agent's helper, your own checkout or a run
+//! of the board's own program. What was started for it but runs elsewhere (another folder, another parent) is named
+//! for you to end, on Linux and macOS alike.
 use crate::common;
 use common::*;
 use serde_json::{json, Value};
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use sw::json::*;
 
@@ -25,6 +27,25 @@ fn sleep_in(dir: &std::path::Path, env: &[(&str, &std::path::Path)]) -> Child {
     c.spawn().unwrap()
 }
 fn ended(c: &mut Child) -> bool { (0..50).any(|_| { if c.try_wait().unwrap().is_some() { return true; } std::thread::sleep(std::time::Duration::from_millis(20)); false }) }
+/// Set: this test program only waits a minute, as `sleep 60` does. What was started for the task and works elsewhere
+/// is a copy of it, not `sleep`: macOS keeps the environment Apple's own programs were started with to themselves.
+const HOLD: &str = "HERDR_PROJECTS_TEST_HOLD";
+/// The test that waits when HOLD is set.
+const HELD: &str = "a_run_of_the_boards_own_program_is_never_ended_nor_named_in_its_folders_or_started_for_it";
+/// `exe` (this test program, or a copy of it) to wait a minute, started for the task: `tmp` is its temporary folder.
+fn held(exe: &Path, tmp: &Path) -> Command {
+    let mut c = Command::new(exe);
+    c.args([format!("{}::{HELD}", module_path!().split_once("::").unwrap().1).as_str(), "--exact", "-q"]).env(HOLD, "1").env("TMPDIR", tmp);
+    c.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    c
+}
+/// A program of the task's, outside its folders: a copy of this test program.
+fn task_program(w: &World) -> PathBuf {
+    let p = w.base.join("bin/dev-server");
+    std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+    std::fs::copy(std::env::current_exe().unwrap(), &p).unwrap();
+    p
+}
 
 #[test]
 fn a_command_the_agent_runs_is_ended_and_the_agent_and_its_helper_are_kept() {
@@ -61,16 +82,60 @@ fn what_runs_from_its_worktree_or_temporary_folder_is_ended_your_checkout_is_not
     let mut check = sleep_in(&tree, &[]); // a check that left the agent's terminal, in its worktree
     let mut preview = sleep_in(&tmp, &[]); // a preview in its temporary folder
     let mut yours = sleep_in(&w.root, &[]); // yours, in your own checkout
-    let mut away = sleep_in(&w.base, &[("TMPDIR", &tmp)]); // started for the task, working elsewhere now
+    let mut away = held(&task_program(&w), &tmp).current_dir(&w.base).spawn().unwrap(); // started for the task, working elsewhere now
     let said = sw::actions::talk::stop(t.s("id")).unwrap();
     assert!(ended(&mut check) && ended(&mut preview), "{}", said.msg);
     assert!(said.msg.starts_with("Ended what it started: ") && said.msg.contains(&format!("(pid {})", check.id())) && said.msg.contains(&format!("sleep 60 (pid {})", preview.id())), "{}", said.msg);
     assert!(yours.try_wait().unwrap().is_none() && !said.msg.contains(&format!("pid {})", yours.id())), "{}", said.msg);
-    if cfg!(target_os = "linux") {
-        assert!(away.try_wait().unwrap().is_none(), "named, not ended");
-        assert!(said.msg.contains(&format!("Still running, end it yourself: sleep 60 (pid {}), in {}.", away.id(), std::fs::canonicalize(&w.base).unwrap().display())), "{}", said.msg);
-    }
+    assert!(away.try_wait().unwrap().is_none(), "named, not ended");
+    assert!(said.msg.contains(&format!("Still running, end it yourself: {}, in {}.", sw::herdr::busy::found(away.id() as i64), w.base.display())), "{}", said.msg);
     for c in [&mut yours, &mut away] { let _ = c.kill(); let _ = c.wait(); }
+}
+
+#[test]
+fn one_started_for_it_that_left_its_folder_and_its_parent_is_still_found_and_named() {
+    let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
+    let t = working(&w, json!({}));
+    let tmp = sw::temp::made(&t);
+    let elsewhere = w.base.join("elsewhere");
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    // started in its temporary folder by a shell that went elsewhere and ended: the system is its parent now
+    let server = held(&task_program(&w), &tmp);
+    let o = Command::new("sh").arg("-c").arg(r#"cd "$0" && { "$@" </dev/null >/dev/null 2>&1 & echo $!; }"#).arg(&elsewhere).arg(server.get_program()).args(server.get_args())
+        .envs(server.get_envs().filter_map(|(k, v)| Some((k, v?)))).current_dir(&tmp).output().unwrap();
+    let away: i32 = String::from_utf8_lossy(&o.stdout).trim().parse().unwrap();
+    // a fork of the shell until it has started the program
+    let runs = || sw::herdr::procs::command(away as i64).is_some_and(|c| c.split_whitespace().next().is_some_and(|p| p.ends_with("/dev-server")));
+    let started = (0..500).any(|_| { if runs() { return true; } std::thread::sleep(std::time::Duration::from_millis(20)); false });
+    assert!(started && sw::leftovers::procs::folder_of(away) == Some(elsewhere.clone()), "{:?}", sw::leftovers::procs::folder_of(away));
+    assert!(!sw::leftovers::procs::in_folder(&tmp).contains(&away), "out of its folders");
+    assert!(sw::leftovers::procs::started_in(&tmp).contains(&away), "found by the temporary folder it was started with");
+    let said = sw::actions::talk::stop(t.s("id")).unwrap();
+    assert!(sw::herdr::procs::running(away as i64), "named, not ended: {}", said.msg);
+    assert!(said.msg.contains(&format!("Still running, end it yourself: {}, in {}.", sw::herdr::busy::found(away as i64), elsewhere.display())), "{}", said.msg);
+    unsafe { libc::kill(away, libc::SIGKILL) };
+}
+
+#[test]
+fn a_run_of_the_boards_own_program_is_never_ended_nor_named_in_its_folders_or_started_for_it() {
+    if std::env::var_os(HOLD).is_some() { std::thread::sleep(std::time::Duration::from_secs(60)); return; }
+    let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
+    let t = working(&w, json!({}));
+    let tmp = sw::temp::made(&t);
+    let tree = PathBuf::from(t.s("worktree"));
+    let own = |dir: &Path| held(&std::env::current_exe().unwrap(), &tmp).current_dir(dir).spawn().unwrap();
+    let (mut in_tree, mut away) = (own(&tree), own(&w.base)); // in its worktree; started for it, elsewhere now
+    let mut check = sleep_in(&tree, &[]);
+    let this = |c: &Child| sw::leftovers::procs::this_program(c.id() as i32);
+    assert!(this(&in_tree) && this(&away) && sw::leftovers::procs::this_program(std::process::id() as i32) && !this(&check));
+    assert!(sw::leftovers::procs::in_folder(&tree).contains(&(in_tree.id() as i32)), "it runs in the worktree");
+    assert!(!sw::leftovers::procs::started_in(&tmp).iter().any(|p| [in_tree.id(), away.id()].contains(&(*p as u32))), "never among what was started for the task");
+    let said = sw::actions::talk::stop(t.s("id")).unwrap();
+    assert!(ended(&mut check), "{}", said.msg);
+    for c in [&mut in_tree, &mut away] {
+        assert!(c.try_wait().unwrap().is_none() && !said.msg.contains(&format!("pid {})", c.id())), "{}", said.msg);
+        let _ = c.kill(); let _ = c.wait();
+    }
 }
 
 #[test]
