@@ -211,3 +211,24 @@ fn real_programs_a_helper_is_wired_to_the_agent_and_a_command_left_running_is_no
     for c in [&mut piped, &mut socket, &mut null, &mut logged] { let _ = c.kill(); let _ = c.wait(); }
     let _ = std::fs::remove_file(std::env::temp_dir().join(format!("hp-wired-{me}.log")));
 }
+
+#[test]
+fn real_programs_what_a_helper_runs_in_the_agents_group_with_its_input_on_dev_null_is_a_helper_too() {
+    use std::process::{Command, Stdio};
+    use sw::herdr::procs::{helpers, real_wiring, Wiring};
+    let me = std::process::id() as i64; // the agent
+    // wired to the agent, it runs a program of its own in the agent's group, input on /dev/null and output the agent's:
+    // as `uv tool run` runs an MCP server (upstream #554)
+    let mut uv = Command::new("sh").args(["-c", "sleep 30 </dev/null; :"]).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
+    let pid = uv.id() as i64;
+    // its child once it is the program, not a fork of the shell before its input is put on /dev/null
+    let started = || sw::herdr::cli::kids(pid).ok().and_then(|k| k.first().copied()).filter(|c| sw::herdr::procs::command(*c).is_some_and(|a| a.starts_with("sleep")));
+    let server = (0..500).find_map(|_| started().or_else(|| { std::thread::sleep(std::time::Duration::from_millis(20)); None })).expect("its program starts");
+    let mut beside = Command::new("sleep").arg("30").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
+    let group = [me, pid, server, beside.id() as i64];
+    assert_eq!(real_wiring(server, &group), Wiring::Elsewhere, "on its own it is not wired to the agent");
+    // the agent's helper by its parent; a command the agent runs with the same streams is not
+    assert_eq!(helpers(&group, &[me]), (vec![pid, server], vec![(beside.id() as i64, Wiring::Elsewhere)]));
+    sw::herdr::procs::signal(server, 15);
+    for c in [&mut uv, &mut beside] { let _ = c.kill(); let _ = c.wait(); }
+}

@@ -24,19 +24,22 @@ impl Fake for FakeHerdr {
     }
     /// pid 1 is an agent with one process under it: 2, wired to it (an MCP server), or 3, which is not (`child`, `wrapped`).
     /// A helper that is a language server (`helper: "lsp"`) has one of its own, 4, in a group of its own; one the agent
-    /// started in a group of its own (`helper: "own"`) is 5, wired to the agent
-    fn kids(&self, pid: i64) -> Vec<i64> { let h = |v: &str| self.st.borrow().arr("panes").iter().any(|p| p.s("helper") == v); if pid == 2 && h("lsp") { vec![4] } else if pid == 1 && h("own") { vec![5] } else if pid != 1 { vec![] } else if self.st.borrow().arr("panes").iter().any(|p| p.b("child") || p.b("wrapped")) { vec![3] } else { vec![2] } }
+    /// started in a group of its own (`helper: "own"`) is 5, wired to the agent; `uv tool run` (`helper: "uv"`) runs
+    /// its MCP server, 6, in the agent's group
+    fn kids(&self, pid: i64) -> Vec<i64> { let h = |v: &str| self.st.borrow().arr("panes").iter().any(|p| p.s("helper") == v); if pid == 2 && h("lsp") { vec![4] } else if pid == 2 && h("uv") { vec![6] } else if pid == 1 && h("own") { vec![5] } else if pid != 1 { vec![] } else if self.st.borrow().arr("panes").iter().any(|p| p.b("child") || p.b("wrapped")) { vec![3] } else { vec![2] } }
     fn wired_to(&self, pid: i64, group: &[i64]) -> Option<bool> { self.wiring(pid, group).wired() }
-    /// 2 and 5 are wired to the agent (but 2 is a dev server, `tool`); 3 streams to the terminal, or (`child` says) is wired to a
-    /// file, closed, or cannot be looked at
+    /// 2 and 5 are wired to the agent (but 2 is a dev server, `tool`); 6 is not, its input being `/dev/null`; 3 streams to
+    /// the terminal, or (`child` says) is wired to a file, closed, or cannot be looked at
     fn wiring(&self, pid: i64, _group: &[i64]) -> Wiring {
         if (pid == 2 && !self.st.borrow().arr("panes").iter().any(|p| p.b("tool"))) || pid == 5 { return Wiring::Agent; }
+        if pid == 6 { return Wiring::Elsewhere; }
         match self.st.borrow().arr("panes").iter().find(|p| p.b("child")).map(|p| p.t("child")).as_deref() { Some("file") => Wiring::Elsewhere, Some("closed") => Wiring::Closed, Some("unknown") => Wiring::Unknown, _ => Wiring::Terminal }
     }
-    /// 2 is an MCP server, or a dev server the agent left running (`tool`); 3 a command; 4 a language server's own
+    /// 2 is an MCP server, or a dev server the agent left running (`tool`); 3 a command; 4 a language server's own; 6
+    /// the MCP server `uv tool run` runs
     fn command(&self, pid: i64) -> Option<String> {
         let tool = self.st.borrow().arr("panes").iter().any(|p| p.b("tool"));
-        match pid { 2 if tool => Some("node /srv/app/dev-server.js --port 3000".into()), 2 => Some("node /opt/mcp/server.js --stdio".into()), 3 => Some("sleep 600".into()), 4 => Some("gopls telemetry".into()), 5 => Some("gopls".into()), _ => None }
+        match pid { 2 if tool => Some("node /srv/app/dev-server.js --port 3000".into()), 2 => Some("node /opt/mcp/server.js --stdio".into()), 6 => Some("/usr/bin/python3 /home/me/.cache/uv/archive-v0/x/bin/analytics-mcp".into()), 3 => Some("sleep 600".into()), 4 => Some("gopls telemetry".into()), 5 => Some("gopls".into()), _ => None }
     }
     /// Ending a fake agent's process: its pane is at its shell again. Every process ended is noted (`killed`).
     fn kill(&self, pid: i64) {
@@ -44,8 +47,8 @@ impl Fake for FakeHerdr {
         arr(&mut st, "killed").push(json!(pid));
         for p in st["panes"].as_array_mut().unwrap() { if p.at("agent").i("pid") == pid { p["agent"] = Value::Null; } }
     }
-    /// 2 and 3 run until they are ended
-    fn alive(&self, pid: i64) -> Option<bool> { [2, 3].contains(&pid).then(|| !self.st.borrow().arr("killed").contains(&json!(pid))) }
+    /// 2, 3 and 6 run until they are ended
+    fn alive(&self, pid: i64) -> Option<bool> { [2, 3, 6].contains(&pid).then(|| !self.st.borrow().arr("killed").contains(&json!(pid))) }
     /// The herdr program cannot be found from here (`noProgram`): run where it is not on PATH nor anywhere usual.
     fn found(&self) -> bool { !self.st.borrow().b("noProgram") }
 }

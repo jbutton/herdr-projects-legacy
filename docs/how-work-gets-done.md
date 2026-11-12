@@ -400,10 +400,11 @@ itself, and its worktree and branch are removed. `workspace.cleanup false` keeps
 - What an agent program keeps running as part of itself is no such command: its MCP servers, or its own program under
   an npm wrapper (`codex` installed with npm). They are in the agent's own process group, and an MCP server's input and
   output are wired to the agent itself (a pipe or a socket the agent holds the other end of). What such a helper runs
-  under it is its own too (a language server's telemetry, in a group of its own). So a finished agent with MCP or
-  language servers is closed like any other. A command whose streams go elsewhere (the terminal, a file, `/dev/null`) keeps
-  the space open, in the agent's group or not, and so does one in a group of its own. What cannot be told counts as a
-  command.
+  under it is its own too, whatever its streams: a language server's telemetry in a group of its own, or the MCP server
+  that `uv tool run` (`uvx`) starts in the agent's group with its input on `/dev/null`. So a finished agent with MCP or
+  language servers is closed like any other, and a stop keeps them. A command whose streams go elsewhere (the terminal, a
+  file, `/dev/null`) keeps the space open, in the agent's group or not, and so does one in a group of its own. What
+  cannot be told counts as a command.
 - Nor is one Herdr could not answer for, or whose Herdr session is not running: then nothing of the task is touched.
 - The clean-up is tried again by itself (about every half minute, board open or closed) and happens once the space is
   free. After a turn of the agent, only once that has been quiet for ten minutes. Work that appeared meanwhile is kept.

@@ -137,7 +137,8 @@ task panel ends in `Kept:` and says why:
 | `(its herdr session cannot be reached)` | the Herdr session it ran in is not running | start that session; it is tried again |
 
 - **What `<why>` means**: a process in the agent's own process group is one of its helpers (an MCP server) only when
-  its input and output are wired to the agent and its errors go to no terminal. Otherwise it `streams to the terminal`,
+  its input and output are wired to the agent and its errors go to no terminal, or when one of its helpers runs it (the
+  MCP server `uv tool run` starts, whose input is `/dev/null`). Otherwise it `streams to the terminal`,
   `is not wired to its agent` (a file, `/dev/null`, a pipe nobody in the agent's group holds), `has its input or output
   closed`, or `cannot be looked at` (the system does not say). A process under the agent in a group of its own (a dev
   server it started) `runs in a group of its own` (one wired to the agent, or under a helper, is its own, and keeps nothing); one its
@@ -148,7 +149,9 @@ task panel ends in `Kept:` and says why:
 - **Nothing says `Kept:`, and the space still stays**: `herdr-projects show <id>` tells whether `workspace.cleanup` was
   turned off, and where. `herdr-projects set workspace.cleanup true` turns it on again.
 - **An agent with MCP servers used to stay `in use` for good**: its servers counted as a command still running. Since
-  this was fixed, the next pass closes those spaces by itself.
+  this was fixed, the next pass closes those spaces by itself. The same went for an MCP server started by `uv tool run`
+  (`uvx`), named as `… (pid <n>) is not wired to its agent`: its input is `/dev/null`. It is now known by the helper
+  that runs it.
 - **To close one at once**: archive the task (`Ctrl+A`); what is kept on disk stays, and the task says where.
 
 ## Behind main: main could not be fetched

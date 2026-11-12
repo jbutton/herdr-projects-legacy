@@ -60,6 +60,16 @@ fn a_command_the_agent_runs_is_ended_and_the_agent_and_its_helper_are_kept() {
 }
 
 #[test]
+fn what_a_helper_runs_in_the_agents_group_is_kept_with_it_and_a_command_beside_them_is_ended() {
+    let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
+    // `uv tool run` (2), wired to the agent, runs its MCP server (6) in the agent's group with its input on /dev/null
+    let t = working(&w, json!({ "child": true, "helper": "uv" }));
+    let said = sw::actions::talk::stop(t.s("id")).unwrap();
+    assert_eq!(killed(&w), vec![3], "only the command: not uv (2), nor the MCP server it runs (6)");
+    assert_eq!(said.msg, "Ended what it started: sleep 600 (pid 3).");
+}
+
+#[test]
 fn a_dev_server_in_a_group_of_its_own_is_ended_and_a_stop_with_nothing_started_says_only_stopped() {
     let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
     let t = working(&w, json!({ "tool": true }));
