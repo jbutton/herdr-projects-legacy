@@ -12,10 +12,19 @@ use sw::json::*;
 use sw::store::automations::firings_of;
 
 const MIN: i64 = 60_000;
-/// What the keeper does once a second, with its look at each working agent's screen; then the jobs it started.
-fn keeper(w: &World) { sw::keeper::tick_once(&w.socket, true); common::pilot::drain(); }
+/// What the keeper does once a second, with its look at each working agent's screen. The jobs it starts (an agent put on
+/// the task an automation made) wait: what they do is not what is tested here, and each would take real time.
+fn keeper(w: &World) { sw::keeper::tick_once(&w.socket, true); }
 /// `n` minutes on, the keeper ticking each minute.
 fn minutes_on(w: &World, n: i64) { for _ in 0..n { sw::clock::advance(MIN); keeper(w); } }
+/// The same with a coordinator on autopilot: its jobs run each tick (its wake typed in, its turn).
+fn pilot_keeper(w: &World) { keeper(w); common::pilot::drain(); }
+fn pilot_minutes(w: &World, n: i64) { for _ in 0..n { sw::clock::advance(MIN); pilot_keeper(w); } }
+/// The task an automation made for a stall is done, and the agent it would have been given is never started.
+fn made_done(a: &Obj) {
+    for f in firings_of(a.s("id")).iter().filter(|f| f.b("task")) { sw::store::tasks::patch(f.s("task"), |t| t.put("stage", "done")).unwrap(); }
+    sw::runner::JOBS.with(|j| j.borrow_mut().clear());
+}
 fn screen(w: &World, id: &str, s: &str) {
     let pane = task(id).at("link").t("pane");
     w.patch(|st| { for p in st["panes"].as_array_mut().unwrap() { if p.s("pane_id") == pane { p["agent"]["screen"] = json!(s); } } });
@@ -45,8 +54,7 @@ fn an_automation_waiting_for_a_stall_fires_once_when_the_screen_shows_nothing_ne
     assert_eq!(stalls_of(&a, &id).len(), 1, "once per stall");
     // the task it made is done (another firing would make one); its agent shows a dialog for two minutes and works on
     // with the same screen: the same stall, never heard of again
-    let made = firings_of(a.s("id")).iter().find(|f| f.b("task")).map(|f| f.t("task")).unwrap();
-    sw::store::tasks::patch(&made, |t| t.put("stage", "done")).unwrap();
+    made_done(&a);
     let pane = task(&id).at("link").t("pane");
     set_status(&w, &pane, "blocked"); minutes_on(&w, 2);
     assert_eq!((task(&id).s("stage"), task(&id).at("last").s("status")), ("working", "blocked"));
@@ -77,6 +85,7 @@ fn a_task_that_waits_for_you_or_one_under_stall_after_none_never_stalls() {
     let t = task(&id);
     assert_eq!(stalls_of(&a, &id).len(), 1, "{:?} output {} since {} workAt {} now {}", firings_of(a.s("id")), t.at("output"), t.i("since"), t.i("workAt"), sw::clock::now());
     // waiting for you is not a stall: its agent asks
+    made_done(&a);
     w.script(json!({ "worker": [{ "status": "working", "screen": "● Reading the code\n" }] }));
     let other = w.add("Asks"); delegate(&other); working(&other);
     sw::store::tasks::patch(&other, |t| { t.put("stage", "asks"); t.put("kind", "question"); }).unwrap();
@@ -90,26 +99,26 @@ fn a_task_of_its_own_that_stalls_wakes_its_coordinator_on_autopilot_once_also_wi
     let co = proj(&w);
     // one task at once: the one that stalls fills it, and a stall needs looking after all the same
     ok(&["autopilot", "on", "--project", "proj", "--goal", "Docs", "--autopilot.every", "none", "--autopilot.gap", "1m", "--autopilot.when", "stalled", "--autopilot.tasksAtOnce", "1"]);
-    keeper(&w); keeper(&w);
+    pilot_keeper(&w); pilot_keeper(&w);
     assert_eq!(prompts_of(&w, &co).len(), 1, "the wake of turning on");
     assert_eq!(record(&co).arr("wakes")[0].at("answered"), &json!(true));
     w.script(json!({ "worker": [{ "status": "working", "screen": "● Running the tests\n" }] }));
     let id = sw::autopilot::add::add(&co, &w.root, "Its own", Default::default(), &[], false).unwrap().task.t("id");
     delegate(&id); working(&id);
-    keeper(&w);
-    minutes_on(&w, 19);
+    pilot_keeper(&w);
+    pilot_minutes(&w, 19);
     assert_eq!(prompts_of(&w, &co).len(), 1, "{:?}", prompts_of(&w, &co));
-    minutes_on(&w, 2);
+    pilot_minutes(&w, 2);
     assert_eq!(prompts_of(&w, &co).len(), 2, "{:?}", prompts_of(&w, &co));
     let said = prompts_of(&w, &co)[1].clone();
     assert!(said.starts_with(&format!("Autopilot: {} has shown nothing new for 2", short(&id))), "{said}");
     let shown = ok(&["autopilot", "show", "--project", "proj"]);
     assert!(shown.contains("Today: 1 of 5 added · 1 of 1 under way") && shown.contains(&format!("Needs looking after: {} (has stalled)", short(&id))), "{shown}");
-    minutes_on(&w, 20);
+    pilot_minutes(&w, 20);
     assert_eq!(prompts_of(&w, &co).len(), 2, "once per stall");
     // its status flaps: still the same stall
     let pane = task(&id).at("link").t("pane");
-    set_status(&w, &pane, "blocked"); minutes_on(&w, 2); set_status(&w, &pane, "working"); minutes_on(&w, 12);
+    set_status(&w, &pane, "blocked"); pilot_minutes(&w, 2); set_status(&w, &pane, "working"); pilot_minutes(&w, 12);
     assert_eq!(prompts_of(&w, &co).len(), 2, "{:?}", prompts_of(&w, &co));
 }
 
@@ -140,8 +149,7 @@ fn a_task_well_past_the_watchers_estimate_stalls_once_though_its_screen_moves_an
     for n in 31..40 { minute(n); }
     assert_eq!(stalls_of(&a, &id).len(), 1, "once per stall");
     // its guess moves: a new estimate, so no stall until that one runs out too
-    let made = firings_of(a.s("id")).iter().find(|f| f.b("task")).map(|f| f.t("task")).unwrap();
-    sw::store::tasks::patch(&made, |t| t.put("stage", "done")).unwrap();
+    made_done(&a);
     guess.set(80);
     for n in 40..60 { minute(n); }
     assert_eq!(stalls_of(&a, &id).len(), 1, "{:?}", task(&id).at("watch"));
