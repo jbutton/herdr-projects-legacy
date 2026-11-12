@@ -225,6 +225,26 @@ every repo the board merges in. `merge.checks: none` does not look at GitHub's c
 A failure is of one commit: once a repair is pushed, the old commit's failed checks block nothing (also when main is
 merged in before it merges). Only the checks of the commit that would merge count.
 
+Each check is judged by its newest run, here and in the pull requests' watch, which wakes the agent when checks fail:
+
+- A job re-run in its workflow run counts by its latest attempt.
+- A workflow run more than once on the same commit counts by its newest run: the same job of that run decides, whatever
+  an older run said (cancelled, failed or still going). This happens with a workflow that has `concurrency` with
+  `cancel-in-progress` and starts again on the same commit, for example when a label is added or the pull request is
+  edited: the older run ends up cancelled. It also happens with a workflow that runs for both the push and the pull
+  request: the newer run decides.
+- Newest means the job GitHub made last. GitHub numbers jobs as it makes them, re-runs included, so the number decides,
+  not the times:
+  - a job cancelled before it began is older than the job that replaced it, however late its cancel ended;
+  - a job not begun yet in a newer run is the newest, and is waited for;
+  - an older run's job run again after a newer run's job is the newest.
+
+  With a fine-grained token, a workflow run read as a whole goes by when its latest attempt began, then by its number.
+- A newest run that failed or was cancelled still fails, and so does a cancelled check with no newer run of its own.
+  Two jobs of the same name in one run are two checks.
+- Another CI's check counts as run again only when it has the very same link: two CIs that each call a check `build`
+  are two checks.
+
 Each check is counted once, a workflow for its jobs until GitHub lists them. `details` names what it waits for
 (`checksWaitingFor`).
 
@@ -431,6 +451,11 @@ itself, and its worktree and branch are removed. `workspace.cleanup false` keeps
 
 - A checkout with unsaved files, or with work that was never merged, stays on disk with its branch. The task says where,
   and a reply continues there.
+- A checkout with a submodule checked out in it (a set-up step that runs `git submodule update --init`) is removed
+  like any other. Git removes one only when forced, and then looks at nothing: the submodule's own repo goes with the
+  worktree. So it stays when it or any of its submodules, nested ones too, holds a change (also one a repo's
+  `ignore = all` leaves out of `git status`), or a submodule holds a commit that no remote branch of it has. That is
+  looked at again right before the worktree goes, after what still ran from it was ended (it may save a file as it ends).
 - A space you are using again is not closed: a turn in the agent's own terminal, a command running in any of its panes
   (including one a finished agent left running in the background).
 - What an agent program keeps running as part of itself is no such command: its MCP servers, or its own program under

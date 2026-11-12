@@ -7,6 +7,9 @@ use std::path::Path;
 use sw::actions::{archive, filing, finish_line, talk};
 use sw::json::*;
 
+/// A worktree with a submodule checked out in it goes like any other, unless its submodule holds work.
+mod submodules;
+
 fn done(id: &str) { filing::report(id, filing::Report { state: "done".into(), ..Default::default() }).unwrap(); }
 fn kept(t: &Obj) -> String { t.arr("kept").first().map(text).unwrap_or_default() }
 fn ws_ids(w: &World) -> Vec<String> { w.state().arr("workspaces").iter().map(|x| x.t("workspace_id")).collect() }
