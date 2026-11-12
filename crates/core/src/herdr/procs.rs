@@ -1,9 +1,9 @@
 //! Whether a process beside an agent in its process group is the agent's own helper (an MCP server): its input and
 //! output are wired to the agent's group itself, a pipe or a socket whose other end a process of that group holds, and
-//! its errors go to no terminal. A command left running is not: its streams are the terminal, a file or `/dev/null`.
-//! Unknown (the system cannot be asked, the process is another user's): not a helper. What it is wired to instead is
-//! said in words when it keeps a space in use (busy.rs). Ending a process, and whether it still runs, go through a
-//! test's stand-in for its own processes.
+//! its errors go to no terminal; or a helper runs it (`helpers`). A command left running is not: its streams are the
+//! terminal, a file or `/dev/null`. Unknown (the system cannot be asked, the process is another user's): not a helper.
+//! What it is wired to instead is said in words when it keeps a space in use (busy.rs). Ending a process, and whether
+//! it still runs, go through a test's stand-in for its own processes.
 use std::process::Command;
 
 fn tty(s: &str) -> bool { s.starts_with("/dev/pts/") || s.starts_with("/dev/tty") || s == "/dev/console" }
@@ -28,6 +28,24 @@ pub fn wired_to(pid: i64, group: &[i64]) -> Option<bool> {
 pub fn wiring(pid: i64, group: &[i64]) -> Wiring {
     if let Some(f) = super::cli::fake() { return f.wiring(pid, group); }
     real_wiring(pid, group)
+}
+/// The agent's helpers among `group` (its process group, `roots` being the agent itself), and the others with what each
+/// is wired to. A helper is wired to the agent, or runs under one in the group whatever its streams (by its parent chain
+/// to the agent: the MCP server `uv tool run` runs, its input `/dev/null`, upstream #554). Only below a helper is looked
+/// at, never above it, and only while one of the others is left; what cannot be listed stays among the others.
+pub fn helpers(group: &[i64], roots: &[i64]) -> (Vec<i64>, Vec<(i64, Wiring)>) {
+    let (mut helpers, mut rest) = (vec![], vec![]);
+    for p in group.iter().copied().filter(|p| !roots.contains(p)) {
+        match wiring(p, group) { Wiring::Agent => helpers.push(p), w => rest.push((p, w)) }
+    }
+    let mut i = 0;
+    while i < helpers.len() && !rest.is_empty() {
+        for c in super::cli::kids(helpers[i]).unwrap_or_default() {
+            if let Some(j) = rest.iter().position(|(p, _)| *p == c) { rest.remove(j); helpers.push(c); }
+        }
+        i += 1;
+    }
+    (helpers, rest)
 }
 pub fn real_wired_to(pid: i64, group: &[i64]) -> Option<bool> { real_wiring(pid, group).wired() }
 pub fn real_wiring(pid: i64, group: &[i64]) -> Wiring { if cfg!(target_os = "linux") { linux(pid, group) } else { lsof(pid, group) } }
