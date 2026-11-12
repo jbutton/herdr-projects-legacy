@@ -6,6 +6,7 @@
 //! pane.agent_detected (released) and a status change to "unknown"; herdr does not replay missed events.
 mod lost;
 mod reconcile;
+pub mod relaunch;
 pub use lost::{ask_start, retry_lost, GRACE_MS};
 pub use reconcile::{reconcile, same_dir};
 
