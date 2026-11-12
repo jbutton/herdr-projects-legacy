@@ -28,7 +28,7 @@ pub fn parse_schedule(typed: &str) -> Res<Value> {
     if word == "cron" { let c = parse_cron(text[4..].trim().trim_matches(|c| c == '"' || c == '\''))?; return Ok(json!({ "kind": "schedule", "text": format!("cron {}", c.text), "cron": c.text })); }
     if word == "every" && rest.len() == 1 {
         let every = ms(rest[0]);
-        if every == 0 { crate::fail!("\"{}\" is not a time with a unit, such as 30m or 2h (s, m or h).{}", rest[0], if rest[0].bytes().all(|b| b.is_ascii_digit()) { format!(" Did you mean {}m?", rest[0]) } else { String::new() }); }
+        if every == 0 { crate::fail!("\"{}\" is not a time with a unit, such as 30m or 2h (s, m, h or d).{}", rest[0], if rest[0].bytes().all(|b| b.is_ascii_digit()) { format!(" Did you mean {}m?", rest[0]) } else { String::new() }); }
         if every < EVERY_MIN { crate::fail!("An automation runs once a minute at most: every 1m or longer."); }
         return Ok(json!({ "kind": "schedule", "text": format!("every {}", rest[0]), "every": every }));
     }

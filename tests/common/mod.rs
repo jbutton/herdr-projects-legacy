@@ -81,7 +81,7 @@ pub fn world_in(o: Opts, under: &str) -> World {
         git(&root, &["add", "-A"]); git(&root, &["commit", "-qm", "init"]);
         if o.origin { let bare = base.join("origin.git"); git(&base, &["init", "-q", "--bare", "-b", "main", &bare.display().to_string()]); git(&root, &["remote", "add", "origin", &bare.display().to_string()]); git(&root, &["push", "-q", "-u", "origin", "main"]); }
     }
-    let fake = Rc::new(herdr::FakeHerdr { st: std::cell::RefCell::new(herdr::empty()), dir: base.join("fake"), script: std::cell::RefCell::new(json!({})), env: vec![] });
+    let fake = Rc::new(herdr::FakeHerdr { st: std::cell::RefCell::new(herdr::empty()), dir: base.join("fake"), script: std::cell::RefCell::new(json!({})), env: vec![], during: Default::default() });
     std::fs::create_dir_all(base.join("fake")).unwrap();
     sw::herdr::cli::set_fake(Some(fake.clone()));
     FAKE.with(|f| *f.borrow_mut() = Some(fake.clone()));
@@ -115,6 +115,8 @@ impl World {
     pub fn sock(&self, name: &str) -> PathBuf { socket_in(&self.sockets, name) }
     /// The rest of the turn of the task's agent (its step's `then`, agents.rs), now.
     pub fn go_on(&self, t: &Obj) { let pi = self.state().arr("panes").iter().position(|p| p.s("pane_id") == t.at("link").s("pane")); if let Some(pi) = pi { agents::go_on(&self.fake, pi); } }
+    /// `f` happens while herdr answers the next call that starts with `call` (`pane list --workspace w1`), once.
+    pub fn during(&self, call: &str, f: impl FnOnce() + 'static) { self.fake.during.borrow_mut().push((call.into(), Box::new(f))); }
     /// What the fake gh answers from now on (gh.rs).
     pub fn gh_says(&self, c: Value) { *self.gh.cfg.borrow_mut() = c; }
     pub fn add(&self, title: &str) -> String { sw::actions::filing::add(&self.root, title, Default::default()).unwrap().t("id") }

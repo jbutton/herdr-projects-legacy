@@ -1,6 +1,6 @@
 //! The checks a pull request is to get before GitHub lists them, so that one not registered yet is waited for and
 //! never taken for "none". GitHub Actions: each workflow of the branch that runs for this pull request (triggers.rs
-//! decides it as GitHub does: its events, branches, paths and types) must have its run on the commit, finished and
+//! decides it as GitHub does: its events, branches, paths and types) must have its newest run on the commit, finished and
 //! passed; a run waits for all of its jobs, every member of a matrix too. One that may not run on this commit (its
 //! types) is waited for a short while only, and none at all where the repo has GitHub Actions turned off. Each check the branch it merges into
 //! requires (its protection, its rulesets) must be listed. An outside CI, with nothing listed: checks of its own on
@@ -40,10 +40,11 @@ pub fn actions_off(root: &Path) -> bool {
     let r = gh(&["api", "repos/{owner}/{repo}/actions/permissions", "--jq", ".enabled"], root, 30000);
     r.status == 0 && r.stdout.trim() == "false"
 }
-/// Each workflow that runs for it, against its runs on this commit: none yet, or one not finished, is waited for (by the
-/// workflow's name); one that finished and failed is a failed check. GitHub not answering: all of them are waited for.
-/// One that may not run on this commit and has no run is waited for only `MAYBE_MS` since the board began waiting
-/// (where GitHub gave the commit's runs: not given, it is waited for as the others are).
+/// Each workflow that runs for it, against its newest run on this commit (what an older run said does not count,
+/// readable.rs): none yet, or one not finished, is waited for (by the workflow's name); one that finished and failed is
+/// a failed check. GitHub not answering: all of them are waited for. One that may not run on this commit and has no run
+/// is waited for only `MAYBE_MS` since the board began waiting (where GitHub gave the commit's runs: not given, it is
+/// waited for as the others are).
 pub fn flows_state(t: &Obj, root: &Path, base: &str, head: &str) -> Flows {
     let flows = flows_for(t, base);
     if flows.is_empty() || actions_off(root) { return Flows::default(); }
@@ -52,7 +53,9 @@ pub fn flows_state(t: &Obj, root: &Path, base: &str, head: &str) -> Flows {
     let runs = runs.unwrap_or_default();
     let mut out = Flows::default();
     for (file, flow, how) in flows {
-        let mine: Vec<&super::readable::Run> = runs.iter().filter(|x| x.path.split('@').next() == Some(file.as_str())).collect();
+        let all: Vec<&super::readable::Run> = runs.iter().filter(|x| x.path.split('@').next() == Some(file.as_str())).collect();
+        // Its newest run decides: an older one cancelled for it, failed or still going says nothing (#781).
+        let mine: Vec<&super::readable::Run> = all.iter().copied().filter(|x| !x.superseded(&all)).collect();
         if mine.is_empty() && how == Runs::Maybe && given_up { continue; }
         let up = |s: &str| s.to_uppercase();
         if let Some(bad) = mine.iter().find(|x| up(&x.status) == "COMPLETED" && CHECK_BAD.contains(&up(&x.conclusion).as_str())) {

@@ -1,7 +1,8 @@
 //! GitHub's checks on the pull request, looked at before it merges (`merge.checks`): still running, the merge waits
 //! and says so; failed, nothing merges and the failure goes back to the agent with the check's name and its log,
 //! within `review.rounds`, then waits for you (`approve` refuses, `--anyway` merges); stuck past `check.timeout`, it
-//! waits for you; `none` merges as before. A check run again is judged by its newest run (#404).
+//! waits for you; `none` merges as before. A check run again is judged by its newest run: a job by its run's latest
+//! attempt (#404) and by its workflow's newest run on the commit (newest_run.rs, #781).
 use crate::common;
 use common::*;
 use serde_json::{json, Value};
@@ -10,6 +11,7 @@ use sw::housekeeping::poll_prs;
 use sw::json::*;
 use sw::store::settings::{change::set_value, lookup::Scope};
 use sw::store::tasks::{update, Change};
+mod newest_run;
 
 pub fn pr_world(more: Value) -> World {
     let mut s = json!({ "review.when": "never" });
@@ -197,21 +199,24 @@ fn rerun(conclusion: &str, url: &str, from: u8, to: u8) -> Value {
 fn rollup_of(head: &str, checks: Value) -> Value { json!({ "state": "OPEN", "headRefOid": head, "statusCheckRollup": checks, "comments": [], "reviews": [], "author": { "login": "me" } }) }
 
 #[test]
-fn a_check_run_again_is_judged_by_its_newest_run_and_another_runs_failure_still_counts() {
-    // its job failed, was run again in the same workflow run, and passed: merged
-    let w = pr_world(json!({}));
-    let id = to_approval(&w, "Flaky build");
-    let head = task(&id).t("prHead");
+fn a_check_run_again_is_judged_by_its_newest_run_and_another_jobs_failure_in_the_same_attempt_still_counts() {
+    // its job failed and passed when it ran again: in the same workflow run (its latest attempt), or in a newer run of
+    // the workflow on the commit: merged
     let (old, new) = ("https://github.com/o/r/actions/runs/11/job/22", "https://github.com/o/r/actions/runs/11/job/23");
-    w.gh_says(json!({ "view": rollup_of(&head, json!([rerun("FAILURE", old, 0, 5), rerun("SUCCESS", new, 7, 12)])), "jobs": { "11": [["23"]] } }));
-    finish_line::approve(&id, None, false).unwrap();
-    let t = settle(&id);
-    assert_eq!(t.s("stage"), "done", "{} {}", t.t("msg"), t.at("failure")); assert!(merged(&w), "{}", gh_log(&w));
-    drop(w);
-    // the run again failed: not merged; a failure in another workflow run (its run for the push) is its own check; and
-    // so is another job of the same name in the same attempt, after it or beside it, and one GitHub does not say of
     let (both, latest) = (json!({ "11": [["22"], ["23"]] }), json!({ "11": [["23"]] }));
-    for (checks, jobs) in [(json!([rerun("SUCCESS", old, 0, 5), rerun("FAILURE", new, 7, 12)]), &latest), (json!([rerun("FAILURE", "https://github.com/o/r/actions/runs/10/job/21", 0, 5), rerun("SUCCESS", new, 7, 12)]), &latest),
+    let other_run = "https://github.com/o/r/actions/runs/10/job/21";
+    for (checks, jobs) in [(json!([rerun("FAILURE", old, 0, 5), rerun("SUCCESS", new, 7, 12)]), &latest), (json!([rerun("FAILURE", other_run, 0, 5), rerun("SUCCESS", new, 7, 12)]), &latest)] {
+        let w = pr_world(json!({}));
+        let id = to_approval(&w, "Flaky build");
+        let head = task(&id).t("prHead");
+        w.gh_says(json!({ "view": rollup_of(&head, checks), "jobs": jobs }));
+        finish_line::approve(&id, None, false).unwrap();
+        let t = settle(&id);
+        assert_eq!(t.s("stage"), "done", "{} {}", t.t("msg"), t.at("failure")); assert!(merged(&w), "{}", gh_log(&w));
+    }
+    // the run again failed (in its run, or in the newer run of the workflow): not merged; another job of the same name
+    // in the same attempt is its own check, after it or beside it, and so is one GitHub does not say of
+    for (checks, jobs) in [(json!([rerun("SUCCESS", old, 0, 5), rerun("FAILURE", new, 7, 12)]), &latest), (json!([rerun("SUCCESS", other_run, 0, 5), rerun("FAILURE", new, 7, 12)]), &latest),
         (json!([rerun("FAILURE", old, 0, 5), rerun("SUCCESS", new, 7, 12)]), &both), (json!([rerun("FAILURE", old, 0, 5), rerun("SUCCESS", new, 1, 6)]), &both), (json!([rerun("FAILURE", old, 0, 5), rerun("SUCCESS", new, 7, 12)]), &json!({}))] {
         let w = pr_world(json!({ "review.rounds": 0 }));
         let id = to_approval(&w, "Still failing");
