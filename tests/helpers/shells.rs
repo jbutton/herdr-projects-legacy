@@ -79,8 +79,11 @@ fn a_background_command_runs_until_its_notification_or_its_stop() {
     assert_eq!(running(&lines), 1);
     lines.push(stopped(&at(6000), "bumphhsle"));
     assert_eq!(running(&lines), 0);
-    // A command's own output that only quotes such a line, and Claude Code's copies of its requests, start nothing.
+    // A foreground command's own output that quotes such a line, even at its start, and Claude Code's copies of its
+    // requests, start nothing: no notification would ever end them.
     lines.push(result(&at(7000), "  10 Command running in background with ID: b0po6ap81", json!({})));
+    lines.push(result(&at(7000), "Command running in background with ID: example. (a line of a log it printed)", json!({ "stdout": "Command running in background with ID: example." })));
+    lines.push(result(&at(7000), "Command did not complete within its 120s timeout and was moved to the background (ID: example2).", json!({})));
     lines.push(json!({ "type": "api-request-blob", "timestamp": at(7000), "message": { "role": "user", "content": started(&at(1), "bq8w3e5rt").at("message").at("content").clone() }, "toolUseResult": { "backgroundTaskId": "bq8w3e5rt" } }));
     assert_eq!(running(&lines), 0);
     // A shell lives in the agent's program: one left running by the program before this one is gone with it.

@@ -54,14 +54,14 @@ fn word_after(line: &str, key: &str) -> Vec<String> {
 /// it is written as a queued command (`queue-operation`, then an `attachment` taken into the running turn), as seen on
 /// HSW-218 (Claude Code 2.1.300, 2026-10-15), where the board waited for a helper back for half an hour.
 /// A command it runs in the background (a Bash with `run_in_background`, or one moved there when its timeout ran out)
-/// is at work the same way, from the result that names it until its `<task-notification>` (completed, failed or
-/// killed), or until TaskStop's result: a stopped one gets no notification (Claude Code 2.1.308 to 2.1.322). Before, a
-/// turn that ended while one ran was taken for the end, and the check and the review ran while it still did (upstream
-/// Shepherdr SHEP-148).
+/// is at work the same way, from the result that names it (`backgroundTaskId`) until its `<task-notification>`
+/// (completed, failed or killed), or until TaskStop's result: a stopped one gets no notification (Claude Code 2.1.308 to
+/// 2.1.322). Before, a turn that ended while one ran was taken for the end, and the check and the review ran while it
+/// still did (upstream Shepherdr SHEP-148).
 fn claude_running(file: &Path, since: i64) -> usize {
     let mut live: Vec<(String, i64)> = vec![];
     let mut known: Vec<String> = vec![];
-    for (l, e) in lines_with(file, &["Async agent launched", "<task-notification>", "\"SendMessage\"", "backgroundTaskId", "in background with ID", "moved to the background", "Successfully stopped task"]) {
+    for (l, e) in lines_with(file, &["Async agent launched", "<task-notification>", "\"SendMessage\"", "backgroundTaskId", "Successfully stopped task"]) {
         let at = when(e.at("timestamp"));
         if e.s("type") == "user" && l.contains("Async agent launched") {
             for id in word_after(&l, "agentId: ") { live.retain(|(x, _)| *x != id); live.push((id.clone(), at)); known.push(id); }
@@ -80,19 +80,10 @@ fn claude_running(file: &Path, since: i64) -> usize {
     }
     live.iter().filter(|(id, at)| *at >= since && !claude_back(file, id, *at)).count()
 }
-/// The id of a command Claude Code moved to the background, from its result: its `backgroundTaskId`, or the words the
-/// result starts with (a command's own output that only quotes them, further in, is none).
-fn shell_started(e: &Value) -> Option<String> {
-    let id = e.at("toolUseResult").t("backgroundTaskId");
-    if !id.is_empty() { return Some(id); }
-    let words = |c: &Value| c.as_str().map(String::from).unwrap_or_else(|| c.as_array().map(|a| a.iter().map(|x| x.t("text")).collect::<Vec<_>>().join("\n")).unwrap_or_default());
-    e.at("message").arr("content").iter().filter(|c| c.s("type") == "tool_result").find_map(|c| {
-        let w = words(c.at("content"));
-        let w = w.trim_start();
-        let key = if w.starts_with("Command running in background with ID: ") { "with ID: " } else if w.starts_with("Command did not complete") { "moved to the background (ID: " } else { return None };
-        word_after(w, key).into_iter().next()
-    })
-}
+/// The id of a command Claude Code moved to the background: its result's `backgroundTaskId` (in every one recorded,
+/// 2.1.308 to 2.1.322). Never the words of the result: a foreground command's own output may begin with them, and no
+/// notification would ever end a command it never started.
+fn shell_started(e: &Value) -> Option<String> { Some(e.at("toolUseResult").t("backgroundTaskId")).filter(|id| !id.is_empty()) }
 /// A Claude Code helper's own conversation (`<conversation>/subagents/agent-<id>.jsonl`) ends in its finished reply,
 /// written since it was last started: it is back, whatever the agent's own file shows of its notification.
 fn claude_back(file: &Path, id: &str, at: i64) -> bool {
