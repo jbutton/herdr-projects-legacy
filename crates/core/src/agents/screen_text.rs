@@ -38,9 +38,11 @@ fn turn_line(line: &str) -> bool {
         && w.next().is_some_and(|d| d.starts_with(|c: char| c.is_ascii_digit()))
 }
 /// Claude Code's notice in the row right over its input box (`new task? /clear to save 599.8k tokens`, `✔ Update
-/// installed`): pushed to the right, it ends where the box's top rule ends, give or take a margin.
+/// installed`): pushed to the right, it starts past the first third of the box's top rule and ends where the rule ends,
+/// give or take a margin. A line of the agent's own, even indented, starts further left.
 fn notice(row: &str, top: &str) -> bool {
-    row.starts_with("        ") && row.trim_end().chars().count() + 4 >= top.trim_end().chars().count()
+    let (width, lead) = (top.trim_end().chars().count(), row.chars().take_while(|c| *c == ' ').count());
+    lead * 3 >= width && row.trim_end().chars().count() + 4 >= width
 }
 /// The words an agent left on its screen, for a turn that ended with nothing else: what stands above its program's
 /// input box. The box is its prompt mark near the end of the screen (Claude Code's `❯`, Codex's `›`, or `>` just under

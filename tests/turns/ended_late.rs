@@ -87,6 +87,10 @@ fn claude_codes_notice_over_its_input_box_is_not_the_agents_words() {
     let words = sw::agents::screen_text::agent_words(&recorded("claude-notice-over-box"));
     assert!(words.ends_with("  The report now notes that they're posted. The closing note still calls them drafts; I didn't change it."), "{words}");
     for junk in ["new task?", "Crunched for", "bypass permissions"] { assert!(!words.contains(junk), "{words}"); }
+    // a line of the agent's own right over the box, indented and as long as the rule, is its words, not a notice
+    let command = "        curl --retry 3 --connect-timeout 20 https://service.example.test/health";
+    let screen = format!("⏺ The command failed:\n\n{command}\n{}\n❯\n{}\n  Opus · 42% left\n  ⏵⏵ bypass permissions on", "─".repeat(80), "─".repeat(80));
+    assert!(sw::agents::screen_text::agent_words(&screen).ends_with(command), "{}", sw::agents::screen_text::agent_words(&screen));
 }
 
 #[test]
