@@ -2,7 +2,7 @@
 //! shell (`Herdr::pane_idle`'s). Empty: nothing. A look for the rule stops at the first thing; `all` names every one, for
 //! the words of a clean-up kept because its space is in use (`details <id>` shows them all).
 use super::cli::kids;
-use super::procs::{command, wiring, Wiring};
+use super::procs::{command, helpers, wiring, Wiring};
 use super::Herdr;
 use crate::json::*;
 
@@ -28,19 +28,20 @@ pub fn found(pid: i64) -> String {
     format!("{} (pid {pid})", if argv.is_empty() { "a process".into() } else { short(&argv) })
 }
 
-/// What runs in the pane beside the program `agent`: a process of its group that is not its helper, one in a group of
-/// its own under it that is not wired to it (nor under a helper), a job of its shell.
+/// What runs in the pane beside the program `agent`: a process of its group that is not its helper (procs.rs), one in a
+/// group of its own under it that is not wired to it (nor under a helper), a job of its shell.
 pub fn beside_agent(api: &Herdr, id: &str, agent: &str, all: bool) -> Vec<String> {
     let Some(i) = api.process_info(id) else { return vec![UNSAID.into()] };
     let procs: Vec<&Value> = i.arr("foreground_processes").iter().filter(|p| crate::gate::is_int(p.at("pid"))).collect();
     let front: Vec<i64> = procs.iter().map(|p| p.i("pid")).collect();
     if front.is_empty() { return vec![UNSAID.into()]; }
     let lead = i.i("foreground_process_group_id");
-    let (mut out, mut helpers) = (vec![], vec![]);
-    for p in &procs {
-        if p.i("pid") == lead || (!agent.is_empty() && p.s("name") == agent) { continue; }
-        let w = wiring(p.i("pid"), &front);
-        if w != Wiring::Agent { out.push(format!("{} {}", listed(p), w.words())); if !all { return out; } } else { helpers.push(p.i("pid")); }
+    let roots: Vec<i64> = procs.iter().filter(|p| p.i("pid") == lead || (!agent.is_empty() && p.s("name") == agent)).map(|p| p.i("pid")).collect();
+    let (helpers, rest) = helpers(&front, &roots);
+    let mut out = vec![];
+    for (p, w) in rest.iter().filter_map(|(pid, w)| Some((procs.iter().find(|p| p.i("pid") == *pid)?, w))) {
+        out.push(format!("{} {}", listed(p), w.words()));
+        if !all { return out; }
     }
     // What a helper runs under it is the helper's own (a language server's telemetry): it goes down with it. A helper
     // in a group of its own is wired to the agent all the same (a language server it started so, #399).

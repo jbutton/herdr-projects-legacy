@@ -1,8 +1,8 @@
 //! A task started from a named branch with `merge.pr` off (`workspace.from develop`): it starts, and lands by a push of
 //! a commit built from the reviewed one to that branch at origin, your checkout untouched. Tasks on one branch build on
 //! each other, two branches each move on their own, origin's main named lands there too, a branch that moved is caught
-//! up with and checked again, `merge.method` and `merge.by` are kept, and a push origin refuses waits for you with
-//! git's own words.
+//! up with and checked again, `merge.method` and `merge.by` are kept, a repo that signs its commits pushes a signed one,
+//! and a push origin refuses waits for you with git's own words.
 use crate::common;
 use super::they_push;
 use common::*;
@@ -217,4 +217,21 @@ fn a_push_origin_refuses_waits_for_you_with_gits_own_words_and_lands_once_allowe
     std::fs::remove_file(bare(&w).join("hooks").join("pre-receive")).unwrap();
     let t = approved(&id);
     assert_eq!(t.s("stage"), "done", "{}", t.at("failure")); assert!(has(&w, "develop", "f.txt").is_some());
+}
+
+#[test]
+fn a_repo_that_signs_its_commits_pushes_a_signed_commit_or_none() {
+    let w = push_world(json!({}));
+    they_push(&w, "develop", "d.txt", "one\n");
+    from("develop");
+    w.script(json!({ "worker": [work("f.txt")] }));
+    let id = to_approval(&w, "Signed");
+    let before = origin(&w, "develop");
+    crate::merge::local::signs_with(&w, false);
+    let t = approved(&id);
+    assert_eq!(t.at("failure").s("title"), "Could not make the commit for develop", "{}", t.at("failure"));
+    assert_eq!(origin(&w, "develop"), before, "nothing pushed");
+    crate::merge::local::signs_with(&w, true);
+    assert_eq!(approved(&id).s("stage"), "done", "{}", task(&id).at("failure"));
+    assert!(crate::merge::local::signed(&bare(&w), &origin(&w, "develop")));
 }

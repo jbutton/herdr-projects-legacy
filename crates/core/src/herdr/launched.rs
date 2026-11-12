@@ -1,9 +1,9 @@
 //! What a task's agent launched in its pane, to end when the task is stopped: the pane's whole process tree below its
-//! shell, split into the pane's own (its shell, the agent, the agent's helpers wired to it and what they run, busy.rs's
-//! rule) and what the agent launched (a command in its group not wired to it, one in a group of its own, a job of the
-//! shell, and everything those run).
+//! shell, split into the pane's own (its shell, the agent, the agent's helpers and what they run, procs.rs's rule) and
+//! what the agent launched (a command in its group that is no helper, one in a group of its own not wired to it, a job
+//! of the shell, and everything those run).
 use super::cli::kids;
-use super::procs::{wiring, Wiring};
+use super::procs::{helpers, wiring, Wiring};
 use super::Herdr;
 use crate::json::*;
 
@@ -18,14 +18,10 @@ pub fn tree(api: &Herdr, id: &str, agent: &str) -> Option<Tree> {
     let shell = crate::gate::is_int(i.at("shell_pid")).then(|| i.i("shell_pid"));
     let lead = i.i("foreground_process_group_id");
     // roots: the shell and the agent itself, whose other processes are each looked at; helpers keep what they run
-    let mut roots: Vec<i64> = shell.into_iter().collect();
-    let (mut helpers, mut launched) = (vec![], vec![]);
-    for p in &procs {
-        let pid = p.i("pid");
-        if roots.contains(&pid) { continue; }
-        if (Some(lead) != shell && pid == lead) || (!agent.is_empty() && p.s("name") == agent) { roots.push(pid); }
-        else if wiring(pid, &front) == Wiring::Agent { helpers.push(pid); } else { launched.push(pid); }
-    }
+    let agent_itself = |p: &&&Value| (Some(lead) != shell && p.i("pid") == lead) || (!agent.is_empty() && p.s("name") == agent);
+    let roots: Vec<i64> = shell.into_iter().chain(procs.iter().filter(agent_itself).map(|p| p.i("pid"))).collect();
+    let (mut helpers, rest) = helpers(&front, &roots);
+    let mut launched: Vec<i64> = rest.into_iter().map(|(p, _)| p).collect();
     let mut queue: Vec<i64> = shell.into_iter().chain(front.iter().copied()).collect();
     let mut seen = queue.clone();
     while let Some(p) = queue.pop() {

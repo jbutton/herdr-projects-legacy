@@ -53,6 +53,9 @@ fn a_process_beside_the_agent_is_named_with_why_it_keeps_the_space_and_a_helper_
     // and a language server the agent started in a group of its own, wired to it all the same
     let t = merged(&w, "own", |t| pane(&w, t.at("link").s("pane"), |p| p["helper"] = json!("own")));
     assert!(!t.b("kept") && t.b("cleaned"), "{}", kept(&t));
+    // and the MCP server `uv tool run` runs in the agent's own group with its input on /dev/null: under a helper (#554)
+    let t = merged(&w, "uv", |t| pane(&w, t.at("link").s("pane"), |p| p["helper"] = json!("uv")));
+    assert!(!t.b("kept") && t.b("cleaned"), "{}", kept(&t));
 }
 
 #[test]
