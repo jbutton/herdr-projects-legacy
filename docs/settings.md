@@ -90,7 +90,7 @@ one setting the next place down is used, and the board keeps running.
 - **A switch** is `true` or `false`, in the file as real booleans. Typed, `yes`, `no`, `on` and `off` work too. Anything
   else is refused.
 - **A choice** is one word from a list. "Off" is always the word `none`.
-- **A time** carries a unit: `60s`, `15m`, `2h`.
+- **A time** carries a unit: `60s`, `15m`, `2h`, `3d`.
 - **An agent** is `claude`, `codex`, `pi` or another program Herdr can start, with an optional model after a slash
   (`codex/gpt-6.1-sol`). The model travels with the program, so a Claude model is never paired with Codex. A model the
   program does not take is refused, with the ones it does ([models](models.md)).
@@ -185,6 +185,7 @@ are changed on that machine.
 | `workspace.include` | `none` | task, repo entry, you, repo file | ignored files a fresh worktree lacks and gets a copy of (`.env`); `.worktreeinclude` in the repo names more |
 | `workspace.teardown` | `none` | task, repo entry, you, repo file | a command run in the worktree before it is removed |
 | `workspace.cleanup` | `true` | task, repo entry, you | remove a done task's space (so it leaves herdr's sidebar), worktree and branch. More: [when a task is done](how-work-gets-done.md#when-a-task-is-done) |
+| `archive.doneAfter` | `none` | task, repo entry, you | how long a task stays done before it archives itself: a time (`3d`, `12h`) or `none`. Counted from when it was done, or from its restore. Each goes as one archive does (its space closes, its worktree stays), and only what `archive --done` would take: a pinned task, one that works, waits or is to do stays, and so does a done one whose clean-up is still to come or whose space is in use, until it is free. More: [the board](board.md#the-list-five-groups) |
 | `attempts.by` | `1` | task, repo entry, you | how many attempts are made at once, and by whom: a count (`3`), or a list of agents (`claude, codex, pi`; a model after a slash; a name may repeat). A count means that many of `worker.agent`. Each attempt has its own worktree, branch and tab, runs the check, and holds one of `board.agents`' slots; one that finds no free slot waits its turn. At most 5. `1`: the task is done once, as ever. More: [several attempts](attempts.md) |
 | `attempts.pick` | `you` | task, repo entry, you | who chooses among the attempts that passed the check. `you`: the task waits as "pick one", the attempts side by side, with the reviewer's comparison when there is a reviewer. `reviewer`: the reviewer compares them, names one and says why, and that one goes on by itself. Only the chosen attempt is reviewed in full, pushed and merged. More: [several attempts](attempts.md) |
 | `plan.approve` | `none` | task, repo entry, you | whether the work starts with a plan, and who says yes to it; nothing in the repo is changed before that yes. `none`: no plan. `you`: the agent writes its plan and the task waits as `plan ready` for your yes; a reply sends the plan back with your words, and it is written again. `reviewer`: the reviewer checks the plan against the task's description and the build goes on, or the plan goes back to its writer with the reviewer's points. Read when the agent starts and again when the plan is written. More: [a plan first](plan.md) |

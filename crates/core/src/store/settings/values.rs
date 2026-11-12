@@ -38,14 +38,14 @@ pub fn known(name: &str) -> Res<&'static Entry> {
 }
 
 // ---- a time carries a unit ---------------------------------------------------------------------------------------------
-/// `90s`, `15m`, `2h` in milliseconds; 0 for anything else.
+/// `90s`, `15m`, `2h`, `3d` in milliseconds; 0 for anything else.
 pub fn ms(time: &str) -> i64 {
     let t = time.trim();
     if t.len() < 2 { return 0; }
     let (n, u) = t.split_at(t.len() - 1);
     if !n.bytes().all(|b| b.is_ascii_digit()) { return 0; }
     let n: i64 = n.parse().unwrap_or(0);
-    match u { "s" => n * 1000, "m" => n * 60_000, "h" => n * 3_600_000, _ => 0 }
+    match u { "s" => n * 1000, "m" => n * 60_000, "h" => n * 3_600_000, "d" => n.saturating_mul(86_400_000), _ => 0 }
 }
 fn none_meant(w: &str) -> String {
     let yes = ["no", "non", "off", "never", "unlimited", "nolimit"].contains(&w) || (w.starts_with('0') && w[1..].chars().all(|c| c.is_ascii_lowercase()));
@@ -55,7 +55,7 @@ fn time_meant(w: &str, unit: &str) -> String {
     let digits: String = w.chars().take_while(|c| c.is_ascii_digit()).collect();
     let rest = &w[digits.len()..];
     if digits.is_empty() || !rest.chars().all(|c| c.is_ascii_lowercase()) || digits.parse::<u64>().unwrap_or(0) == 0 { return String::new(); }
-    let u = match rest.chars().next() { None => unit.to_string(), Some('h') => "h".into(), Some('m') => "m".into(), Some('s') => "s".into(), Some(_) => unit.to_string() };
+    let u = match rest.chars().next() { None => unit.to_string(), Some('d') => "d".into(), Some('h') => "h".into(), Some('m') => "m".into(), Some('s') => "s".into(), Some(_) => unit.to_string() };
     format!("{digits}{u}")
 }
 // ---- a count of tokens: 500k, 2m, 1.5m -----------------------------------------------------------------------------------
@@ -151,12 +151,12 @@ fn check_ty(e: &Entry, v: &Value) -> Res<Value> {
         }
         Ty::Time => {
             let w: String = word(v).to_lowercase().split_whitespace().collect();
-            let like = if text(&e.builtin) == NONE { "2h".to_string() } else { text(&e.builtin) };
+            let like = if !e.like.is_empty() { e.like.clone() } else if text(&e.builtin) == NONE { "2h".to_string() } else { text(&e.builtin) };
             if e.none && w == NONE { return Ok(json!(NONE)); }
-            let unit = if e.none { "m".to_string() } else { like[like.len() - 1..].to_string() };
+            let unit = if e.none && e.like.is_empty() { "m".to_string() } else { like[like.len() - 1..].to_string() };
             if ms(&w) == 0 {
                 let meant = time_meant(&w, &unit);
-                return refuse(format!("{name} is a time with a unit, such as {like} (s, m or h){}, not \"{}\".{}", if e.none { ", or none" } else { "" }, word(v),
+                return refuse(format!("{name} is a time with a unit, such as {like} (s, m, h or d){}, not \"{}\".{}", if e.none { ", or none" } else { "" }, word(v),
                     if !meant.is_empty() { format!(" Did you mean {meant}?") } else if e.none { none_meant(&w) } else { String::new() }));
             }
             Ok(json!(w))

@@ -5,9 +5,10 @@
 //! An entry: `name` (everywhere: config.json, the command line, a task), `kind` (work: task -> your entry for the repo
 //! -> you -> the repo's file -> built in; board: yours only; repo: a fact about one repo; coordinator: this time ->
 //! this coordinator -> you -> built in, store/settings/coord.rs), `ty` (what a value is:
-//! settings/values.rs), `builtin`, `values` (a choice's words), `none` (an agent or a time that may be `none`), `min`
-//! (a count's smallest), `repo` (one of the facts the repo's own file may hold), `task` (one task's own only), `adds` (its values add up across the
-//! places), `label` (its plain name on the settings page), `means` (a few words beside what the row may be), `doc`.
+//! settings/values.rs), `builtin`, `values` (a choice's words), `none` (an agent or a time that may be `none`), `like`
+//! (the example a refused time names, when not its built-in one), `min` (a count's smallest), `repo` (one of the facts
+//! the repo's own file may hold), `task` (one task's own only), `adds` (its values add up across the places), `label`
+//! (its plain name on the settings page), `means` (a few words beside what the row may be), `doc`.
 use crate::json::{json, Value};
 use std::sync::LazyLock;
 
@@ -20,14 +21,15 @@ pub enum Ty { Switch, Choice, Time, Count, Tokens, Agent, Agents, Effort, Access
 #[derive(Clone, Debug)]
 pub struct Entry {
     pub name: String, pub label: String, pub kind: Kind, pub ty: Ty, pub builtin: Value,
-    pub values: Vec<String>, pub none: bool, pub min: i64, pub repo: bool, pub adds: bool, pub task: bool, pub means: String, pub doc: String,
+    pub values: Vec<String>, pub none: bool, pub like: String, pub min: i64, pub repo: bool, pub adds: bool, pub task: bool, pub means: String, pub doc: String,
 }
 fn e(name: &str, label: &str, kind: Kind, ty: Ty, builtin: Value, doc: &str) -> Entry {
-    Entry { name: name.into(), label: label.into(), kind, ty, builtin, values: vec![], none: false, min: 0, repo: false, adds: false, task: false, means: String::new(), doc: doc.into() }
+    Entry { name: name.into(), label: label.into(), kind, ty, builtin, values: vec![], none: false, like: String::new(), min: 0, repo: false, adds: false, task: false, means: String::new(), doc: doc.into() }
 }
 impl Entry {
     fn values(mut self, v: &[&str]) -> Self { self.values = v.iter().map(|s| s.to_string()).collect(); self }
     fn none(mut self) -> Self { self.none = true; self }
+    fn like(mut self, l: &str) -> Self { self.like = l.into(); self }
     fn min(mut self, n: i64) -> Self { self.min = n; self }
     fn repo(mut self) -> Self { self.repo = true; self }
     fn task(mut self) -> Self { self.task = true; self }
@@ -93,6 +95,7 @@ pub static SETTINGS: LazyLock<Vec<Entry>> = LazyLock::new(|| {
     s.push(e("workspace.include", "Files copied in", Work, Ty::List, json!("none"), "ignored files a fresh worktree lacks and gets a copy of (`.env`); `.worktreeinclude` in the repo names more").repo());
     s.push(e("workspace.teardown", "Teardown command", Work, Ty::Text, json!("none"), "a command run in the worktree before it is removed").repo());
     s.push(e("workspace.cleanup", "Clean up when done", Work, Ty::Switch, json!(true), "remove a done task's space (so it leaves herdr's sidebar), worktree and branch. More: [when a task is done](how-work-gets-done.md#when-a-task-is-done)"));
+    s.push(e("archive.doneAfter", "Archive done after", Work, Ty::Time, json!("none"), "how long a task stays done before it archives itself: a time (`3d`, `12h`) or `none`. Counted from when it was done, or from its restore. Each goes as one archive does (its space closes, its worktree stays), and only what `archive --done` would take: a pinned task, one that works, waits or is to do stays, and so does a done one whose clean-up is still to come or whose space is in use, until it is free. More: [the board](board.md#the-list-five-groups)").none().like("3d").means("how long a task stays done before it archives itself. Pinned, working, waiting and to-do tasks stay"));
     // how many try it, and who picks
     s.push(e("attempts.by", "Attempts by", Work, Ty::Attempts, json!(1), "how many attempts are made at once, and by whom: a count (`3`), or a list of agents (`claude, codex, pi`; a model after a slash; a name may repeat). A count means that many of `worker.agent`. Each attempt has its own worktree, branch and tab, runs the check, and holds one of `board.agents`' slots; one that finds no free slot waits its turn. At most 5. `1`: the task is done once, as ever. More: [several attempts](attempts.md)"));
     s.push(e("attempts.pick", "Attempt picked by", Work, Ty::Choice, json!("you"), "who chooses among the attempts that passed the check. `you`: the task waits as \"pick one\", the attempts side by side, with the reviewer's comparison when there is a reviewer. `reviewer`: the reviewer compares them, names one and says why, and that one goes on by itself. Only the chosen attempt is reviewed in full, pushed and merged. More: [several attempts](attempts.md)").values(&["you", "reviewer"]));
