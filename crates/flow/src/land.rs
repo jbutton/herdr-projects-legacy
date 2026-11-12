@@ -1,9 +1,10 @@
 //! Landing: bring the branch up to date with main in the task's own worktree, merge (through the pull request when
 //! there is one, by a push to a branch it started from by name, else locally), then clean up. A pull request merges
 //! once GitHub's checks pass (checks.rs), as the token can read them (readable.rs). Conflicts are rolled back and saved;
-//! a checkout with unsaved files is never forced. One part per file in land/: the clean-up, what it ends first and what
-//! keeps a space in use, GitHub's checks, how they are read and the ones it expects, the merge, the push to a named
-//! branch, your checkout caught up with origin first (`merge.syncRemote`), and the GitHub issues it closes.
+//! a checkout with unsaved files is never forced, and your own files are never overwritten by a local merge. One part
+//! per file in land/: the clean-up, what it ends first and what keeps a space in use, GitHub's checks, how they are
+//! read and the ones it expects, the merge, the push to a named branch, the merge into your checkout, your checkout
+//! caught up with origin first (`merge.syncRemote`), and the GitHub issues it closes.
 pub mod catch_up;
 pub mod checks;
 pub mod cleanup;
@@ -12,6 +13,7 @@ pub mod closes;
 pub mod direct;
 pub mod expected;
 pub mod in_use;
+pub mod local;
 pub mod merge;
 pub mod readable;
 pub mod triggers;

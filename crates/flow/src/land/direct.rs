@@ -20,8 +20,8 @@ use std::path::Path;
 fn at_origin(tp: &Path, b: &str) -> Res<String> { git_out(tp, &["rev-parse", "--verify", &format!("refs/remotes/origin/{b}^{{commit}}")]) }
 fn holds(tp: &Path, older: &str, newer: &str) -> bool { git_out(tp, &["merge-base", "--is-ancestor", older, newer]).is_ok() }
 /// The commit that goes onto `parent`: the reviewed tree squashed into one, a merge of the two, or (rebase) the reviewed
-/// commit itself. `parent` when the work brings it nothing.
-fn build(tp: &Path, how: &str, parent: &str, head: &str, message: &str) -> Res<String> {
+/// commit itself. `parent` when the work brings it nothing. A local merge builds its commit the same way (local.rs).
+pub(super) fn build(tp: &Path, how: &str, parent: &str, head: &str, message: &str) -> Res<String> {
     let tree = format!("{head}^{{tree}}");
     if parent == head || how == "rebase" { return Ok(head.into()); }
     if how == "merge" { return git_out(tp, &["commit-tree", &tree, "-p", parent, "-p", head, "-m", message]); }

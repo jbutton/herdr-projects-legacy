@@ -102,6 +102,13 @@ fn head_file(dir: &Path) -> String {
 }
 pub fn head_of(dir: &Path) -> String { let k = head_file(dir); if !k.is_empty() { k } else { git_out(dir, &["rev-parse", "HEAD"]).unwrap_or_default() } }
 pub fn dirty(dir: &Path) -> String { git_out(dir, &["status", "--porcelain"]).unwrap_or_default() }
+/// A checkout fast-forwarded to `to`, git alone judging what is at risk: your own work it does not touch stays as it
+/// is (staged stays staged), and a file of yours it would overwrite (changed, untracked or ignored) stops it with
+/// nothing changed. Never stashed for you. Err: those files (none when git refused for another reason) and what it said.
+pub fn fast_forward(dir: &Path, to: &str) -> Result<(), (Vec<String>, String)> {
+    git_out(dir, &["merge", "--ff-only", "--no-autostash", "--no-overwrite-ignore", "-q", to]).map(|_| ())
+        .map_err(|e| (e.msg.lines().filter_map(|l| l.strip_prefix('\t')).map(String::from).collect(), e.msg))
+}
 /// The board's own comments on a pull request are posted as the logged-in user: each ends with this mark.
 pub const BOARD_COMMENT: &str = "\n\n<!-- herdr-projects -->";
 pub fn board_comment(body: &str) -> bool { body.contains("<!-- herdr-projects -->") || { let b = body.trim_start(); b.starts_with("**Review ·") || (b.starts_with("**Review ") && b[9..].split(' ').next().map(|n| n.bytes().all(|c| c.is_ascii_digit())).unwrap_or(false) && b.contains(" · ")) } }
