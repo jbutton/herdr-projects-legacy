@@ -63,6 +63,15 @@ pub fn read_turn_of(k: &str, file: Option<&Path>, session: &str, cwd: &Path, who
     t.file = Some(f);
     Some(t)
 }
+/// The same, of the end of the file, read through what this process kept of it (read_kept.rs): for a reader that comes
+/// back every few seconds while the agent works, which then reads only what was written since.
+pub fn read_turn_kept_of(k: &str, file: Option<&Path>, session: &str, cwd: &Path) -> Option<Turn> {
+    if !kind(k).map(|a| a.reads_turn).unwrap_or(false) { return None; }
+    let f = file_for(k, file, session, cwd)?;
+    let mut t = super::read_kept::read_turn_kept(k, &f, TAIL)?;
+    t.file = Some(f);
+    Some(t)
+}
 /// Was this text submitted to the agent since a moment: do the words stand in its saved conversation? None: nothing to read.
 pub fn said_to(k: &str, file: Option<&Path>, session: &str, cwd: &Path, text: &str, since: i64) -> Option<bool> {
     if !kind(k).map(|a| a.reads_turn).unwrap_or(false) { return None; }

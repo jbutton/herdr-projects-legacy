@@ -150,11 +150,12 @@ pub fn tick_once(socket: &str, watch: bool) -> Option<Vec<Obj>> {
 }
 static SAID_AT: LazyLock<Mutex<HashMap<String, i64>>> = LazyLock::new(Default::default);
 /// While an agent works, its last message is refreshed from the saved conversation, at most once every five seconds.
+/// The file is read again only when it changed, and then only what was written since (agents/read_kept.rs).
 pub fn refresh_said(rows: &[Obj], now_ms: i64) {
     for t in rows {
         if t.s("stage") != "working" || !is_agent_task(t) || t.b("archivedAt") || t.at("live").at("status").is_null() { continue; }
         { let mut s = SAID_AT.lock().unwrap(); if now_ms - s.get(t.s("id")).copied().unwrap_or(0) < 5000 { continue; } s.insert(t.t("id"), now_ms); }
-        let Some(turn) = crate::agents::installed::read_turn_of(t.s("agent"), t.so("transcript").map(Path::new), t.s("session"), &cwd_of(t), false) else { continue };
+        let Some(turn) = crate::agents::installed::read_turn_kept_of(t.s("agent"), t.so("transcript").map(Path::new), t.s("session"), &cwd_of(t)) else { continue };
         let usage = turn.usage.as_ref().map(|u| serde_json::to_value(u).unwrap_or(Value::Null));
         let same_ctx = usage.as_ref().map(|u| u.at("context") == t.at("usage").at("context")).unwrap_or(true);
         if (turn.said.is_empty() || turn.said == t.s("said")) && same_ctx { continue; }

@@ -114,11 +114,11 @@ fn codex_code(c: &Value) -> String {
     out
 }
 
-pub fn read_claude(file: &Path, bytes: u64) -> Option<Turn> {
-    let rows = tail_lines(file, bytes).ok()?;
+pub fn read_claude(file: &Path, bytes: u64) -> Option<Turn> { claude_turn(&tail_lines(file, bytes).ok()?) }
+pub fn claude_turn(rows: &[Value]) -> Option<Turn> {
     enum Last<'a> { Say { id: String, text: String, tool: bool, e: &'a Value }, Error(&'a Value), Interrupt(&'a Value, String), User(&'a Value) }
     let (mut last, mut usage, mut model, mut latest, mut began): (Option<Last>, Option<(f64, f64)>, String, String, i64) = (None, None, String::new(), String::new(), 0);
-    for e in &rows {
+    for e in rows {
         let m = e.at("message");
         if e.s("type") == "assistant" && m.is_object() {
             if e.b("isApiErrorMessage") { last = Some(Last::Error(e)); continue; }
@@ -165,12 +165,12 @@ pub fn read_claude(file: &Path, bytes: u64) -> Option<Turn> {
         }
     })
 }
-pub fn read_codex(file: &Path, bytes: u64) -> Option<Turn> {
-    let rows = tail_lines(file, bytes).ok()?;
+pub fn read_codex(file: &Path, bytes: u64) -> Option<Turn> { codex_turn(&tail_lines(file, bytes).ok()?) }
+pub fn codex_turn(rows: &[Value]) -> Option<Turn> {
     #[derive(PartialEq)] enum K { Final, Partial, User, Tool, Error, Done, Interrupt }
     let mut last: Option<(K, &Value, String, String, String)> = None; // kind, entry, id, error text, code
     let (mut said, mut usage, mut model, mut window, mut began) = (String::new(), None::<(f64, f64)>, String::new(), None::<f64>, 0);
-    for e in &rows {
+    for e in rows {
         let p = e.at("payload");
         let (ty, pty) = (e.s("type"), p.s("type"));
         if ty == "turn_context" { if p.b("model") { model = p.t("model"); } }
@@ -207,11 +207,11 @@ pub fn read_codex(file: &Path, bytes: u64) -> Option<Turn> {
         _ => Turn { pending: true, said: said.trim().to_string(), ..base },
     })
 }
-pub fn read_pi(file: &Path, bytes: u64) -> Option<Turn> {
-    let rows = tail_lines(file, bytes).ok()?;
+pub fn read_pi(file: &Path, bytes: u64) -> Option<Turn> { pi_turn(&tail_lines(file, bytes).ok()?) }
+pub fn pi_turn(rows: &[Value]) -> Option<Turn> {
     let mut last: Option<(bool, &Value)> = None; // (said by the agent, entry)
     let (mut usage, mut model, mut latest, mut began) = (None::<(f64, f64)>, String::new(), String::new(), 0);
-    for e in &rows {
+    for e in rows {
         let m = e.at("message");
         if e.s("type") != "message" || !m.is_object() { continue; }
         if m.s("role") == "assistant" {
@@ -237,6 +237,10 @@ pub fn read_pi(file: &Path, bytes: u64) -> Option<Turn> {
 /// The end of a conversation, by this program's reader.
 pub fn read_turn(kind: &str, file: &Path, bytes: u64) -> Option<Turn> {
     match kind { "claude" => read_claude(file, bytes), "codex" => read_codex(file, bytes), "pi" => read_pi(file, bytes), _ => None }
+}
+/// The same, of its lines as read (`tail_lines`): what a reader of the file's end kept between reads judges.
+pub fn turn_in(kind: &str, rows: &[Value]) -> Option<Turn> {
+    match kind { "claude" => claude_turn(rows), "codex" => codex_turn(rows), "pi" => pi_turn(rows), _ => None }
 }
 /// A file whose name passes `test`, anywhere under a folder (a few levels deep), newest first.
 pub fn find_file(root: &Path, test: &dyn Fn(&str) -> bool, depth: usize) -> Vec<PathBuf> {
