@@ -85,7 +85,9 @@ an hour, which Herdr counts as a turn. A compaction in the saved conversation is
 
 At each turn's end, the hook runs `herdr-projects turn-ended` (silent, at most two seconds, protected by a per-launch
 secret). The finish line then reads the end of that agent's saved conversation: its last message, an API or login error,
-its token use.
+its token use. That file is looked for only where the program keeps it, never by reading through a long history: pi's
+in the folder it keeps for the agent's working folder; Codex's in the folder of the day its conversation began, which
+the conversation's id tells (Codex's ids carry the moment they were made), then the day after and the day before.
 
 **An agent that stopped to wait for you** (a question, a permission, a sign-in) has not finished, however often it asks:
 none of the finish line runs. How an agent says so, and what the board does:
