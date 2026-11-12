@@ -3,8 +3,8 @@
 //! only): where GitHub refuses it, the list is made of what such a token reads, the jobs of the commit's GitHub Actions
 //! runs (every matrix member, with the link to its log) and its commit statuses (an outside CI, Vercel), in the same
 //! shape, and what cannot be read that way (another app's check runs) is named, to be said on the task. A check run
-//! again keeps its older runs in GitHub's list: only its newest one counts (#404). Used by
-//! checks.rs, merge.rs and the pull requests' watch (housekeeping/prs.rs).
+//! again keeps its older runs in GitHub's list: only its newest one counts (#404), and a run its workflow cancelled for
+//! a newer one fails nothing (#781). Used by checks.rs, merge.rs and the pull requests' watch (housekeeping/prs.rs).
 use crate::clock::now;
 use crate::flow::git::{gh, pr_number, GhOut};
 use crate::json::*;
@@ -51,12 +51,30 @@ pub fn pr_view(root: &Path, pr: &str, fields: &str) -> Result<Read, String> {
     // Merged or closed: its checks are not asked for.
     if !v.s("state").is_empty() && v.s("state") != "OPEN" { v["statusCheckRollup"] = json!([]); return Ok(Read { view: v, ..Default::default() }); }
     let (checks, fault) = match of_commit(root, &v.t("headRefOid")) { Ok(c) => (c, String::new()), Err(e) => (vec![], e) };
-    v["statusCheckRollup"] = json!(checks);
+    v["statusCheckRollup"] = json!(checks.iter().filter(|c| !superseded(c, &checks)).collect::<Vec<_>>());
     Ok(Read { view: v, unread: vec![UNREAD.to_string()], fault })
 }
 
 /// A number in a GitHub Actions link after `part` (`/actions/runs/<run>/job/<job>`): None for any other check.
 fn link_id(c: &Value, part: &str) -> Option<u64> { c.s("detailsUrl").split(part).nth(1).and_then(|r| r.split(|c: char| !c.is_ascii_digit()).next()?.parse().ok()) }
+/// The workflow run a GitHub Actions check is of: None for any other check.
+fn run_of(c: &Value) -> Option<u64> { link_id(c, "/actions/runs/") }
+/// One check, in whichever run: its kind, its workflow, its name.
+fn check_of(c: &Value) -> (String, String, String) { (c.s("__typename").to_string(), c.s("workflowName").to_string(), super::checks::name(c)) }
+/// A time GitHub gave: not none, nor gh's `0001-…` for none (not started yet).
+fn known(s: &str) -> bool { !s.is_empty() && !s.starts_with("0001") }
+/// `b` began after `a`, each as (when it began, its workflow run's number): by the times where both are known and
+/// differ, else by the numbers, which GitHub gives a later run higher.
+fn began_after(a: (&str, u64), b: (&str, u64)) -> bool { if known(a.0) && known(b.0) && a.0 != b.0 { a.0 < b.0 } else { a.1 < b.1 } }
+/// A GitHub Actions check cancelled for a newer run of its workflow (#781). A workflow with `concurrency` and
+/// `cancel-in-progress`, started again on the same commit (a label added, the pull request edited), cancels the run
+/// still going, and GitHub lists both: the cancelled one judged nothing, the newer run's job of the same name does. A
+/// cancelled newest run still counts, and so does any other result of an older run (its run for the push may fail where
+/// the pull request's passes).
+fn superseded(c: &Value, checks: &[Value]) -> bool {
+    let Some(r) = run_of(c) else { return false };
+    super::checks::word(c) == "CANCELLED" && checks.iter().any(|o| check_of(o) == check_of(c) && run_of(o).is_some_and(|q| q != r && began_after((c.s("startedAt"), r), (o.s("startedAt"), q))))
+}
 /// The jobs of a workflow run's latest attempt, as GitHub gives them: None where it does not.
 fn latest_jobs(root: &Path, run: u64) -> Option<Vec<u64>> {
     let r = every_page(root, &format!("repos/{{owner}}/{{repo}}/actions/runs/{run}/jobs?filter=latest&per_page=100"), ".jobs[].id");
@@ -67,15 +85,13 @@ fn latest_jobs(root: &Path, run: u64) -> Option<Vec<u64>> {
 /// check: one of the same name with the very same link that began after it was over; with another link it may be
 /// another pipeline's or another CI's check of that name, whose pass says nothing of this one's failure. What cannot be
 /// told (GitHub does not say, no link, the times are not known: not started yet, gh's `0001-…`) is kept, so that a
-/// failure is never dropped for a guess.
+/// failure is never dropped for a guess. A run its workflow cancelled for a newer one is left out too (`superseded`).
 pub fn newest(root: &Path, checks: &[Value]) -> Vec<Value> {
-    let run_of = |c: &Value| link_id(c, "/actions/runs/");
-    let key = |c: &Value| (c.s("__typename").to_string(), c.s("workflowName").to_string(), if c.b("name") { c.t("name") } else { c.t("context") }, run_of(c));
+    let key = |c: &Value| (check_of(c), run_of(c));
     let mut latest: Vec<(u64, Option<Vec<u64>>)> = vec![];
     for c in checks.iter().filter(|c| checks.iter().filter(|o| key(o) == key(c)).count() > 1) {
         if let Some(r) = run_of(c) { if !latest.iter().any(|(x, _)| *x == r) { latest.push((r, latest_jobs(root, r))); } }
     }
-    let known = |s: &str| !s.is_empty() && !s.starts_with("0001");
     let link = |c: &Value| if c.b("detailsUrl") { c.t("detailsUrl") } else { c.t("targetUrl") };
     // A status has one time, when it was set.
     let older = |a: &Value, b: &Value| { let (end, start) = (if a.b("completedAt") { a.s("completedAt") } else { a.s("startedAt") }, b.s("startedAt")); known(end) && known(start) && end < start };
@@ -87,25 +103,32 @@ pub fn newest(root: &Path, checks: &[Value]) -> Vec<Value> {
         }
         None => !link(c).is_empty() && checks.iter().any(|o| key(o) == key(c) && link(o) == link(c) && older(c, o)),
     };
-    checks.iter().filter(|c| !gone(c)).cloned().collect()
+    checks.iter().filter(|c| !gone(c) && !superseded(c, checks)).cloned().collect()
 }
 
-/// One GitHub Actions run of a commit.
-pub struct Run { pub id: String, pub path: String, pub status: String, pub conclusion: String, pub url: String, pub name: String }
+/// One GitHub Actions run of a commit. `started`: when its latest attempt began, where GitHub says.
+pub struct Run { pub id: String, pub path: String, pub status: String, pub conclusion: String, pub url: String, pub name: String, pub started: String }
+impl Run {
+    /// Cancelled for a newer run among `others`, its workflow's runs on the commit (as `superseded`, #781).
+    pub fn superseded(&self, others: &[&Run]) -> bool {
+        let Ok(me) = self.id.parse::<u64>() else { return false };
+        self.conclusion.eq_ignore_ascii_case("cancelled") && others.iter().any(|o| o.id.parse::<u64>().is_ok_and(|n| n != me && began_after((&self.started, me), (&o.started, n))))
+    }
+}
 /// Every page of a list GitHub gives at most 100 to a page, each item a line of `jq`.
 fn every_page(root: &Path, path: &str, jq: &str) -> GhOut { gh(&["api", "--paginate", path, "--jq", jq], root, 60000) }
 /// The commit's GitHub Actions runs (the Actions permission reads them), all of them.
 pub fn runs(root: &Path, head: &str) -> Result<Vec<Run>, GhOut> {
-    let r = every_page(root, &format!("repos/{{owner}}/{{repo}}/actions/runs?head_sha={head}&per_page=100"), ".workflow_runs[] | [.id, .path, .status, (.conclusion // \"\"), .html_url, .name] | @tsv");
+    let r = every_page(root, &format!("repos/{{owner}}/{{repo}}/actions/runs?head_sha={head}&per_page=100"), ".workflow_runs[] | [.id, .path, .status, (.conclusion // \"\"), .html_url, .name, (.run_started_at // \"\")] | @tsv");
     if r.status != 0 { return Err(r); }
     Ok(r.stdout.lines().filter(|l| !l.trim().is_empty()).map(|l| {
         let x: Vec<String> = l.split('\t').map(String::from).collect();
         let at = |i: usize| x.get(i).cloned().unwrap_or_default();
-        Run { id: at(0), path: at(1), status: at(2), conclusion: at(3), url: at(4), name: at(5) }
+        Run { id: at(0), path: at(1), status: at(2), conclusion: at(3), url: at(4), name: at(5), started: at(6) }
     }).collect())
 }
-fn check_run(name: &str, status: &str, conclusion: &str, url: &str, flow: &str) -> Value {
-    json!({ "__typename": "CheckRun", "name": name, "status": status.to_uppercase(), "conclusion": conclusion.to_uppercase(), "detailsUrl": url, "workflowName": flow })
+fn check_run(name: &str, status: &str, conclusion: &str, url: &str, flow: &str, started: &str) -> Value {
+    json!({ "__typename": "CheckRun", "name": name, "status": status.to_uppercase(), "conclusion": conclusion.to_uppercase(), "detailsUrl": url, "workflowName": flow, "startedAt": started })
 }
 /// The commit's checks, from what a fine-grained token reads, every page of them: each of its runs as itself (still
 /// running or failed, whatever its jobs listed so far say; `run`), then each of the run's jobs, and each of its commit
@@ -114,14 +137,14 @@ fn of_commit(root: &Path, head: &str) -> Result<Vec<Value>, String> {
     let mut out: Vec<Value> = vec![];
     let runs = runs(root, head).map_err(|r| format!("GitHub Actions runs (gh api …/actions/runs): {}", said(&r)))?;
     for run in runs {
-        let mut me = check_run(&run.name, &run.status, &run.conclusion, &run.url, &run.name); me["run"] = json!(true);
+        let mut me = check_run(&run.name, &run.status, &run.conclusion, &run.url, &run.name, &run.started); me["run"] = json!(true);
         out.push(me);
-        let r = every_page(root, &format!("repos/{{owner}}/{{repo}}/actions/runs/{}/jobs?per_page=100", run.id), ".jobs[] | [.name, .status, (.conclusion // \"\"), .html_url] | @tsv");
+        let r = every_page(root, &format!("repos/{{owner}}/{{repo}}/actions/runs/{}/jobs?per_page=100", run.id), ".jobs[] | [.name, .status, (.conclusion // \"\"), .html_url, (.started_at // \"\")] | @tsv");
         if r.status != 0 { continue; }
         out.extend(r.stdout.lines().filter(|l| !l.trim().is_empty()).map(|l| {
             let x: Vec<&str> = l.split('\t').collect();
             let at = |i: usize| x.get(i).copied().unwrap_or("");
-            check_run(at(0), at(1), at(2), at(3), &run.name)
+            check_run(at(0), at(1), at(2), at(3), &run.name, at(4))
         }));
     }
     let r = every_page(root, &format!("repos/{{owner}}/{{repo}}/commits/{head}/status?per_page=100"), ".statuses[] | [.context, .state, (.target_url // \"\")] | @tsv");

@@ -41,9 +41,10 @@ pub fn actions_off(root: &Path) -> bool {
     r.status == 0 && r.stdout.trim() == "false"
 }
 /// Each workflow that runs for it, against its runs on this commit: none yet, or one not finished, is waited for (by the
-/// workflow's name); one that finished and failed is a failed check. GitHub not answering: all of them are waited for.
-/// One that may not run on this commit and has no run is waited for only `MAYBE_MS` since the board began waiting
-/// (where GitHub gave the commit's runs: not given, it is waited for as the others are).
+/// workflow's name); one that finished and failed is a failed check, unless it was cancelled for a newer run of it
+/// (readable.rs). GitHub not answering: all of them are waited for. One that may not run on this commit and has no run
+/// is waited for only `MAYBE_MS` since the board began waiting (where GitHub gave the commit's runs: not given, it is
+/// waited for as the others are).
 pub fn flows_state(t: &Obj, root: &Path, base: &str, head: &str) -> Flows {
     let flows = flows_for(t, base);
     if flows.is_empty() || actions_off(root) { return Flows::default(); }
@@ -52,7 +53,9 @@ pub fn flows_state(t: &Obj, root: &Path, base: &str, head: &str) -> Flows {
     let runs = runs.unwrap_or_default();
     let mut out = Flows::default();
     for (file, flow, how) in flows {
-        let mine: Vec<&super::readable::Run> = runs.iter().filter(|x| x.path.split('@').next() == Some(file.as_str())).collect();
+        let all: Vec<&super::readable::Run> = runs.iter().filter(|x| x.path.split('@').next() == Some(file.as_str())).collect();
+        // A run cancelled for a newer one of the workflow judged nothing: the newer one does (#781).
+        let mine: Vec<&super::readable::Run> = all.iter().copied().filter(|x| !x.superseded(&all)).collect();
         if mine.is_empty() && how == Runs::Maybe && given_up { continue; }
         let up = |s: &str| s.to_uppercase();
         if let Some(bad) = mine.iter().find(|x| up(&x.status) == "COMPLETED" && CHECK_BAD.contains(&up(&x.conclusion).as_str())) {

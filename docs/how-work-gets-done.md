@@ -189,6 +189,17 @@ every repo the board merges in. `merge.checks: none` does not look at GitHub's c
 A failure is of one commit: once a repair is pushed, the old commit's failed checks block nothing (also when main is
 merged in before it merges). Only the checks of the commit that would merge count.
 
+Each check is judged by its newest run, here and in the pull requests' watch, which wakes the agent when checks fail:
+
+- A job re-run in its workflow run counts by its latest attempt.
+- A run that its workflow cancelled for a newer one fails nothing; the newer run's job of the same name decides. That
+  happens with a workflow that has `concurrency` with `cancel-in-progress` and starts again on the same commit, for
+  example when a label is added or the pull request is edited.
+- A cancelled newest run still fails, and so does a cancelled check with no newer run of its own.
+- A failure in another run of the workflow (its run for the push) is its own check: a pass of the pull request's run
+  does not undo it.
+- Another CI's check counts as run again only when it has the very same link.
+
 Each check is counted once, a workflow for its jobs until GitHub lists them. `details` names what it waits for
 (`checksWaitingFor`).
 
