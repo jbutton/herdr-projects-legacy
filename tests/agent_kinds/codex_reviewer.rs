@@ -106,3 +106,55 @@ fn only_a_role_that_looks_is_started_with_its_hooks_off() {
     assert!(!args("codex", false).iter().any(|a| a.contains("hooks")), "{:?}", args("codex", false));
     assert_eq!(args("claude", true), args("claude", false));
 }
+
+/// A `codex` first on PATH that answers as Codex 0.167.2 did here with no sign-in at all: `login status` says "Not
+/// logged in" (exit 1) whatever its provider, and its app-server's `account/read` says whether that provider needs
+/// one (`requiresOpenaiAuth`: false for a `model_provider` of your own with `requires_openai_auth = false`). Every
+/// call is noted in `asked`. PATH is put back when it is dropped, also when the test fails.
+struct FakeCodex { path: String, asked: std::path::PathBuf }
+impl Drop for FakeCodex { fn drop(&mut self) { unsafe { std::env::set_var("PATH", &self.path) } } }
+fn fake_codex(w: &World, needs_sign_in: bool) -> FakeCodex {
+    let bin = w.base.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let asked = w.base.join("asked");
+    let account = format!(r#"{{"id":1,"result":{{"account":null,"requiresOpenaiAuth":{needs_sign_in},"workspaceRouting":null}}}}"#);
+    std::fs::write(bin.join("codex"), format!("#!/bin/sh\necho \"$*\" >> {}\nif [ \"$1 $2\" = 'login status' ]; then echo 'Not logged in'; exit 1; fi\nif [ \"$1\" = app-server ]; then\n  while read l; do case \"$l\" in *'\"account/read\"'*) printf '%s\\n' '{account}';; esac; done\n  exit 0\nfi\nexit 2\n", asked.display())).unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(bin.join("codex"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = std::env::var("PATH").unwrap_or_default();
+    unsafe { std::env::set_var("PATH", format!("{}:{path}", bin.display())) };
+    // Nothing kept from before: the board asks the program.
+    let f = sw::store::files::data_dir().join("signins.json");
+    let mut all = sw::store::files::read_json(&f).unwrap_or(json!({}));
+    all.as_object_mut().unwrap().remove("codex");
+    sw::store::files::write_json(&f, &all).unwrap();
+    FakeCodex { path, asked }
+}
+
+#[test]
+fn real_programs_a_codex_on_a_provider_of_its_own_reviews_although_it_says_it_is_not_logged_in() {
+    let w = reviewed_by(json!({}));
+    let codex = fake_codex(&w, false);
+    w.script(json!({ "worker": [step(1)], "reviewer": [pass()] }));
+    let id = w.add("Own provider");
+    delegate(&id);
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "approval", "{} {}", t.s("msg"), t.at("failure"));
+    assert_eq!(starts_of(&w, "codex").len(), 1, "{:?}", starts_of(&w, "codex"));
+    assert_eq!(std::fs::read_to_string(&codex.asked).unwrap_or_default(), "login status\napp-server\n", "its app-server says whether the sign-in is needed at all");
+}
+
+#[test]
+fn real_programs_a_codex_that_needs_its_sign_in_and_has_none_is_not_started() {
+    let w = reviewed_by(json!({}));
+    let codex = fake_codex(&w, true);
+    w.patch(|s| s["signedOut"] = json!(["codex"]));
+    w.script(json!({ "worker": [step(1)], "reviewer": [pass()] }));
+    let id = w.add("Needs a sign-in");
+    delegate(&id);
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "failed", "{} {}", t.s("msg"), t.at("failure"));
+    assert_eq!(t.at("failure").s("title"), "Needs a login", "{}", t.at("failure"));
+    assert!(starts_of(&w, "codex").is_empty(), "{:?}", starts_of(&w, "codex"));
+    assert!(std::fs::read_to_string(&codex.asked).unwrap_or_default().starts_with("login status\n"));
+}
