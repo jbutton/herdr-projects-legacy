@@ -113,7 +113,7 @@ fn the_pull_request_and_the_review_page_show_every_finding_those_below_the_gate_
     let t = settle(&id);
     assert_eq!(t.s("stage"), "approval", "{}", t.at("failure"));
     let log = gh_log(&w);
-    assert!(re(r"pr comment 7 --body \*\*Review 1 · Pass · 1 minor\*\*[\s\S]*\*\*Not required \(below the gate\)\*\*\n- \*\*minor\*\*: The name could be clearer \(`f\.txt`\)", &log), "{log}");
+    assert!(re(r"pr comment https://github\.com/o/r/pull/7 --body \*\*Review 1 · Pass · 1 minor\*\*[\s\S]*\*\*Not required \(below the gate\)\*\*\n- \*\*minor\*\*: The name could be clearer \(`f\.txt`\)", &log), "{log}");
     let mut rv = review_of(false, vec![finding("major", "Crashes on <empty> files", json!({})), finding("minor", "A name is unclear", json!({})), finding("major", "The old importer drops rows", json!({ "preexisting": true }))], "major");
     for f in rv.get_mut("findings").unwrap().as_array_mut().unwrap() { if f.b("preexisting") { f["task"] = json!("proj/9"); } }
     rv.put("at", sw::clock::now()); rv.put("left", 2);
