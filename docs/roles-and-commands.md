@@ -78,15 +78,15 @@ Coordinator's closing line use them too):
 | `pin`, `unpin` (a task, a machine or a project; `--on MACHINE`: another machine's project) | `proj/12: pinned`, `vm-str: pinned`, `mstars on vm-b: unpinned` ([pins](pinned.md)) |
 | `stop` | `stopped`, and what it ended beside the agent: `proj/12: stopped. Ended what it started: bun …/check (pid 812).` |
 
-`stop` interrupts the agent and keeps it, so a reply goes on, and ends what it started for the task: every process
-in its terminal below its shell but the agent and its helpers (an MCP server wired to it), the whole tree, and your
-processes that run from the task's worktree or temporary folder. Never your own checkout, another task's worktree,
-what runs in the task's other panes (yours, its reviewer's), or a run of the board's own program. One started for the
-task that works elsewhere now is named for you to end, not ended: `Still running, end it yourself: node …/x.js (pid 9),
-in /srv/app.` So is what runs from its folders when herdr does not say what runs in its panes: then the agent and your
-shells there cannot be told apart. One that works elsewhere is known by the temporary folder it was started with (its
-`TMPDIR`), which Linux shows for every program and macOS for all but Apple's own (`/bin/sh`, `/usr/bin/ruby`): macOS
-keeps theirs to themselves, so such a one is not named there.
+`stop` interrupts the agent and keeps it, so a reply goes on, and ends what it started for the task: every process in
+its terminal below its shell but the agent and its helpers (an MCP server wired to it, and what a helper runs), the
+whole tree, and your processes that run from the task's worktree or temporary folder. Never your own checkout, another
+task's worktree, what runs in the task's other panes (yours, its reviewer's), or a run of the board's own program. One
+started for the task that works elsewhere now is named for you to end, not ended: `Still running, end it yourself:
+node …/x.js (pid 9), in /srv/app.` So is what runs from its folders when herdr does not say what runs in its panes:
+then the agent and your shells there cannot be told apart. One that works elsewhere is known by the temporary folder
+it was started with (its `TMPDIR`), which Linux shows for every program and macOS for all but Apple's own (`/bin/sh`,
+`/usr/bin/ruby`): macOS keeps theirs to themselves, so such a one is not named there.
 
 `approve` refuses work whose last review failed, and says what the review found. `approve <id> --anyway` merges it all
 the same. It is for when the human said so in so many words.
