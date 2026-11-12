@@ -78,7 +78,11 @@ attempts' picker ([attempts](attempts.md)), which are the same program:
   as `herdr-projects doctor` does). Signed out, it is not started: the next one on `reviewer.fallback` reviews
   (`claude took over the review from codex: logged out`, [fallback](fallback.md#the-reviewer)), or the task fails as
   **Needs a login**, with what to run: `codex is not signed in here (codex login status says so): run codex login in a
-  terminal here, then retry the review`. A signed-in answer is kept a minute (`signins.json` in the data folder); a
+  terminal here, then retry the review`. "Not logged in" counts only where the provider it is set to needs that
+  sign-in: Codex on a `model_provider` of yours with `requires_openai_auth = false` says "Not logged in" too, yet shows
+  no sign-in page and works, so its app-server is asked (`account/read`, `requiresOpenaiAuth`); where that gives no
+  answer, a provider of your own needs none (Codex's `model_provider`, Claude Code's `ANTHROPIC_BASE_URL` or a cloud,
+  as for [model names](models.md)). An answer it can start on is kept a minute (`signins.json` in the data folder); a
   signed-out one is asked again every time, so signing in counts at the very next try. A program that cannot say, or
   does not answer in 5 seconds, is started, and a login error in its turn is handled as before.
 

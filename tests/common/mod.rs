@@ -70,7 +70,7 @@ pub fn world_in(o: Opts, under: &str) -> World {
     let versions: serde_json::Map<String, Value> = sw::agents::kinds::all().map(|k| (k.name.to_string(), json!({ "v": "9.9.9", "at": now, "found": true }))).collect();
     std::fs::write(data.join("versions.json"), Value::Object(versions).to_string()).unwrap();
     // And as signed in, for as long as the test runs, without its sign-in command being run (agents/sign_in.rs).
-    let signins: serde_json::Map<String, Value> = sw::agents::kinds::all().map(|k| (k.name.to_string(), json!({ "in": true, "until": i64::MAX }))).collect();
+    let signins: serde_json::Map<String, Value> = sw::agents::kinds::all().map(|k| (k.name.to_string(), json!({ "sign": "in", "until": i64::MAX }))).collect();
     std::fs::write(data.join("signins.json"), Value::Object(signins).to_string()).unwrap();
     let mut settings = json!({ "watcher.agent": "none", "coordinator.agent": "none" });
     for (k, v) in o.settings.as_object().cloned().unwrap_or_default() { settings[k] = v; }

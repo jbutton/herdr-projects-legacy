@@ -15,7 +15,7 @@ fn starts_of(w: &World, kind: &str) -> Vec<String> { calls(w).into_iter().filter
 fn codex_signed_out(w: &World) {
     let f = sw::store::files::data_dir().join("signins.json");
     let mut all = sw::store::files::read_json(&f).unwrap_or(json!({}));
-    all["codex"] = json!({ "in": false, "until": i64::MAX });
+    all["codex"] = json!({ "sign": "out", "until": i64::MAX });
     sw::store::files::write_json(&f, &all).unwrap();
     w.patch(|s| s["signedOut"] = json!(["codex"]));
 }

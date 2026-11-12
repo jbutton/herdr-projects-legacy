@@ -66,7 +66,8 @@ pub fn check(progs: &[Prog]) -> Vec<Found> {
         if p.integration == Some(false) {
             out.push(Found::bad(format!("{k} needs herdr's own integration, or herdr cannot see when it works"), format!("Run: herdr integration install {}", a.integration)));
         }
-        if out.len() == before { out.push(Found::ok(format!("{k}{v}{} ({by})", if p.sign == Sign::In { ", signed in" } else { "" }))); }
+        let sign = match p.sign { Sign::In => ", signed in", Sign::NotNeeded => ", on a provider that needs no sign-in", _ => "" };
+        if out.len() == before { out.push(Found::ok(format!("{k}{v}{sign} ({by})"))); }
     }
     out
 }
