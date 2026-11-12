@@ -1,8 +1,10 @@
-//! The push of a task's branch: it replaces what origin holds only where that is the task's own (the head it pushed
-//! last, a commit its branch was at, or one its branch holds), never a commit someone else pushed there, even after a
-//! fetch moved `origin/<branch>` (upstream d63af260); and a branch origin already has at its head is not pushed again,
-//! so the repo's pre-push hook does not run for nothing (upstream #795, #901).
+//! The push of a task's branch: it replaces what origin holds only where that is exactly the commit the board pushed
+//! last, or one the pushed commit holds; never a commit someone else pushed there, even after a fetch moved
+//! `origin/<branch>` or put it in the branch's own history, and what it keeps as pushed is the commit it pushed
+//! (upstream d63af260). A branch origin already has at its head is not pushed again, so the repo's pre-push hook does
+//! not run for nothing (upstream #795, #901).
 use crate::common;
+use super::{first_on_path, script, PathBack};
 use common::*;
 use serde_json::json;
 use std::path::Path;
@@ -27,6 +29,16 @@ fn pre_push(w: &World, then: &str) {
     std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
 }
 fn hook_runs(w: &World) -> usize { read(&w.base.join("hook-runs")).lines().count() }
+/// A git first on PATH that, once `armed` exists, has someone else push onto the task's branch and fetches that here
+/// right after the board's next push returns, before the board reads anything more.
+fn fetch_right_after_push(w: &World, branch: &str) -> PathBack {
+    let real = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).map(|d| d.join("git")).find(|p| p.is_file()).unwrap();
+    let other = w.base.join("other");
+    git(&w.base, &["clone", "-q", "-b", branch, &w.base.join("origin.git").display().to_string(), &other.display().to_string()]);
+    let (g, o, root, armed) = (real.display(), other.display(), w.root.display(), w.base.join("armed").display().to_string());
+    script(&w.base.join("gitbin/git"), &format!("#!/bin/sh\n\"{g}\" \"$@\"; s=$?\nif [ \"$1\" = push ] && [ $s -eq 0 ] && [ -f \"{armed}\" ]; then\n  rm -f \"{armed}\"\n  cd \"{o}\" && \"{g}\" fetch -q origin && \"{g}\" reset -q --hard \"origin/{branch}\" && echo theirs > theirs.txt && \"{g}\" add -A && \"{g}\" commit -qm 'a suggestion' && \"{g}\" push -q origin \"{branch}\" && \"{g}\" -C \"{root}\" fetch -q origin\nfi\nexit $s\n"));
+    first_on_path(&w.base.join("gitbin"))
+}
 /// The agent is asked for more and does `step`; its turn ends and the finish line runs again.
 fn again(w: &World, id: &str, step: serde_json::Value) -> Obj {
     w.script(json!({ "worker": [step] }));
@@ -60,6 +72,44 @@ fn a_commit_someone_else_pushed_to_the_branch_is_never_pushed_over_even_after_a_
 }
 
 #[test]
+fn a_commit_someone_else_pushed_is_not_the_tasks_own_for_having_been_pulled_into_its_branch_and_dropped_again() {
+    let w = pr_world();
+    let id = to_approval(&w, "Pulled, dropped");
+    let t = task(&id);
+    let (branch, tree, pushed) = (t.t("branch"), t.t("worktree"), t.t("prHead"));
+    let theirs = someone_pushes(&w, &branch);
+    // The agent pulls their commit in, goes back to what the board pushed and rewrites that: their commit is in the
+    // branch's own history (its reflog), and in nothing it would push.
+    git(Path::new(&tree), &["pull", "-q", "--ff-only", "origin", &branch]);
+    git(Path::new(&tree), &["reset", "-q", "--hard", &pushed]);
+    git(Path::new(&tree), &["commit", "-q", "--amend", "-m", "v1, worded better"]);
+    let t = again(&w, &id, json!({ "note": "Reworded it." }));
+    assert_eq!(at_origin(&w, &branch), theirs, "their commit is still the head of the branch at origin");
+    assert_eq!(t.at("failure").s("title"), "The branch at origin has commits this task does not have", "{}", t.at("failure"));
+    assert_eq!(t.t("prHead"), pushed);
+}
+
+#[test]
+fn what_the_board_keeps_as_pushed_is_the_commit_it_pushed_not_what_a_fetch_right_after_the_push_found() {
+    let w = pr_world();
+    let id = to_approval(&w, "Fetched after");
+    let t = task(&id);
+    let (branch, tree) = (t.t("branch"), t.t("worktree"));
+    let _git = fetch_right_after_push(&w, &branch);
+    std::fs::write(w.base.join("armed"), "").unwrap();
+    let t = again(&w, &id, step(2));
+    assert!(t.at("failure").is_null(), "{}", t.at("failure"));
+    let (mine, theirs) = (git(Path::new(&tree), &["rev-parse", "HEAD"]), at_origin(&w, &branch));
+    assert_ne!(theirs, mine, "someone pushed on top of it right after");
+    assert_eq!(git(&w.root, &["rev-parse", &format!("refs/remotes/origin/{branch}")]), theirs, "and a fetch here found it");
+    assert_eq!(t.t("prHead"), mine, "kept as pushed: the commit the board pushed");
+    // The agent's next commit does not have theirs: nothing is pushed over it.
+    let t = again(&w, &id, step(3));
+    assert_eq!(at_origin(&w, &branch), theirs, "their commit is still the head of the branch at origin");
+    assert_eq!(t.at("failure").s("title"), "The branch at origin has commits this task does not have", "{}", t.at("failure"));
+}
+
+#[test]
 fn the_tasks_own_rewritten_branch_is_still_pushed_over_what_it_pushed_before() {
     let w = pr_world();
     let id = to_approval(&w, "Rebuilt");
@@ -67,6 +117,7 @@ fn the_tasks_own_rewritten_branch_is_still_pushed_over_what_it_pushed_before() {
     let (branch, tree) = (t.t("branch"), t.t("worktree"));
     let first = t.t("prHead");
     assert_eq!(at_origin(&w, &branch), first);
+    assert_eq!(git(&w.root, &["config", "--get", &format!("branch.{branch}.merge")]), format!("refs/heads/{branch}"), "its upstream, as git push -u writes it");
     // The agent rewrites its own commit (a rebase, an amend): origin's head is not in the branch any more.
     git(Path::new(&tree), &["commit", "-q", "--amend", "-m", "v1, worded better"]);
     let t = again(&w, &id, json!({ "note": "Reworded it." }));

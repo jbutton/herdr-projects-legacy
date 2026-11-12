@@ -2,21 +2,12 @@
 //! or a `mise.toml` has its pre-push hook run by the tools it names (`mise env`), as its agents push (`mise exec -- git
 //! push`), whatever PATH the board's process has. A repo without one, or a mise that cannot say, pushes as before.
 use crate::common;
+use super::{first_on_path, script, PathBack};
 use common::*;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 use sw::json::*;
 
-/// PATH as it was before the test put its fake mise first.
-struct PathBack(Option<std::ffi::OsString>);
-impl Drop for PathBack { fn drop(&mut self) { unsafe { match &self.0 { Some(p) => std::env::set_var("PATH", p), None => std::env::remove_var("PATH") } } } }
-
-fn script(path: &Path, body: &str) {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    std::fs::write(path, body).unwrap();
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
-}
 /// A mise on PATH that notes where and how it was asked. `mise env --json` in a folder with a tool file gives the
 /// tools' folder first on PATH, as the real one does; `works: false` is a mise that fails (an untrusted mise.toml).
 fn fake_mise(w: &World, works: bool) -> PathBack {
@@ -25,11 +16,7 @@ fn fake_mise(w: &World, works: bool) -> PathBack {
     script(&bin.join("mise"), &format!("#!/bin/sh\necho \"$PWD $*\" >> \"{}\"\n{answer}\n", log.display()));
     // The repo's interpreter, which only the tool manager's PATH has (Ruby for an overcommit hook).
     script(&tools.join("herdr-test-ruby"), &format!("#!/bin/sh\necho \"$TOOLS_ON\" >> \"{}\"\n", w.base.join("hook-runs").display()));
-    let was = std::env::var_os("PATH");
-    let mut all = vec![bin];
-    all.extend(std::env::split_paths(&was.clone().unwrap_or_default()));
-    unsafe { std::env::set_var("PATH", std::env::join_paths(all).unwrap()); }
-    PathBack(was)
+    first_on_path(&bin)
 }
 /// The repo names its tools in `file` and its pre-push hook needs the repo's interpreter, as chargify's overcommit does.
 fn repo_with_tools(w: &World, file: Option<&str>) {
