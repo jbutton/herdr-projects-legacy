@@ -69,7 +69,8 @@ pub fn plain_held(said: &str, b: &str, lock: Option<String>) -> String {
     if locked(said) { return "another fetch of this repo was writing the same branch at that moment, again on every try. Nothing is wrong with the work; the board tries again by itself".into(); }
     if no_such_branch(said) { return format!("origin has no branch {b}. If the remote's main branch has another name, run git fetch origin and then git remote set-head origin --auto in your checkout"); }
     if login(said) { return "origin asked for a login, and the board never types one in. Make sure git fetch origin works in your checkout without a prompt (an SSH key in the agent, or a credential helper)".into(); }
-    if has(said, &["did not answer within"]) { return format!("origin did not answer within {} seconds. If it waits for a password or a passphrase, make sure git fetch origin works without a prompt", FETCH_MS / 1000); }
+    // "origin did not answer within N seconds": the bound of the fetch that said it (a sync's, a start's).
+    if let Some(l) = said.lines().find(|l| has(l, &["did not answer within"])) { return format!("{}. If it waits for a password or a passphrase, make sure git fetch origin works without a prompt", l.trim().trim_end_matches('.')); }
     if network(said) { return "origin could not be reached (the network or the server). The board tries again by itself".into(); }
     if has(said, &["does not appear to be a git repository", "repository not found", "no such remote"]) { return "origin is not a repository the board can read. Check where it points with git remote -v".into(); }
     let first = said.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("git fetch failed");
@@ -129,6 +130,7 @@ mod tests {
         assert!(plain("fatal: unable to access 'https://x/': Could not resolve host: x", "main").starts_with("origin could not be reached"));
         assert!(plain("fatal: '/gone.git' does not appear to be a git repository", "main").starts_with("origin is not a repository"));
         assert_eq!(plain("fatal: something new", "main"), "something new");
+        assert!(plain("origin did not answer within 10 seconds", "main").starts_with("origin did not answer within 10 seconds. If it waits"));
         assert!(!network("fatal: couldn't find remote ref main") && !locked("Permission denied (publickey)"));
         // git 2.53's words for a lock file in the way, and for a real conflict: the lock only when its file is there
         let dir = std::env::temp_dir().join(format!("sw-fetch-plain-{}", std::process::id()));
