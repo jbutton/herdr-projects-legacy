@@ -58,7 +58,21 @@ impl Bench {
             .current_dir(self.dir(wt)).env("XDG_CACHE_HOME", self.base.join("cache")).env_remove("HERDR_PROJECTS_NO_WARM")
             .env_remove("CARGO_TARGET_DIR").env("GIT_CONFIG_GLOBAL", "/dev/null").env("GIT_CONFIG_NOSYSTEM", "1").output().unwrap();
         assert!(o.status.success(), "the setup's steps failed: {}", String::from_utf8_lossy(&o.stderr));
+        // What it said and what is kept after it, shown only when the test fails (a failure on another machine).
+        eprintln!("setup in {wt}: said {:?}, {:?}\n{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr), self.state());
         String::from_utf8_lossy(&o.stdout).into_owned()
+    }
+    /// The kept builds as they are: each repo's folder and its `current`, each build's commit, folder and compiler.
+    fn state(&self) -> String {
+        let mut s = String::new();
+        for r in std::fs::read_dir(self.base.join("cache/herdr-projects/warm")).into_iter().flatten().flatten() {
+            s += &format!("  {}: current {:?}\n", r.file_name().to_string_lossy(), std::fs::read_to_string(r.path().join("current")).unwrap_or_default().trim());
+            for k in std::fs::read_dir(r.path()).into_iter().flatten().flatten().filter(|k| k.path().is_dir()) {
+                let f = |n: &str| std::fs::read_to_string(k.path().join(n)).unwrap_or_default().trim().to_string();
+                s += &format!("    {}: commit {:?} folder {:?} rustc {:?}\n", k.file_name().to_string_lossy(), f("commit"), f("folder"), f("rustc"));
+            }
+        }
+        s
     }
     /// The commit the kept build was built from, if one is kept.
     fn kept(&self) -> Option<String> {
