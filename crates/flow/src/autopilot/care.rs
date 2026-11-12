@@ -3,7 +3,8 @@
 //! It may look after the tasks it added and, under `autopilot.scope all`, your to-do tasks it started; never a task of
 //! yours it did not start. One needs looking after when it failed (the check, the review after its rounds, a limit, its
 //! agent's program exiting, its setup) or its agent waits with a question; under `autopilot.approve yes`, also when it
-//! waits for a yes autopilot may give. A task that fails or asks again after `autopilot.retries` retries is left to you.
+//! waits for a yes autopilot may give (never work landed through code review on GitHub, `merge.by none`). A task that
+//! fails or asks again after `autopilot.retries` retries is left to you.
 use super::record::{key_of, task_rec, tasks};
 use crate::coordinator::co::{Co, Level};
 use crate::json::*;
@@ -28,7 +29,8 @@ pub fn need_of(t: &Obj, approve: bool) -> Option<&'static str> {
     if st == "failed" || st == "nosummary" || (st == "stopped" && t.b("limitStop")) || (st == "approval" && review_failed(t)) { return Some("failed"); }
     if st == "approval" && (t.b("mergeFailed") || t.b("prFailure") || t.s("prState") == "failing") { return Some("failed"); }
     if st == "asks" && t.s("kind") == "question" { return Some("asks"); }
-    if approve && !held_for_you(t) && (st == "plan" || (st == "approval" && !t.b("failure") && !t.b("syncBlocked"))) { return Some("yes"); }
+    // Work landed through code review on GitHub (`merge.by none`) waits for no yes: there is none to give.
+    if approve && !held_for_you(t) && (st == "plan" || (st == "approval" && !t.b("failure") && !t.b("syncBlocked") && !crate::finish::code_review::is(t))) { return Some("yes"); }
     None
 }
 /// A task autopilot added whose change touches the repo's own settings file waits for your own yes

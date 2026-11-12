@@ -1,6 +1,8 @@
 //! Auto-merge, the setting: a task that may merge does so by itself while `merge.by` is `itself`, and waits for you
-//! while it is `you`. The pipeline asks the setting when a task turns green; this is the housekeeping pass's part, for
-//! a setting changed while a task already waits.
+//! while it is `you` (for code review on GitHub while it is `none`: finish/code_review.rs). The pipeline asks the
+//! setting when a task turns green; this is the housekeeping pass's part, for a setting changed while a task already
+//! waits.
+use super::code_review;
 use super::old_holds::lift_old_holds;
 use super::shared::approval_message;
 use crate::clock::now;
@@ -29,21 +31,27 @@ pub fn green(t: &Obj) -> bool {
 }
 /// Will this task merge with nobody's yes?
 pub fn merges_itself(t: &Obj) -> bool { if t.at("mergeIntent").is_object() { t.at("mergeIntent").b("auto") } else { by_itself(t) && !t.b("requireApproval") } }
-/// A merge the board itself started and that still waits (for GitHub's checks or its merge queue).
-fn pending(t: &Obj) -> bool { t.s("stage") == "merging" && t.b("autoMerge") && t.at("mergeIntent").b("auto") }
+/// A merge that still waits (for GitHub's checks or its merge queue).
+fn waiting(t: &Obj) -> bool { t.s("stage") == "merging" && t.b("autoMerge") }
+/// A merge under way that may not go on: one the board started by itself, once `merge.by` is no longer `itself`; any
+/// at all under `merge.by none`, one you approved before it was set included (finish/code_review.rs).
+fn stopped(t: &Obj) -> bool { (t.at("mergeIntent").b("auto") && !by_itself(t)) || code_review::by_code_review(t) }
 /// Turned on: a green task that waits for your yes merges now. Turned off: a task waiting to merge by itself waits.
+/// Turned to `none`: no task waiting to merge does; it waits for code review on GitHub.
 pub fn auto_merge_pass(tasks: &[Obj], socket: &str) {
     lift_old_holds(tasks, socket);
     for seen in tasks {
-        if !crate::herdr::cli::same_socket(seen.at("link").s("socket"), socket) || (seen.s("stage") != "approval" && !pending(seen)) || runner_alive(seen) { continue; }
-        if by_itself(seen) { if green(seen) { start(seen.s("id")); } } else if pending(seen) { hold(seen); }
+        if !crate::herdr::cli::same_socket(seen.at("link").s("socket"), socket) || (seen.s("stage") != "approval" && !waiting(seen)) || runner_alive(seen) { continue; }
+        code_review::relabel(seen); // turned to or from `none`: what it waits for, said again
+        if by_itself(seen) { if green(seen) { start(seen.s("id")); } } else if waiting(seen) && stopped(seen) { hold(seen); }
     }
 }
 /// Asked by the land runner, when it starts and again right before it merges: a merge the board started by itself is
-/// only carried out while the setting is still on. Turned off since: the task waits for your yes.
+/// only carried out while the setting is still on, and none at all under `merge.by none`. Called off: the task waits
+/// for your yes again, or for code review on GitHub.
 pub fn called_off(g: &mut Guard) -> bool {
     let Ok(cur) = g.check() else { return false };
-    if !cur.at("mergeIntent").b("auto") || by_itself(&cur) { return false; }
+    if !stopped(&cur) { return false; }
     if let Ok(t) = g.set(|t| { t.put("stage", "approval"); t.put("autoMerge", false); t.put("autoMergeLocal", false); t.put("mergeIntent", Value::Null); t.put("requireApproval", false); t.put("since", now()); let m = approval_message(t); t.put("msg", m); }) { flow::sidebar::tell_sidebar(&t); }
     true
 }
@@ -63,9 +71,13 @@ fn start(id: &str) {
 }
 fn hold(seen: &Task) {
     // Where GitHub's own auto-merge is what waits (a merge queue), that is switched off first.
-    if !seen.b("autoMergeLocal") && flow::git::gh(&["pr", "merge", &flow::git::pr_number(seen.s("pr")), "--disable-auto"], &folder_of(seen.s("id")), 60000).status != 0 { return; }
+    let github = !seen.b("autoMergeLocal");
+    if github && flow::git::gh(&["pr", "merge", &flow::git::pr_number(seen.s("pr")), "--disable-auto"], &folder_of(seen.s("id")), 60000).status != 0 { return; }
+    // Under `merge.by none` one GitHub already queued is taken out of its queue too; until it is, the task says why.
+    if github && code_review::by_code_review(seen) { if let Err(why) = code_review::dequeue(seen) { code_review::still_queued(seen, &why); return; } }
     let Ok(t) = update(seen.s("id"), |t| {
-        if runner_alive(t) || t.s("stage") != "merging" || !t.at("mergeIntent").b("auto") || by_itself(t) { return Ok(Change::Keep); }
+        if runner_alive(t) || !waiting(t) || !stopped(t) { return Ok(Change::Keep); }
+        code_review::out_of_queue(t);
         t.put("stage", "approval"); t.put("autoMerge", false); t.put("autoMergeLocal", false); t.put("mergeIntent", Value::Null); t.put("requireApproval", false); t.put("since", now());
         let m = approval_message(t); t.put("msg", m);
         Ok(Change::Write)

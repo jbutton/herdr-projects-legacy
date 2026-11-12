@@ -6,7 +6,9 @@ use sw::flow::git::GhOut;
 use sw::json::*;
 
 /// What gh answers, as the old test/fake-gh.js: `user`, `createFail`, `head`, `disableFail`, `autoOk`, `mergeFail`,
-/// `queue` (accepted, only lined up to merge later), `view` (what `pr view` gives), `late: { head, times }` (the first
+/// `queue` (accepted, only lined up to merge later: GraphQL's `isInMergeQueue`, for o/r's pull request 7, says so until
+/// `dequeuePullRequest` takes it out, which `dequeueFail` refuses with these words; `pr view --json` has no such field
+/// and refuses it, as gh does), `view` (what `pr view` gives), `late: { head, times }` (the first
 /// `times` looks at the pull request still name `head`, the commit before a push), `log` (what `run view --log-failed`
 /// prints of a failed job), `base` and `baseFail` (the checks of the branch it merges into, asked through `api`), `required` (the checks it requires), `runs` (a commit's workflow runs), `others`
 /// (how many of the repo's last pull requests had checks). A fine-grained token: `noChecks` (GitHub refuses it the
@@ -21,7 +23,7 @@ use sw::json::*;
 /// `pr create` or `pr edit` gave it last (or `view`'s own). `issueFail`: `issue close` fails with these words;
 /// `editFail`: `pr edit` does.
 #[derive(Default)]
-pub struct FakeGh { pub cfg: RefCell<Value>, pub log: RefCell<Vec<String>>, pub merged: Cell<bool>, late: Cell<i64>, head_branch: RefCell<String>, body: RefCell<Option<String>> }
+pub struct FakeGh { pub cfg: RefCell<Value>, pub log: RefCell<Vec<String>>, pub merged: Cell<bool>, late: Cell<i64>, head_branch: RefCell<String>, body: RefCell<Option<String>>, dequeued: Cell<bool> }
 fn ok(out: &str) -> GhOut { GhOut { status: 0, stdout: if out.is_empty() { String::new() } else { format!("{out}\n") }, stderr: String::new() } }
 fn rows(v: &Value) -> String { v.as_array().map(|a| a.iter().map(|r| strings(r).join("\t")).collect::<Vec<_>>().join("\n")).unwrap_or_default() }
 fn fail(m: &str) -> GhOut { GhOut { status: 1, stdout: String::new(), stderr: format!("{m}\n") } }
@@ -45,6 +47,11 @@ impl FakeGh {
         }
         match (x, y) {
             ("api", "user") => ok(if c.b("user") { c.s("user") } else { "me" }),
+            ("api", "graphql") if a.iter().any(|s| s.contains("dequeuePullRequest")) => if c.b("dequeueFail") { fail(c.s("dequeueFail")) } else if has("id=PR_7") { self.dequeued.set(true); ok(r#"{"data":{"dequeuePullRequest":{"mergeQueueEntry":{"id":"MQE_1"}}}}"#) } else { fail("GraphQL: Could not resolve to a node with the global id") },
+            ("api", "graphql") if a.iter().any(|s| s.contains("isInMergeQueue")) => if has("owner=o") && has("name=r") && has("number=7") && a.windows(2).any(|w| w[0] == "-F" && w[1] == "number=7") {
+                ok(&json!({ "data": { "repository": { "pullRequest": { "id": "PR_7", "isInMergeQueue": c.b("queue") && !self.dequeued.get() && !self.merged.get() } } } }).to_string())
+            } else { fail("GraphQL: Could not resolve to a Repository") },
+            ("pr", "view") if a.iter().any(|s| s.contains("isInMergeQueue")) => fail("Unknown JSON field: \"isInMergeQueue\""),
             ("pr", "create") => if c.b("createFail") { fail(c.s("createFail")) } else {
                 *self.head_branch.borrow_mut() = a.iter().position(|s| s == "--head").and_then(|i| a.get(i + 1)).cloned().unwrap_or_default();
                 *self.body.borrow_mut() = a.iter().position(|s| s == "--body").and_then(|i| a.get(i + 1)).cloned();

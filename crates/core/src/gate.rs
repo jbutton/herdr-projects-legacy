@@ -103,9 +103,10 @@ pub fn result(rv: &Value, verb: &str) -> String {
     format!("{}/5{advice}", rv.t("score"))
 }
 pub fn sentence(rv: &Value, verb: &str) -> String { if is_tagged(rv) { format!("Review: {}.", result(rv, verb)) } else { format!("Reviewed {}.", result(rv, verb)) } }
-/// The board's own review words at the start of a task's message, for a screen that shows them elsewhere.
+/// The board's own review words at the start of a task's message, for a screen that shows them elsewhere. The label of
+/// work landed through code review (`Review passed: ready for code review · 1 minor.`) is such words too.
 pub fn strip_sentence(msg: &str) -> String {
-    static RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| regex::Regex::new(r"^(Approve to merge\?\s*)?(?:Reviewed [1-5]/5(?:, says (?:don't )?(?:merge|accept))?|Review: (?:Pass|Fail)(?: · [a-z0-9, -]+)?)\.\s*").unwrap());
+    static RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| regex::Regex::new(&format!(r"^(?:(Approve to merge\?\s*)?(?:Reviewed [1-5]/5(?:, says (?:don't )?(?:merge|accept))?|Review: (?:Pass|Fail)(?: · [a-z0-9, -]+)?)|{}(?: · [a-z0-9, -]+)?)\.\s*", regex::escape(crate::status_words::CODE_REVIEW))).unwrap());
     RE.replace(msg, "").into_owned()
 }
 pub fn has_sentence(msg: &str) -> bool { strip_sentence(msg) != msg }

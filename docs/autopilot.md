@@ -11,7 +11,8 @@ second conversation: it is the same chat you talk to, and it remembers what you 
 
 **`autopilot.approve yes` overrides `merge.by`.** With its default, `no`, a task autopilot added merges only as your
 `merge.by` says: under `merge.by you`, it waits for your yes. With `yes`, the coordinator may say that yes itself, so its
-tasks merge without you. It is the one setting that does that. Leave it at `no` unless you mean it.
+tasks merge without you. It is the one setting that does that. Leave it at `no` unless you mean it. Under
+`merge.by none` there is no yes to give: the board never lands that work ([the gate](gate.md#landed-through-code-review-on-github)).
 
 ## Turning it on and off
 

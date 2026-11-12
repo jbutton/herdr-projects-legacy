@@ -1,11 +1,13 @@
 //! The finish line: commit, check, push, draft pull request, review, then the approval gate. Never merges by itself
-//! unless `merge.by` says `itself` (finish/auto_merge.rs). Runs in a detached runner, started by the event hook when
-//! herdr says the agent stopped, so it works with the board closed. One step per file in finish/.
+//! unless `merge.by` says `itself` (finish/auto_merge.rs), and never at all where it says `none`
+//! (finish/code_review.rs). Runs in a detached runner, started by the event hook when herdr says the agent stopped, so
+//! it works with the board closed. One step per file in finish/.
 pub mod already;
 pub mod auto_merge;
 pub mod chat;
 pub mod chat_only;
 pub mod check_again;
+pub mod code_review;
 pub mod check_run;
 pub mod commit;
 pub mod hand_over;

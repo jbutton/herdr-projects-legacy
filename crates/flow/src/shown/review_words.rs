@@ -4,6 +4,7 @@ use super::states::{is_agent, reviewing};
 use super::words::{landed, ordinal};
 use crate::gate;
 use crate::json::*;
+use crate::status_words::{CODE_REVIEW, CODE_REVIEW_READY};
 use crate::store::reviews::{review_number, review_result, review_round};
 
 /// A review's result is said in words; its colour only repeats it. One from before the gate: its advice, as it was.
@@ -23,11 +24,12 @@ pub fn review_tag_ink(r: &Obj) -> Ink {
 pub fn review_tag_inked(r: &Obj) -> Inked { Inked::of(review_tag(r), review_tag_ink(r)) }
 /// In the task panel a merged task's reviews are quiet the same way: all but its last one, when that one failed.
 pub fn quiet_review(r: &Obj, e: &Value, last: bool) -> bool { landed(r) && !(last && (e.b("error") || result_ink(e) == Ink::Red)) }
-/// Strip only board-generated review metadata; task descriptions and agent wording stay intact.
+/// Strip only board-generated review metadata; task descriptions and agent wording stay intact. The label of work
+/// landed through code review says the review passed: it is left saying only that the work is ready for code review.
 pub fn review_note(r: &Obj) -> String {
     if !is_agent(r) { return r.t("msg"); }
-    static RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| regex::Regex::new(r"^(Approve to merge\?\s*)?(?:Reviewed [1-5]/5(?:, says (?:don't )?(?:merge|accept))?|Review: (?:Pass|Fail)(?: · [a-z0-9, -]+)?)\.\s*").unwrap());
-    RE.replace(r.s("msg"), "$1").into_owned()
+    static RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| regex::Regex::new(&format!(r"^(?:(Approve to merge\?\s*)?(?:Reviewed [1-5]/5(?:, says (?:don't )?(?:merge|accept))?|Review: (?:Pass|Fail)(?: · [a-z0-9, -]+)?)|({})(?: · [a-z0-9, -]+)?)\.\s*", regex::escape(CODE_REVIEW))).unwrap());
+    RE.replace(r.s("msg"), |c: &regex::Captures| if c.get(2).is_some() { format!("{CODE_REVIEW_READY}. ") } else { c.get(1).map(|m| m.as_str().to_string()).unwrap_or_default() }).into_owned()
 }
 /// One review in a few words: "pass" in a list of them, "Pass · 2 minor" on its own. `quiet` takes the colour away.
 pub fn verdict(e: &Value, long: bool, quiet: bool) -> Inked {

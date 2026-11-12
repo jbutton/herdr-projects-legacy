@@ -128,6 +128,7 @@ pub fn yes(s: &mut State, r: &Obj, fx: &mut Vec<Effect>) {
     let id = r.t("id");
     let st = |x: &str| r.s("stage") == x;
     if st("approval") && r.s("state") == "blocked" {
+        if r.b("codeReview") { return s.flash(crate::finish::code_review::refusal(&number_tag(r, &s.data.keys, &s.scope, true)), Ink::Yellow); } // `merge.by none`
         if r.b("syncBlocked") { return s.flash(format!("Behind main, so it cannot be approved yet: {}. The board keeps trying to bring it up to date.", r.at("syncBlocked").s("why")), Ink::Yellow); }
         let bad_review = failed_review(r);
         let tally = if bad_review { crate::status_words::review_tally(r) } else { String::new() };

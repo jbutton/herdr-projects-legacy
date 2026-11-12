@@ -22,13 +22,16 @@ fn the_popup_says_how_to_get_back_before_it_closes_for_an_agent_and_takes_no_key
     let id = w.add("Add a greeting"); delegate(&id); settle(&id);
     let mut v = open_with(&w.root, 34, true);
     v.s.ctx.leave_ms = 30; v.s.ctx.board_key = "prefix+w".into();
-    let now = sw::clock::now(); tick(&mut v, now);
+    // The clock stands still: on the real one, a slow machine between this `now` and the key moved the moment the line
+    // shows past `now + 80`, and the board was seen not to close.
+    let now = sw::clock::now(); sw::clock::set(Some(now)); tick(&mut v, now);
     v.s.sel = id.clone(); v.load(); v.press(&["alt+o"]);
     assert!(!v.closed, "not at once: the line shows first");
     assert!(v.text().contains("Opening the agent. prefix+w brings the board back."), "{}", v.text());
     v.press(&["ctrl+x"]); assert_eq!(task(&id).s("stage"), "working", "nothing more is taken from the keyboard"); assert!(v.s.ask.is_none());
     assert!(!tick(&mut v, now + 10).contains(&Effect::Close));
     assert!(tick(&mut v, now + 80).contains(&Effect::Close), "the board closes a moment after the line shows");
+    sw::clock::set(None);
     unsafe { std::env::remove_var("HERDR_ENV") };
     // once the agent is stopped, the menu's line for the same key is "remove"
     let mut s = open(&w.root, 34); s.s.sel = id.clone(); s.load(); s.press(&["ctrl+x"]);
@@ -69,9 +72,11 @@ fn closing_takes_ctrl_c_twice_and_the_hints_say_so_wherever_you_are() {
     s.press(&["?"]); assert!(s.s.menu.is_some()); assert!(has(&s.text(), &format!("{} +twice: close the board", regex::escape(&key_name("close")))));
     s.press(&["ctrl+c"]); assert!(s.s.menu.is_none() && !s.closed);
     // two seconds: time enough to read the line; then it goes, and ctrl+c after it only shows it again
-    let t0 = s.s.now; s.press(&["ctrl+c"]); assert!(has(&s.text(), &hint));
+    // (on a clock that stands still: the key reads it, and a slow machine moved the real one past `t0 + 100`)
+    let t0 = s.s.now; sw::clock::set(Some(t0)); s.press(&["ctrl+c"]); assert!(has(&s.text(), &hint));
     tick(&mut s, t0 + 1900); assert!(has(&s.text(), &hint), "two seconds: time enough to read the line");
     tick(&mut s, t0 + 2100); assert!(!has(&s.text(), &hint), "{}", s.text());
+    sw::clock::set(None);
     s.press(&["ctrl+c"]); assert!(!s.closed); assert!(has(&s.text(), &hint));
     // esc again is not a yes and not a no: only ctrl+c closes, after esc's hint as after its own
     s.press(&["esc"]); assert!(!s.closed); assert!(has(&s.text(), &esc_hint), "{}", s.text());

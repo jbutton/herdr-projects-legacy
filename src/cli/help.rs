@@ -25,7 +25,8 @@ pub const HELP: &str = r#"herdr-projects: a work board for herdr
   herdr-projects tell <id> <text>              send a message to the task's agent
   herdr-projects stop <id>                     stop its agent
   herdr-projects approve <id> [--anyway]       merge finished work that waits for approval (--anyway: also when its review
-                                                or its pull request's checks on GitHub failed);
+                                                or its pull request's checks on GitHub failed); never under merge.by none,
+                                                where the work lands through code review on GitHub;
                                                 on a task whose plan is ready (plan.approve you): yes to the plan, the build starts.
                                                 tell <id> <text> there sends the plan back with those words
   herdr-projects pick <id> <letter>            keep one of a task's several attempts (attempts.by); the others' tabs close

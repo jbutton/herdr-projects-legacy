@@ -79,6 +79,9 @@ pub fn shown(t: &Task, session: &Session, here: &str, seen: &mut BTreeMap<String
     // Research only or not is worked out here, by the machine that owns the task: a row says it.
     out.put("research", is_research_among(t, seen));
     out.put("chatOnly", crate::chat_only::is_chat_among(t, seen));
+    // Finished work the board never lands (`merge.by none`): its row says it waits for code review on GitHub, and no
+    // yes is asked of it (finish/code_review.rs). Worked out here too, so that another machine's row says it.
+    if t.s("stage") == "approval" && crate::finish::code_review::by_code_review(t) { out.put("codeReview", true); }
     pick(&mut out, &sh);
     out
 }

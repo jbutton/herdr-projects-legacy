@@ -40,7 +40,7 @@ Every command accepts `--json`. Below, `herdr-projects` stands for that path.
   `--worker.agent {agents}` (a model after a slash: `codex/<model>`, in the program's own names: `herdr-projects models <program>` lists the ones your sign-in can use and its effort levels, never guess one, and with no model named by the human give none: the program alone uses its own default; a wrong name or a program that cannot do a role is refused with the reason), `--worker.effort`, `--reviewer.agent`,
   `--worker.fallback "codex, claude/claude-opus-5-5"` (who takes over, in order, when the agent cannot go on: out of
   allowance, logged out, its provider down, its rounds used up; `--reviewer.fallback` the same for the reviewer),
-  `--review.when always|repos|never`, `--review.mustFix critical|major|minor|trivial`, `--merge.by you|itself`,
+  `--review.when always|repos|never`, `--review.mustFix critical|major|minor|trivial`, `--merge.by you|itself|none`,
   `--workspace.from here` (start from their current commit), `--workspace.from develop` (start from that branch at the
   remote and land on it: the pull request merges into it). A refused option changes nothing on the task.
 - One task after another: `--after <id>[,<id>…]` says a task may not start before those tasks (of any repo on this
@@ -60,7 +60,9 @@ Every command accepts `--json`. Below, `herdr-projects` stands for that path.
 - `herdr-projects approve <id>`: merge finished work that waits for approval. Only when the human plainly says so.
 - `herdr-projects pick <id> <letter>`: keep one of a task's several attempts (`--attempts.by 3` on `delegate`), when it waits as "pick one". Only when the human names the one.
   With `merge.by` set to `itself` (`set merge.by itself`, or `--task <id>` for one task) work that passed its review
-  merges by itself; `you`, the default, waits for that approval. Only the human changes it.
+  merges by itself; `you`, the default, waits for that approval; `none`: the board never lands it (the repo's work lands
+  through code review on GitHub), it waits as "Review passed: ready for code review" and `approve` is refused. Only the
+  human changes it.
 - A plan first: `--plan.approve you` on delegate makes a task start with a plan, and nothing in the repo is changed
   before it is approved. The task then waits as "plan ready": `approve <id>` is the human's yes to the plan (only when
   they plainly say so), `tell <id> "<text>"` sends the plan back with their words. `--plan.approve reviewer`: the

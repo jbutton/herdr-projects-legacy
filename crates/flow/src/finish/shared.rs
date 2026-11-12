@@ -1,4 +1,5 @@
 //! The finish line's shared pieces: the approval question's words, and marking a task as failed.
+use super::code_review;
 use crate::err::Res;
 use crate::flow;
 use crate::gate;
@@ -18,6 +19,8 @@ pub fn last_lines(text: &str, n: usize) -> String {
     all[all.len().saturating_sub(n)..].join("\n")
 }
 pub fn first_line(text: &str) -> String { text.split('\n').find(|l| !l.trim().is_empty()).map(|l| l.trim().to_string()).unwrap_or_default() }
+/// What finished work that waits for your yes asks first.
+pub const ASK: &str = "Approve to merge?";
 pub fn approval_message(t: &Obj) -> String { approval_message_with(t, "") }
 pub fn approval_message_with(t: &Obj, note: &str) -> String {
     let rv = current_review(t);
@@ -26,8 +29,11 @@ pub fn approval_message_with(t: &Obj, note: &str) -> String {
         format!(" {}{}.", w[..1].to_uppercase(), &w[1..])
     } _ => String::new() };
     let summary = first_line(t.s("summary"));
-    let held = if crate::autopilot::care::held_for_you(t) { " It changes the repo's .herdr-projects.json, so it waits for your own yes (autopilot.repoFileWaits)." } else { "" };
-    format!("Approve to merge?{}{kept} {}{held}{note}", rv.map(|r| format!(" {}", gate::sentence(r, "merge"))).unwrap_or_default(), if summary.is_empty() { "The work is finished.".into() } else { summary })
+    // Landed through code review on GitHub (`merge.by none`): no yes lands it here, so it asks for none.
+    let by_review = code_review::by_code_review(t);
+    let held = if !by_review && crate::autopilot::care::held_for_you(t) { " It changes the repo's .herdr-projects.json, so it waits for your own yes (autopilot.repoFileWaits)." } else { "" };
+    let opening = if by_review { code_review::opening(rv) } else { format!("{ASK}{}", rv.map(|r| format!(" {}", gate::sentence(r, "merge"))).unwrap_or_default()) };
+    format!("{opening}{kept} {}{held}{note}", if summary.is_empty() { "The work is finished.".into() } else { summary })
 }
 #[derive(Default)]
 pub struct FailHow { pub keep_intent: bool, pub patch: Obj }

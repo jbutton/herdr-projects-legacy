@@ -40,7 +40,7 @@ fn a_mistake_in_a_file_edited_by_hand_is_reported_with_its_setting_the_next_plac
 fn a_refused_delegate_changes_nothing_on_the_task_a_task_in_no_repo_skips_the_repo_places() {
     let w = world();
     let id = w.add("One");
-    refused(delegate(&id, json!({ "reviewer.agent": "claude", "merge.by": "sometimes" })), r#"merge\.by must be you, itself, not "sometimes""#);
+    refused(delegate(&id, json!({ "reviewer.agent": "claude", "merge.by": "sometimes" })), r#"merge\.by must be you, itself, none, not "sometimes""#);
     assert_eq!(task(&id).at("settings"), &json!({})); assert_eq!(task(&id).s("stage"), "todo"); // not even the option that was right
     refused(delegate(&id, json!({ "worker.agent": "pi", "worker.access": "ask" })), r#"pi cannot do "ask""#); assert_eq!(task(&id).at("settings"), &json!({}));
     refused(delegate(&id, json!({ "agent": "codex" })), r#"Unknown setting "agent"\. Did you mean worker\.agent\?"#);

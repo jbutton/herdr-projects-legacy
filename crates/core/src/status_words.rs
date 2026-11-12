@@ -21,6 +21,10 @@ pub mod words {
     pub const PICK: &str = "pick one";
     pub const PASSED: &str = "passed its check";
 }
+/// What finished work the board never lands (`merge.by none`) says first, in its message and on its row: its review
+/// passed and it waits for code review on GitHub; with no review that passed, only that it is ready for one.
+pub const CODE_REVIEW: &str = "Review passed: ready for code review";
+pub const CODE_REVIEW_READY: &str = "Ready for code review";
 /// Finished work whose last review failed. It still waits for your yes or no, but it is not "ready".
 pub fn review_failed(t: &Obj) -> bool {
     if t.s("stage") != "approval" { return false; }

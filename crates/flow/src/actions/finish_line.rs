@@ -8,6 +8,7 @@ use crate::attempts::words::standing_of;
 use crate::board::keys::key_name;
 use crate::clock::now;
 use crate::err::{Error, Res};
+use crate::finish::code_review;
 use crate::flow;
 use crate::gate;
 use crate::json::*;
@@ -25,6 +26,7 @@ use crate::store::tasks::{assert_unarchived, find, get, update, Change, Task};
 /// Approve: the one decision that ships finished work. An agent's own request for permission gets a yes instead.
 /// `seen`: what the human was shown when they said yes (pr, head): if the pull request or the reviewed commit is
 /// another one by now, nothing is merged. `anyway`: work whose last review failed, or whose GitHub checks failed, is merged only when asked for so.
+/// Never work landed through code review on GitHub (`merge.by none`), `anyway` or not.
 pub fn approve(id: &str, seen: Option<(Value, Value)>, anyway: bool) -> Res<Said> {
     let cur = find(id)?;
     assert_unarchived(&cur)?;
@@ -38,6 +40,8 @@ pub fn approve(id: &str, seen: Option<(Value, Value)>, anyway: bool) -> Res<Said
     if cur.s("stage") == "pick" { crate::fail!("{0} waits for you to pick one of its attempts, not for a merge: herdr-projects pick {0} <letter>", cur.s("id")); }
     if crate::chat_only::is_chat(&cur) { crate::fail!("{0} is chat only: nothing of it is merged. To end the conversation: herdr-projects finish {0}", cur.s("id")); }
     if is_research(&cur) { crate::fail!("{0} is research only: nothing of it is merged. To merge its change after all, turn that off (herdr-projects set research.only false --task {0}) and delegate it again.", cur.s("id")); }
+    // Landed through code review on GitHub (`merge.by none`): the board never lands it, whoever asks, `--anyway` too.
+    if code_review::by_code_review(&cur) { crate::fail!("{}", code_review::refusal(cur.s("id"))); }
     let t = update(cur.s("id"), |t| {
         if t.s("stage") != "approval" { crate::fail!("{} is not waiting for an approval to merge.", t.s("id")); }
         moved(t)?;

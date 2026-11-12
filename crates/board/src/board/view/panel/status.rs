@@ -109,7 +109,9 @@ pub fn status(k: &mut Kit, c: &Ctx, r: &Obj) -> (usize, Top, usize, String) {
         k.alert(Ink::Peach, "Behind main", &format!("Cannot be approved yet: {}. The board keeps trying to bring it up to date.", r.at("syncBlocked").s("why")), &if said.is_empty() { vec![] } else { vec![("Details", said)] });
     } else if failed_review(r) {
         let tally = review_tally(r);
-        k.alert(Ink::Red, "Review failed", &format!("{}{}", if tally.is_empty() { String::new() } else { format!("It found {tally}. ") }, if c.web { "Send the review to the agent to fix it, or merge it anyway: that asks first.".to_string() } else { format!("{} sends the review to the agent to fix. {} merges it anyway, and asks first.", key_name("sendBack"), key_name("yes")) }), &[]);
+        // Landed through code review on GitHub (`merge.by none`): no merge anyway is offered.
+        let fix = match (c.web, r.b("codeReview")) { (true, true) => "Send the review to the agent to fix it.".to_string(), (true, false) => "Send the review to the agent to fix it, or merge it anyway: that asks first.".into(), (false, true) => format!("{} sends the review to the agent to fix.", key_name("sendBack")), (false, false) => format!("{} sends the review to the agent to fix. {} merges it anyway, and asks first.", key_name("sendBack"), key_name("yes")) };
+        k.alert(Ink::Red, "Review failed", &format!("{}{fix}", if tally.is_empty() { String::new() } else { format!("It found {tally}. ") }), &[]);
     } else if (r.s("state") == "blocked" && r.s("stage") == "approval") || r.s("stage") == "plan" {
     } else if stopped_at_limit(r) {
         let ls = r.at("limitStop");

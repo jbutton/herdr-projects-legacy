@@ -1,6 +1,7 @@
 //! The merge.by setting: a green task merges by itself, the repo's own file can never switch that on, one whose review
 //! fails still asks, turning it off while a task waits to merge by itself (also before its runner ran) waits for
-//! your yes again, and a task delegated again asks once only when it was asking you then.
+//! your yes again, and a task delegated again asks once only when it was asking you then. `merge.by none`, the board
+//! never landing the work: auto_merge/code_review.rs.
 use crate::common;
 use common::*;
 use serde_json::{json, Value};
@@ -10,6 +11,7 @@ use sw::json::*;
 use sw::store::settings::change::{set_value, unset_value};
 use sw::store::settings::lookup::{lookup, Scope};
 use sw::store::settings::places::yours;
+mod code_review;
 
 fn verdict(findings: Value) -> Value { json!({ "verdict": { "meets": true, "text": "Looked at it.", "findings": findings } }) }
 fn work(n: i64, file: &str) -> Value { json!({ "files": { file: format!("{n}\n") }, "commit": format!("v{n}"), "note": format!("Did v{n}.") }) }

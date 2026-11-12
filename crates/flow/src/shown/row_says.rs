@@ -48,6 +48,8 @@ pub fn sentence(r: &Obj) -> Inked {
     if failed_review(r) { let t = kept(review_tally(r)); return Inked::of("Review failed", Ink::Red).add(quiet(if t.is_empty() { t } else { format!(" · {t}") })); }
     if in_review(r) {
         let rv = current_review(r);
+        // Landed through code review on GitHub (`merge.by none`): the label, with what the review found.
+        if r.b("codeReview") { let (label, passed) = crate::finish::code_review::row_label(rv); let t = kept(rv.filter(|rv| gate::is_tagged(rv)).map(gate::tally).unwrap_or_default()); return Inked::of(label, if passed { Ink::Green } else { Ink::Text }).add(quiet(if t.is_empty() { t } else { format!(" · {t}") })); }
         if let Some(rv) = rv.filter(|rv| gate::is_tagged(rv)) { let t = kept(gate::tally(rv)); return Inked::of(gate::word(rv), result_ink(rv)).add(quiet(if t.is_empty() { t } else { format!(" · {t}") })); }
         let Some(rv) = rv.filter(|rv| gate::is_int(rv.at("score"))) else { return if r.at("review").b("stale") { quiet("The work changed since its review".into()) } else { Inked::new() } };
         let adv = match rv.at("recommend").as_bool() { Some(true) => " reviewer says yes", Some(false) => " reviewer says no", None => "" };

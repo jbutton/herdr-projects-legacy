@@ -141,6 +141,35 @@ seven facts only ([settings](settings.md)). So code an agent writes can never ma
 by itself in one repo, say so yourself: `set merge.by itself --repo <name>`. `show <id>` says what a task really runs
 on, and where each value comes from.
 
+## Landed through code review on GitHub
+
+For a repo whose work must never be landed by the board, where code review and the merge happen on GitHub:
+`merge.by: none`. Its tasks push to their pull request as any task does, and someone reviews and merges it on GitHub.
+
+```
+herdr-projects set merge.by none --repo <name>    one repo's tasks
+herdr-projects set merge.by none --task <id>      one task (or: delegate <id> --merge.by none)
+herdr-projects unset merge.by --repo <name>       take the choice back
+```
+
+- **It waits as ready for code review.** A task whose review passed waits with `Review passed: ready for code review`
+  (and what the review found, `· 2 minor`) where any other says `Approve to merge?`: on its row, in its message (so in
+  `list` and `details`) and on the web board. With no review (`review.when never`) it says `Ready for code review`; a
+  review that failed says only that, as any task's does.
+- **Nothing lands it here.** `approve <id>` is refused, `--anyway` too: `this repo is landed through code review on
+  GitHub, not by the board (merge.by none)`. The yes key says the same at once, its hint is not shown, and a coordinator
+  on autopilot is never woken to say a yes there is none of. A merge you approved before it was set, and not made yet
+  (its runner still to come, or waiting for GitHub's checks or merge queue), is called off: the task waits for code
+  review instead. A pull request GitHub already has in its merge queue is taken out of it first (switching auto-merge
+  off does not do that); while GitHub refuses, the task stays as it is, says `Still in GitHub's merge queue`, and the
+  board tries again.
+- **The rest is any task's.** Its review rounds, its check, GitHub's checks, the fallback agents, catching up with main
+  and the autopilot's other work run as they do under `merge.by: you`.
+- **It counts from the moment you change it.** A task that already waits says it again at the board's next look, and
+  says `Approve to merge?` again when you turn it back.
+
+The task panel shows it as `Merge  by code review on GitHub`.
+
 ## When the agent stops with an error or a question
 
 - **An error, a usage limit, a cut-off or a refusal** is saved as "Agent stopped" with the real text. A provider error
