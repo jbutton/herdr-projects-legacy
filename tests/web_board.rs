@@ -27,7 +27,8 @@ fn the_web_board_shows_the_terminal_boards_list_and_one_task_whole() {
     let mine = w.add("Write notes");
     sw::actions::filing::report(&mine, sw::actions::filing::Report { state: "working".into(), msg: "Drafting".into(), progress: Some(json!(40)), ..Default::default() }).unwrap();
     w.add("Later");
-    // The clock stands from here: the row's time and the panel's are read a few calls apart, and are the same.
+    // The clock stands still from here: a time the board says ("1s ago") is the same in every look, however long one
+    // takes on a busy machine.
     sw::clock::set(Some(sw::clock::now()));
     let term = open(&w.root, 40);
     let mut want: Vec<Vec<String>> = vec![];
