@@ -87,10 +87,30 @@ fn claude_codes_notice_over_its_input_box_is_not_the_agents_words() {
     let words = sw::agents::screen_text::agent_words(&recorded("claude-notice-over-box"));
     assert!(words.ends_with("  The report now notes that they're posted. The closing note still calls them drafts; I didn't change it."), "{words}");
     for junk in ["new task?", "Crunched for", "bypass permissions"] { assert!(!words.contains(junk), "{words}"); }
-    // a line of the agent's own right over the box, indented and as long as the rule, is its words, not a notice
-    let command = "        curl --retry 3 --connect-timeout 20 https://service.example.test/health";
-    let screen = format!("⏺ The command failed:\n\n{command}\n{}\n❯\n{}\n  Opus · 42% left\n  ⏵⏵ bypass permissions on", "─".repeat(80), "─".repeat(80));
-    assert!(sw::agents::screen_text::agent_words(&screen).ends_with(command), "{}", sw::agents::screen_text::agent_words(&screen));
+    // a line of the agent's own right over the box, indented, in a pane of any width, is its words, not a notice
+    for (width, indent) in [(80, 8), (40, 8), (40, 16), (24, 8), (40, 34)] {
+        let words = command_over_box(width, indent);
+        assert!(words.ends_with(&format!("\n\n{}{CURL}", " ".repeat(indent))), "width {width}, indent {indent}: {words:?}");
+    }
+    // while the notice of a narrow pane is left out all the same
+    let narrow = format!("⏺ Done.\n{}new task? /clear to save 599.8k tokens\n{}\n❯\n{}\n  ⏵⏵ bypass permissions on", " ".repeat(10), "─".repeat(50), "─".repeat(50));
+    assert_eq!(sw::agents::screen_text::agent_words(&narrow), "⏺ Done.");
+}
+const CURL: &str = "curl --retry 3 --connect-timeout 20 https://service.example.test/health";
+fn command_over_box(width: usize, indent: usize) -> String {
+    sw::agents::screen_text::agent_words(&format!("⏺ The command failed:\n\n{}{CURL}\n{}\n❯\n{}\n  Opus · 42% left\n  ⏵⏵ bypass permissions on", " ".repeat(indent), "─".repeat(width), "─".repeat(width)))
+}
+
+#[test]
+fn an_indented_command_over_the_input_box_of_a_narrow_pane_stays_in_the_message() {
+    let screen = format!("⏺ The command failed:\n\n{}{CURL}\n{}\n❯\n{}\n  Opus · 42% left\n  ⏵⏵ bypass permissions on", " ".repeat(16), "─".repeat(40), "─".repeat(40));
+    let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
+    w.script(json!({ "worker": [{ "files": { "x.txt": "x\n" }, "note": null, "screen": screen }] }));
+    let id = w.add("Narrow pane");
+    delegate(&id);
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "nosummary");
+    assert!(t.s("msg").contains(CURL), "{:?}", t.s("msg"));
 }
 
 #[test]

@@ -106,8 +106,9 @@ Otherwise the task is held as "Stopped without a summary": `Ctrl+R` tells the ag
 as it is. Its message is the agent's last words on its screen: what stands above the program's input box, however many
 lines are typed into it, never the status line or mode line drawn under it. Claude Code's own lines over the box are
 left out too: the one after each turn (`✻ Worked for 8m 46s · done 8:30 PM`) and its notice pushed to the right
-(`new task? /clear to save 599.8k tokens`). With no words of the agent's there, it says only "Stopped without a
-summary".
+(`new task? /clear to save 599.8k tokens`, `✔ Update installed · Restart to update`), told by those words, so that a
+line of the agent's own there is kept; a notice with other words stays in. With no words of the agent's there, it says
+only "Stopped without a summary".
 
 A task whose finish the board missed (its agent at rest, the row still "Finishing") is finished with `Ctrl+L` or
 `herdr-projects finish <id>`. What the agent said last is the summary.

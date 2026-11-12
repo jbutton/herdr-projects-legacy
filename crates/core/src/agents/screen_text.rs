@@ -37,12 +37,15 @@ fn turn_line(line: &str) -> bool {
     w.next() == Some("✻") && w.next().is_some_and(|v| v.starts_with(char::is_uppercase)) && w.next() == Some("for")
         && w.next().is_some_and(|d| d.starts_with(|c: char| c.is_ascii_digit()))
 }
-/// Claude Code's notice in the row right over its input box (`new task? /clear to save 599.8k tokens`, `✔ Update
-/// installed`): pushed to the right, it starts past the first third of the box's top rule and ends where the rule ends,
-/// give or take a margin. A line of the agent's own, even indented, starts further left.
+/// The words of Claude Code's notices seen in the row right over its input box (`new task? /clear to save 599.8k
+/// tokens`, `✔ Update installed · Restart to update`).
+const NOTICES: &[&str] = &["/clear to save", "Update installed", "Restart to update"];
+/// Claude Code's notice in the row right over its input box: pushed to the right, it ends where the box's top rule
+/// ends, give or take a margin, and never past it. It is told by its words, not by where it stands alone: a line of the
+/// agent's own there, indented in a pane of any width, is kept, and so is a notice with other words.
 fn notice(row: &str, top: &str) -> bool {
-    let (width, lead) = (top.trim_end().chars().count(), row.chars().take_while(|c| *c == ' ').count());
-    lead * 3 >= width && row.trim_end().chars().count() + 4 >= width
+    let (width, end) = (top.trim_end().chars().count(), row.trim_end().chars().count());
+    row.starts_with(' ') && end <= width && end + 4 >= width && NOTICES.iter().any(|n| row.contains(n))
 }
 /// The words an agent left on its screen, for a turn that ended with nothing else: what stands above its program's
 /// input box. The box is its prompt mark near the end of the screen (Claude Code's `❯`, Codex's `›`, or `>` just under
