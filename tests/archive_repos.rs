@@ -11,6 +11,8 @@ use sw::board::update::heads::group_id;
 use sw::cli::flags::parse;
 use sw::json::*;
 
+/// Done tasks that archive themselves after `archive.doneAfter`.
+mod done_after;
 /// Another machine's project, archived and restored from this board and from the shell (`--on`).
 mod far_machine;
 
