@@ -188,7 +188,7 @@ All in the board's data folder, `~/.herdr-projects/data/` ([the home folder](hom
 
 | File | Holds |
 |---|---|
-| `tasks/<repo>/<n>/runner.log` | one task's background work: delegating, the finish line, merges. A failed start adds its account at the end: the reason, what Herdr said, the agent terminal's last lines |
+| `tasks/<repo>/<n>/runner.log` | one task's background work: delegating, the finish line, merges. A failed start adds its account at the end: the reason, what Herdr said, the agent terminal's last lines. A start that could not fetch its branch from origin says so, with the copy it started from and what git said |
 | `coordinator/<session>/start.log` | why the Coordinator could not start, with its terminal's last lines |
 | `keeper.log` | the keeper (the board's background process): starts, updates, errors |
 | `hook.log` | what Herdr's hooks and the agents' turn-end reports told the board |
