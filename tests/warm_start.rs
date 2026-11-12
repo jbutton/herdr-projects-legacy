@@ -60,6 +60,10 @@ impl Bench {
         assert!(o.status.success(), "the setup's steps failed: {}", String::from_utf8_lossy(&o.stderr));
         // What it said and what is kept after it, shown only when the test fails (a failure on another machine).
         eprintln!("setup in {wt}: said {:?}, {:?}\n{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr), self.state());
+        // TEMPORARY (PRJ-23): what the compiler says to the script, and why.
+        let r = Command::new("/bin/sh").arg("-c").arg("echo \"HOME=$HOME RUSTUP_HOME=$RUSTUP_HOME RUSTUP_TOOLCHAIN=$RUSTUP_TOOLCHAIN CARGO_HOME=$CARGO_HOME\"; command -v rustc; ls -l \"$(command -v rustc)\"; rustc -vV 2>&1 | head -4; echo PATH=$PATH")
+            .current_dir(self.dir(wt)).output().unwrap();
+        eprintln!("  compiler: {}", String::from_utf8_lossy(&r.stdout));
         String::from_utf8_lossy(&o.stdout).into_owned()
     }
     /// The kept builds as they are: each repo's folder and its `current`, each build's commit, folder and compiler.
