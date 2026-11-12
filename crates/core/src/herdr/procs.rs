@@ -40,7 +40,19 @@ pub fn signal(pid: i64, sig: i32) -> bool {
 pub fn running(pid: i64) -> bool {
     if let Some(a) = super::cli::fake().and_then(|f| f.alive(pid)) { return a; }
     if !crate::store::files::pid_alive(pid) { return false; }
-    !std::fs::read_to_string(format!("/proc/{pid}/stat")).ok().and_then(|s| s.rfind(')').map(|i| s[i + 2..].starts_with('Z'))).unwrap_or(false)
+    !zombie(pid)
+}
+/// Ended, and only waiting for its parent to read it. Linux says so in /proc; macOS answers a signal for one but no
+/// longer knows it when asked about it.
+fn zombie(pid: i64) -> bool {
+    #[cfg(target_os = "macos")] {
+        let mut i: libc::proc_bsdshortinfo = unsafe { std::mem::zeroed() };
+        let n = std::mem::size_of::<libc::proc_bsdshortinfo>() as i32;
+        let got = unsafe { libc::proc_pidinfo(pid as i32, libc::PROC_PIDT_SHORTBSDINFO, 0, &mut i as *mut _ as *mut libc::c_void, n) };
+        return if got == n { i.pbsi_status == libc::SZOMB } else { std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH) };
+    }
+    #[cfg(not(target_os = "macos"))]
+    std::fs::read_to_string(format!("/proc/{pid}/stat")).ok().and_then(|s| s.rfind(')').map(|i| s[i + 2..].starts_with('Z'))).unwrap_or(false)
 }
 /// A process's command line, where the system tells (`ps`).
 pub fn command(pid: i64) -> Option<String> {

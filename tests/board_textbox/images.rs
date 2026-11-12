@@ -10,7 +10,7 @@ use common::*;
 const HERDR: &str = "/var/folders/gf/7lzcszfj0712mkfw2ptky5vw0000gn/T/herdr-clipboard-images-501/client-327-clipboard-1792608324073248000-0.png";
 fn herdr(n: usize) -> String { HERDR.replace("-0.png", &format!("-{n}.png")) }
 /// The words as the box holds them, checked against its rows on the screen.
-fn shown(s: &mut common::board::Board) -> String { let rows = s.draft(120).rows.join("\n"); let raw = s.s.input.raw(); assert_eq!(rows, raw.trim_end(), "on the screen as in the box"); raw }
+fn shown(s: &mut common::board::Board) -> String { let rows = s.draft(400).rows.join("\n"); let raw = s.s.input.raw(); assert_eq!(rows, raw.trim_end(), "on the screen as in the box"); raw }
 
 #[test]
 fn herdrs_clipboard_path_stands_as_image_1_and_is_sent_as_the_path() {
