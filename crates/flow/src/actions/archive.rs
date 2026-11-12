@@ -44,8 +44,9 @@ pub fn archive(id: &str) -> Res<Task> {
         Ok(Change::Write)
     })
 }
-/// Restore changes nothing in herdr and starts nothing.
-pub fn restore(id: &str) -> Res<Task> { let cur = find(id)?; update(cur.s("id"), |t| { t.put("archivedAt", Value::Null); Ok(Change::Write) }) }
+/// Restore changes nothing in herdr and starts nothing. Its time is kept: a done task counts from it again before it
+/// archives itself (`archive.doneAfter`, housekeeping/done_after.rs).
+pub fn restore(id: &str) -> Res<Task> { let cur = find(id)?; update(cur.s("id"), |t| { t.put("archivedAt", Value::Null); t.put("restoredAt", crate::clock::now()); Ok(Change::Write) }) }
 /// Clear: stop the agent, run teardown, end what it left running from its folders, remove the worktree without force,
 /// delete the branch only if merged. A checkout with unsaved or unmerged work is kept and the caller is told where, and
 /// what was ended and what still runs for you to end (`Ended`).

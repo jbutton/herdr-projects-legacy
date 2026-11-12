@@ -113,8 +113,13 @@ Tasks stand in five groups, in the order they need you:
   - **A repo's done tasks in one go**, from the shell: when a round of work is over, its done tasks are clutter.
     `herdr-projects archive --done --repo mstars` (`Archived 50 done tasks of mstars. Left out: 1 done but pinned, 2
     working.`) archives every done task of that repo; without `--repo`, every repo's. A task that works, waits, is to
-    do or is pinned stays. Each goes as one archive does: its space closes, its worktree stays. Nothing archives them
-    by itself.
+    do or is pinned stays. Each goes as one archive does: its space closes, its worktree stays.
+  - **Done tasks by themselves**, once they have been done for `archive.doneAfter` (`none`, the built-in value: never).
+    `herdr-projects set archive.doneAfter 3d` archives a task three days after it was done (or after you restored it),
+    with no key pressed; `--repo` sets it for one repo, `--task` for one task ([settings](settings.md)). It takes what
+    `archive --done` takes, each as one archive does. A done task waits while its clean-up is still to come or its
+    space is in use (a command of yours, its agent at work), and goes once that is over. The housekeeping pass does
+    it, about once a minute, whether the board is open or not.
 - **Automations** are a group of their own after the task groups, inside their machine's part of the list (by repo:
   under their repo) ([below](#automations-in-the-list)).
 
