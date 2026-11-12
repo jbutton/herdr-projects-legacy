@@ -115,6 +115,13 @@ When the agent's turn ends, the board:
    - A new round starts clean: the failure of the round before (a failed commit, a reviewer out of credits) is cleared
      as soon as the check starts, so the row and the details never show it while the work is checked and reviewed.
 2. **Pushes the branch and opens a draft pull request**, when there is an `origin` remote and `gh`.
+   - The pull request is on origin's repo, and every `gh` call names its repo: the task's pull request by its link,
+     everything else with origin's (`--repo`, or in the API's path). In a fork's checkout, with an `upstream` remote,
+     gh's own default is upstream: a bare `gh pr view 7` there reads upstream's pull request 7. Origin's repo is read
+     from the URL git uses (`insteadOf` applied), else from the one written, with an ssh alias read as ssh reads it
+     (`ssh -G`). With an origin that names no repo on a host (a folder), or none, gh is not asked about a repo while the
+     checkout has another remote it would take instead: that call fails, saying so. With origin the only remote, gh has
+     no other to take.
    - A pull request the agent already opened for the task's branch is taken on instead, and goes through the review and
      the merge as usual.
    - The push may run for `merge.pushTimeout` (2 minutes unless set), the repo's pre-push hook included. A repo whose

@@ -13,7 +13,7 @@ pub use reconcile::{reconcile, same_dir};
 use crate::agents::{adapter::find_session, installed::read_turn_of};
 use crate::clock::now;
 use crate::delegate::task_line;
-use crate::flow::{git::{cancel_auto_merge, pr_number}, handled_turn::{reopened, same_turn}, live::see_terminal, pane_owner::agents_pane, sidebar::tell_sidebar, task::{is_agent_task, note_stat}};
+use crate::flow::{git::cancel_auto_merge, handled_turn::{reopened, same_turn}, live::see_terminal, pane_owner::agents_pane, sidebar::tell_sidebar, task::{is_agent_task, note_stat}};
 use crate::leftovers::sweep::ended;
 use crate::herdr::{cli::{current_socket, same_socket}, Herdr};
 use crate::json::*;
@@ -191,7 +191,7 @@ pub fn apply(id: &str, a: &Value, api: &Herdr) {
                 log(&e.msg);
                 let _ = update_wait(id, 10000, |t| {
                     let detail = format!("{}\n\nYou typed in the agent's terminal while GitHub was set to merge {} by itself. That is still set: it may merge when its checks pass.", e.msg, t.so("pr").unwrap_or("the pull request"));
-                    let next = format!("Cancel it yourself: gh pr merge {} --disable-auto", pr_number(t.s("pr")));
+                    let next = format!("Cancel it yourself: gh pr merge {} --disable-auto", t.s("pr"));
                     for (k, v) in failure_patch(&obj(json!({ "stage": "merge", "title": "Could not cancel the pending auto-merge", "detail": detail, "next": next, "agentCanFix": false, "auth": false }))) { t.insert(k, v); }
                     Ok(Change::Write)
                 });
