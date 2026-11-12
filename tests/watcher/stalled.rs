@@ -13,8 +13,13 @@ use sw::store::automations::firings_of;
 
 const MIN: i64 = 60_000;
 /// What the keeper does once a second, with its look at each working agent's screen. The jobs it starts (an agent put on
-/// the task an automation made) wait: what they do is not what is tested here, and each would take real time.
-fn keeper(w: &World) { sw::keeper::tick_once(&w.socket, true); }
+/// the task an automation made) wait: what they do is not what is tested here, and each would take real time. A tick
+/// that finds the tick lock taken skips, as the keeper's does (in a full run something else in the test program held
+/// it for twenty of these ticks in a row): it is tried again until it ran, as the keeper's next second would be.
+fn keeper(w: &World) {
+    for _ in 0..1_000_000 { if sw::keeper::tick_once(&w.socket, true).is_some() { return; } std::thread::yield_now(); }
+    panic!("the keeper's tick never ran: another ticker held it all along");
+}
 /// `n` minutes on, the keeper ticking each minute.
 fn minutes_on(w: &World, n: i64) { for _ in 0..n { sw::clock::advance(MIN); keeper(w); } }
 /// The same with a coordinator on autopilot: its jobs run each tick (its wake typed in, its turn).
