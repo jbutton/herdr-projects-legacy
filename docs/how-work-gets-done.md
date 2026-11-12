@@ -138,6 +138,25 @@ When the agent's turn ends, the board:
      hook runs its tests needs more: `herdr-projects set merge.pushTimeout 10m --repo <name>`, or `none`. A push that
      runs out of time is stopped and the finish fails, saying so (`git push did not end within 2m
      (merge.pushTimeout)`); finish again once it is raised.
+   - The board pushes the exact commit it read (`git push origin <commit>:refs/heads/<branch>`) and keeps that commit
+     as the one it pushed. What origin holds on the branch is pushed over only where it is exactly the commit the board
+     pushed there last (its agent may have rebased or amended it since), leased on that commit
+     (`--force-with-lease=refs/heads/<branch>:<commit>`, no branch at all the first time); or, not forced, where the
+     new commit holds it. Anything else (a suggestion accepted on GitHub, a commit from another machine, one the agent
+     pushed by hand and rewrote since) is never lost: nothing is pushed, and the finish fails with `The branch at origin
+     has commits this task does not have`, telling the agent to bring them in (`git pull origin <branch>`). It is asked
+     of origin itself (where the push goes) right before the push, so a fetch that moved `origin/<branch>`, before or
+     right after the push, changes nothing; a commit pulled into the branch and dropped again is not the task's either;
+     and a push that lands in between is refused by git. The push sets the branch's upstream when it has none.
+   - A branch origin already has at its head is not pushed again, so the repo's pre-push hook does not run for nothing
+     (git runs it even when there is nothing to push): a later round that ends on the same commit, or work the agent
+     pushed itself.
+   - A repo that names its tools for mise (`.tool-versions`, `mise.toml`, `.mise.toml`, `.config/mise.toml`, …) is
+     pushed with them: the board runs `mise env --json` in the worktree and gives `git push` what it says, as the repo's
+     agents run `mise exec -- git push`. A pre-push hook in Ruby (overcommit) then runs with the repo's own Ruby, not
+     with the first `ruby` on the board's PATH: the keeper's PATH comes from a login shell in your home folder, where
+     that is often macOS's own, without the hook's gems (`the overcommit gem is not installed`). With no such file,
+     no mise, or a mise that cannot say (an untrusted `mise.toml`), the push runs as before.
    - A branch that brings main nothing gets no pull request: no change was needed, or the work is on main already (the
      agent merged its own pull request, or pushed to main itself). The task is done, and its row says why: "No change
      needed", "Already on main" or "Already merged in #133". Nothing is pushed then, so a repo the task archived on
