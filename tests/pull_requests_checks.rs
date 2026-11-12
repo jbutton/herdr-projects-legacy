@@ -1,7 +1,7 @@
 //! GitHub's checks on the pull request, looked at before it merges (`merge.checks`): still running, the merge waits
 //! and says so; failed, nothing merges and the failure goes back to the agent with the check's name and its log,
 //! within `review.rounds`, then waits for you (`approve` refuses, `--anyway` merges); stuck past `check.timeout`, it
-//! waits for you; `none` merges as before.
+//! waits for you; `none` merges as before. A check run again is judged by its newest run (#404).
 use crate::common;
 use common::*;
 use serde_json::{json, Value};
@@ -188,4 +188,53 @@ fn every_failing_check_has_the_end_of_its_log_sent_not_only_the_first_three() {
     let t = settle(&id);
     for n in 1..=4 { assert!(gh_log(&w).contains(&format!("run view --job {n} --log-failed")), "job {n}: {}", gh_log(&w)); }
     assert_eq!(t.at("prFailure").s("detail").matches("test parses_flags ... FAILED").count(), 4, "{}", t.at("prFailure"));
+}
+
+/// `build` of the workflow CI, run from minute `from` to minute `to`.
+fn rerun(conclusion: &str, url: &str, from: u8, to: u8) -> Value {
+    json!({ "__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": conclusion, "workflowName": "CI", "detailsUrl": url, "startedAt": format!("2026-10-28T10:{from:02}:00Z"), "completedAt": format!("2026-10-28T10:{to:02}:00Z") })
+}
+fn rollup_of(head: &str, checks: Value) -> Value { json!({ "state": "OPEN", "headRefOid": head, "statusCheckRollup": checks, "comments": [], "reviews": [], "author": { "login": "me" } }) }
+
+#[test]
+fn a_check_run_again_is_judged_by_its_newest_run_and_another_runs_failure_still_counts() {
+    // its job failed, was run again in the same workflow run, and passed: merged
+    let w = pr_world(json!({}));
+    let id = to_approval(&w, "Flaky build");
+    let head = task(&id).t("prHead");
+    let (old, new) = ("https://github.com/o/r/actions/runs/11/job/22", "https://github.com/o/r/actions/runs/11/job/23");
+    w.gh_says(json!({ "view": rollup_of(&head, json!([rerun("FAILURE", old, 0, 5), rerun("SUCCESS", new, 7, 12)])), "jobs": { "11": [["23"]] } }));
+    finish_line::approve(&id, None, false).unwrap();
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "done", "{} {}", t.t("msg"), t.at("failure")); assert!(merged(&w), "{}", gh_log(&w));
+    drop(w);
+    // the run again failed: not merged; a failure in another workflow run (its run for the push) is its own check; and
+    // so is another job of the same name in the same attempt, after it or beside it, and one GitHub does not say of
+    let (both, latest) = (json!({ "11": [["22"], ["23"]] }), json!({ "11": [["23"]] }));
+    for (checks, jobs) in [(json!([rerun("SUCCESS", old, 0, 5), rerun("FAILURE", new, 7, 12)]), &latest), (json!([rerun("FAILURE", "https://github.com/o/r/actions/runs/10/job/21", 0, 5), rerun("SUCCESS", new, 7, 12)]), &latest),
+        (json!([rerun("FAILURE", old, 0, 5), rerun("SUCCESS", new, 7, 12)]), &both), (json!([rerun("FAILURE", old, 0, 5), rerun("SUCCESS", new, 1, 6)]), &both), (json!([rerun("FAILURE", old, 0, 5), rerun("SUCCESS", new, 7, 12)]), &json!({}))] {
+        let w = pr_world(json!({ "review.rounds": 0 }));
+        let id = to_approval(&w, "Still failing");
+        let head = task(&id).t("prHead");
+        w.gh_says(json!({ "view": rollup_of(&head, checks), "jobs": jobs }));
+        finish_line::approve(&id, None, false).unwrap();
+        let t = settle(&id);
+        assert_eq!(t.at("prFailure").s("remoteKind"), "checks", "{}", t.t("msg")); assert!(!merged(&w));
+    }
+}
+
+/// Two outside CIs, or two pipelines of one, that each call their check `build`: one's pass, begun after the other's
+/// failure, is not that check run again. Only one with the very same link is.
+#[test]
+fn another_ci_s_check_of_the_same_name_is_its_own_check_and_its_failure_still_counts() {
+    let outside = |conclusion: &str, url: &str, from: u8, to: u8| { let mut c = rerun(conclusion, url, from, to); c["workflowName"] = json!(""); c };
+    for (second, lands) in [("https://ci-b.example/build/2", false), ("https://ci-a.example/build/2", false), ("https://ci-a.example/independent-pipeline/build/2", false), ("https://ci-a.example/build/1", true), ("", false)] {
+        let w = pr_world(json!({ "review.rounds": 0 }));
+        let id = to_approval(&w, "Two CIs");
+        let head = task(&id).t("prHead");
+        w.gh_says(json!({ "view": rollup_of(&head, json!([outside("FAILURE", "https://ci-a.example/build/1", 0, 5), outside("SUCCESS", second, 7, 12)])) }));
+        finish_line::approve(&id, None, false).unwrap();
+        let t = settle(&id);
+        assert_eq!(merged(&w), lands, "{second}: {}", t.t("msg"));
+    }
 }

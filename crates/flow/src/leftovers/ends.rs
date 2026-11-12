@@ -49,7 +49,7 @@ pub fn worktree(t: &Obj) -> Option<PathBuf> {
 fn gone(api: &Herdr, pane: &str) -> bool { matches!(api.call(crate::herdr::cli::args(&["pane", "get", pane])), Err(e) if e.code == "pane_not_found") }
 /// A process in words, and the folder it runs in.
 pub fn found_where(pid: i32) -> String {
-    match std::fs::read_link(format!("/proc/{pid}/cwd")).ok() { Some(d) => format!("{}, in {}", found(pid as i64), d.display()), None => found(pid as i64) }
+    match super::procs::folder_of(pid) { Some(d) => format!("{}, in {}", found(pid as i64), d.display()), None => found(pid as i64) }
 }
 
 /// The task's panes as herdr says, and what runs from its folders, sorted.

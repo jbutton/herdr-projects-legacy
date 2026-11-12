@@ -99,14 +99,14 @@ fn ensure(api: &Herdr, co: &Co) -> Res<(Obj, bool)> {
     // The rules ride on no launch flag: the program reads them from its folder, so they are told once.
     let (reads, launch) = put_rules(co, &k, &text)?;
     if co.is_top() { let _ = std::fs::remove_file(dir_of(co).join("rules.md")); }
-    installed::pre_trust(&k, &home(co), if run.b("access") { run.s("access") } else { "full" });
+    installed::pre_trust(&k, &home(co), &home(co), if run.b("access") { run.s("access") } else { "full" });
     let taken: Vec<String> = api.agents()?.iter().filter(|x| x.s("pane_id") != pane.s("pane_id")).map(|x| x.t("name")).collect();
     let mut name = co.agent_name();
     let mut n = 2;
     while taken.contains(&name) { name = format!("{}-{n}", co.agent_name()); n += 1; }
     let began = now();
     change(co, |c| { c.put("starting", began); true })?;
-    let args = start::start_args(&k, &start::StartOpts { model: run.t("model"), effort: run.t("effort"), access: if run.b("access") { run.t("access") } else { "full".into() }, fast: run.b("fast").then_some(true), resume: resume.clone().unwrap_or_default(), session: session.clone().unwrap_or_default(), extra: launch, ..Default::default() })?;
+    let args = start::start_args(&k, &start::StartOpts { model: run.t("model"), effort: run.t("effort"), access: if run.b("access") { run.t("access") } else { "full".into() }, fast: run.b("fast").then_some(true), resume: resume.clone().unwrap_or_default(), session: session.clone().unwrap_or_default(), extra: launch, folder: home(co), ..Default::default() })?;
     let mut blocked = false;
     match api.agent_start(&name, &k, pane.s("pane_id"), &args, 60000) {
         Ok(_) => { settle(api, pane.s("pane_id"), &std::iter::once(crate::agents::kinds::program(&k).to_string()).chain(args).collect::<Vec<_>>().join(" ")); }
@@ -213,7 +213,7 @@ fn run_pump(co: &Co, taken: &mut HashSet<String>) -> Res<()> {
                 let mut l = c.arr("where").to_vec();
                 for x in l.iter_mut() { if x.s("id") == id { if let Some(o) = x.as_object_mut() { o.put("sentAt", now()); } } }
                 c.put("where", trimmed(&l));
-                c.put("mark", json!({ "run": run, "seq": seq, "rest": at_rest }));
+                c.put("mark", json!({ "run": run, "seq": seq, "rest": at_rest, "work": null }));
                 c.put("intro", false); c.put("rulesHash", rules_hash.clone()); c.put("sentAt", now());
                 if !m.b("autopilot") { c.put("last", m.at("said").clone()); c.put("over", over.clone()); c.put("overId", over_id.clone()); } // a wake is no words of yours
                 // Who its turn is on: a task's agent that sent it (coordinator tell), and an autopilot wake (autopilot/).
@@ -227,6 +227,11 @@ fn run_pump(co: &Co, taken: &mut HashSet<String>) -> Res<()> {
             change(co, |c| { c.put("typed", if busy { let mut t = typed.as_ref().and_then(|t| t.as_object().cloned()).unwrap_or_default(); t.put("text", words.clone()); Value::Object(t) } else { Value::Null }); true })?;
             let mark = typed.clone().unwrap_or(Value::Null);
             if !confirm(&api, c.s("pane"), typed, Some(&|| said_in(co, &mark, &words))) { crate::fail!("{UNSENT}"); }
+            // The turn these words started, as herdr numbers it while it works: one typed straight into its terminal
+            // after it ended has another number, also when nothing saw it end (herdr/turns.rs).
+            if let Some(work) = api.agent_get(c.s("pane")).ok().flatten().and_then(|a| crate::herdr::turns::working_seq(&a)) {
+                change(co, |c| { if c.s("typedId") != id || !c.at("mark").b("rest") { return false; } c.obj_mut("mark").put("work", work.clone()); true })?;
+            }
         }
         if stuck { break; }
     }

@@ -4,7 +4,7 @@ use crate::after::{self, Wait};
 use crate::clock::now;
 use crate::err::Res;
 use crate::flow;
-use crate::herdr::cli::current_socket;
+use crate::herdr::cli::{current_socket, same_socket};
 use crate::json::*;
 use crate::research::{turn_refusal, RESEARCH};
 use crate::runner::{runner_alive, spawn_runner};
@@ -91,7 +91,7 @@ pub fn delegate_with(id: &str, asked: Vec<(String, Value)>, w: Wait) -> Res<Task
         if t.s("stage") == "pick" { crate::fail!("{id} waits for you to pick one of its attempts: herdr-projects pick {id} <letter>."); }
         if is_agent_stage(t.s("stage")) || runner_alive(t) { crate::fail!("{id} already has an agent working on it."); }
         if t.b("autoMerge") { crate::fail!("{id} is waiting for an automatic merge. Reply to its agent to cancel that first."); }
-        if t.at("link").b("socket") && t.at("link").s("socket") != socket { crate::fail!("{id} lives in another herdr session. Open the board there."); }
+        if t.at("link").b("socket") && !same_socket(t.at("link").s("socket"), &socket) { crate::fail!("{id} lives in another herdr session. Open the board there."); }
         if !values.is_empty() { let s = t.obj_mut("settings"); for (k, v) in &values { s.insert(k.clone(), v.clone()); } }
         // Delegated again while it asked you (docs/gate.md): the new round asks again, once. A review alone is no reason.
         if t.b("mergeIntent") || t.s("stage") == "approval" { t.put("requireApproval", true); }
@@ -134,11 +134,12 @@ pub fn delegate_with(id: &str, asked: Vec<(String, Value)>, w: Wait) -> Res<Task
 /// take the last slot. A turn the human started in an agent's terminal counts toward the total.
 pub fn start_queued(socket: &str) -> Vec<String> {
     // A task done several times at once is split into its attempts first: each then waits for a slot of its own.
-    for w in list(ListOpts::default()) { if w.s("stage") == "queued" && w.at("link").s("socket") == socket { let _ = crate::attempts::fan_out::fan_out(w.s("id")); } }
+    for w in list(ListOpts::default()) { if w.s("stage") == "queued" && same_socket(w.at("link").s("socket"), socket) { let _ = crate::attempts::fan_out::fan_out(w.s("id")); } }
     let mut started = vec![];
     let _ = with_lock_wait("slots", 5000, || {
         let all = list(ListOpts { attempts: true, ..Default::default() });
-        let mut busy = all.iter().filter(|t| SLOT_STAGES.contains(&t.s("stage")) && !t.b("autoMerge")).count() as i64; // a remembered auto-merge runs nothing
+        // A remembered auto-merge runs nothing, nor does a task waiting in line to merge (finish/line.rs).
+        let mut busy = all.iter().filter(|t| SLOT_STAGES.contains(&t.s("stage")) && !t.b("autoMerge") && !crate::finish::line::in_line(t)).count() as i64;
         let waiting = crate::shown::queue::order(all.iter(), socket); // the order the board says (Q#1, Q#2 …)
         let max = setting("board.agents", None).as_i64().unwrap_or(4);
         for w in waiting {

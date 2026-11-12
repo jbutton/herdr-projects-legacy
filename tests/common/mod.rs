@@ -34,7 +34,7 @@ pub fn world_with(o: Opts) -> World {
     let one = one_at_a_time();
     sw::clock::set(None);
     sw::board::key_style::system_is(Some(false)); // `auto` names keys as on a PC, whatever system runs the test
-    let base = std::env::temp_dir().join(format!("sw-test-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::SeqCst)));
+    let base = std::env::temp_dir().join(format!("swt-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::SeqCst)));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(base.join("home")).unwrap();
     let base = std::fs::canonicalize(&base).unwrap();
@@ -83,7 +83,7 @@ pub fn world_with(o: Opts) -> World {
 impl Drop for World {
     // Out of the world's folder before it goes (a test may have gone into it): the other tests run in this same
     // process, and a program they start would find its folder gone.
-    fn drop(&mut self) { let _ = std::env::set_current_dir(env!("CARGO_MANIFEST_DIR")); FAKE.with(|f| *f.borrow_mut() = None); sw::webui::web::forget(); sw::herdr::cli::set_fake(None); sw::flow::git::set_fake_gh(None); sw::opener::set_fake(None); sw::clock::set(None); sw::runner::JOBS.with(|j| j.borrow_mut().clear()); let _ = std::process::Command::new("chmod").args(["-R", "u+w"]).arg(&self.base).status(); let _ = std::fs::remove_dir_all(&self.base); }
+    fn drop(&mut self) { let _ = std::env::set_current_dir(env!("CARGO_MANIFEST_DIR")); FAKE.with(|f| *f.borrow_mut() = None); sw::webui::web::forget(); sw::herdr::cli::set_fake(None); sw::flow::git::set_fake_gh(None); sw::opener::set_fake(None); sw::agents::opencode_v2::set_fake(None); sw::clock::set(None); sw::runner::JOBS.with(|j| j.borrow_mut().clear()); let _ = std::process::Command::new("chmod").args(["-R", "u+w"]).arg(&self.base).status(); let _ = std::fs::remove_dir_all(&self.base); }
 }
 impl World {
     /// The scripted turns, by role: { "worker": [step, …], "reviewer": […], "picker": […], "coordinator": […] }.
@@ -122,6 +122,8 @@ pub fn settle(id: &str) -> Obj {
 pub fn row(id: &str) -> Obj { sw::flow::live::board(true).into_iter().find(|t| t.s("id") == id).unwrap_or_default() }
 pub fn delegate(id: &str) { sw::actions::start::delegate(id, vec![]).unwrap_or_else(|e| panic!("delegate {id}: {}", e.msg)); }
 pub fn read(p: &Path) -> String { std::fs::read_to_string(p).unwrap_or_default() }
+/// The folder pi keeps a working folder's conversations in, under its sessions: named after its path (`--home-me-app--`).
+pub fn pi_folder(cwd: &Path) -> String { let p = cwd.display().to_string(); format!("--{}--", p.strip_prefix('/').unwrap_or(&p).replace(['/', '\\', ':'], "-")) }
 /// The pane's agent, as the fake herdr has it now.
 pub fn agent_of(w: &World, pane: &str) -> Value { w.state().arr("panes").iter().find(|p| p.s("pane_id") == pane).map(|p| p.at("agent").clone()).unwrap_or(Value::Null) }
 pub fn prompts(w: &World, pane: &str) -> Vec<String> { agent_of(w, pane).arr("prompts").iter().map(text).collect() }

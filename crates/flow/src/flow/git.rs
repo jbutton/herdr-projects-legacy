@@ -70,7 +70,11 @@ pub fn change_of(t: &Task) -> Option<Value> {
     let wt = t.s("worktree");
     if wt.is_empty() || !Path::new(wt).exists() { return None; }
     let base = if t.b("baseSha") { t.t("baseSha") } else if t.b("from") { t.t("from") } else { "HEAD".into() };
-    for from in [t.t("syncedTo"), base].into_iter().filter(|s| !s.is_empty()) {
+    // The range starts at the newer of the two: main as last merged in, unless the task started after that commit
+    // (a sync against a checkout that was behind), which would add main's own history to the task's change.
+    let started = t.b("baseSha") || t.b("from");
+    let synced = Some(t.t("syncedTo")).filter(|s| !s.is_empty() && !(started && git_out(Path::new(wt), &["merge-base", "--is-ancestor", s, &base]).is_ok()));
+    for from in synced.into_iter().chain([base]) {
         let range = format!("{from}...HEAD");
         if let Ok(diff) = git_out(Path::new(wt), &["diff", "--stat", &range]) {
             let head = { let h = head_of(Path::new(wt)); if h.is_empty() { git_out(Path::new(wt), &["rev-parse", "HEAD"]).unwrap_or_default() } else { h } };

@@ -2,6 +2,8 @@
 //! stopping them before the folder goes, as stopping a task ends its panes: this user's own processes only, never this
 //! one or one it runs under. A process runs from a folder when its working folder or its program is in it (Linux:
 //! /proc; elsewhere `lsof`).
+#[cfg(target_os = "macos")]
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 fn inside(p: &Path, dir: &Path) -> bool { p.starts_with(dir) }
@@ -15,6 +17,18 @@ fn line_of(pid: i32) -> Vec<i32> {
     let mut v = vec![pid];
     for _ in 0..64 { match parent_of(*v.last().unwrap()) { Some(up) if up > 1 && !v.contains(&up) => v.push(up), _ => break } }
     v
+}
+/// The folder a process runs in, where the system tells.
+pub fn folder_of(pid: i32) -> Option<PathBuf> {
+    #[cfg(target_os = "macos")] {
+        let mut i: libc::proc_vnodepathinfo = unsafe { std::mem::zeroed() };
+        let n = std::mem::size_of::<libc::proc_vnodepathinfo>() as i32;
+        if unsafe { libc::proc_pidinfo(pid, libc::PROC_PIDVNODEPATHINFO, 0, &mut i as *mut _ as *mut libc::c_void, n) } != n { return None; }
+        let dir = unsafe { std::ffi::CStr::from_ptr(i.pvi_cdir.vip_path.as_ptr() as *const libc::c_char) };
+        return Some(PathBuf::from(std::ffi::OsStr::from_bytes(dir.to_bytes()))).filter(|d| !d.as_os_str().is_empty());
+    }
+    #[cfg(not(target_os = "macos"))]
+    std::fs::read_link(format!("/proc/{pid}/cwd")).ok()
 }
 /// This process and the ones it runs under.
 pub fn own_line() -> Vec<i32> { line_of(std::process::id() as i32) }

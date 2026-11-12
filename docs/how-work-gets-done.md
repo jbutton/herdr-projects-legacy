@@ -39,7 +39,8 @@ All of this runs with the board open or closed.
   origin refuses for another reason (a protected branch, a hook) waits for you with git's own words.
 - `workspace.setup` runs. Then the agent starts in that space's root pane, with the task and its rules.
 - **Outside git**, the agent works in place, in a plain Herdr space.
-- **At most `board.agents` (4) agents work at once.** More wait their turn. Tasks that wait for you hold no slot.
+- **At most `board.agents` (4) agents work at once.** More wait their turn. Tasks that wait for you hold no slot, nor
+  does one waiting in line to merge behind another.
 
 ## Agents run with full access by default
 
@@ -57,7 +58,8 @@ did. They can run anything as you, without asking: the rules and the review brie
   the risky ones: `claude --permission-mode auto`, `codex --approve-for-me` (and Cursor's, Qwen Code's, Qoder's).
   Refused for every other program ([auto mode](auto-mode.md)).
 - So a new task does not wait behind a "trust this folder?" dialog, the plugin marks the task's repo as trusted in the
-  agent's own settings (`~/.claude.json`, `~/.codex/config.toml`) before starting it. Only for a role with full or auto
+  agent's own settings (`~/.claude.json`, `~/.codex/config.toml`; for pi, the task's worktree in
+  `~/.pi/agent/trust.json`) before starting it. Only for a role with full or auto
   access.
 
 ## How the board knows a turn ended
@@ -70,7 +72,9 @@ The plugin starts every agent itself, and passes at launch:
 - **the task's rules** as a standing system prompt: a file, or for Codex inline when short
   ([long rules and long messages](could-not-start.md#long-rules-and-long-messages)).
 
-Nothing is written to your own agent settings, and your own hooks keep running.
+Nothing is written to your own agent settings, and your own hooks keep running. Claude Code's launch settings also turn
+its idle compaction off (`"idleCompaction": false`): it would shrink the session of a finished task left waiting about
+an hour, which Herdr counts as a turn. A compaction in the saved conversation is never read as a new prompt either.
 
 At each turn's end, the hook runs `herdr-projects turn-ended` (silent, at most two seconds, protected by a per-launch
 secret). The finish line then reads the end of that agent's saved conversation: its last message, an API or login error,
@@ -92,7 +96,8 @@ never finishes a task. The turn counts as ended when:
   one, as the fallback.
 
 Otherwise the task is held as "Stopped without a summary": `Ctrl+R` tells the agent to continue, `Ctrl+L` takes the work
-as it is.
+as it is. Its message is the agent's last words on its screen: what stands above the program's input box, never the
+status line or mode line drawn under it.
 
 A task whose finish the board missed (its agent at rest, the row still "Finishing") is finished with `Ctrl+L` or
 `herdr-projects finish <id>`. What the agent said last is the summary.
@@ -361,8 +366,9 @@ itself, and its worktree and branch are removed. `workspace.cleanup false` keeps
   (including one a finished agent left running in the background).
 - What an agent program keeps running as part of itself is no such command: its MCP servers, or its own program under
   an npm wrapper (`codex` installed with npm). They are in the agent's own process group, and an MCP server's input and
-  output are wired to the agent itself (a pipe or a socket the agent holds the other end of). So a finished agent with
-  MCP servers is closed like any other. A command whose streams go elsewhere (the terminal, a file, `/dev/null`) keeps
+  output are wired to the agent itself (a pipe or a socket the agent holds the other end of). What such a helper runs
+  under it is its own too (a language server's telemetry, in a group of its own). So a finished agent with MCP or
+  language servers is closed like any other. A command whose streams go elsewhere (the terminal, a file, `/dev/null`) keeps
   the space open, in the agent's group or not, and so does one in a group of its own. What cannot be told counts as a
   command.
 - Nor is one Herdr could not answer for, or whose Herdr session is not running: then nothing of the task is touched.
