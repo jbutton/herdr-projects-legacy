@@ -222,3 +222,19 @@ fn a_check_run_again_is_judged_by_its_newest_run_and_another_runs_failure_still_
         assert_eq!(t.at("prFailure").s("remoteKind"), "checks", "{}", t.t("msg")); assert!(!merged(&w));
     }
 }
+
+/// Two outside CIs that each call their check `build`: one's pass, begun after the other's failure, is not that check
+/// run again. The same CI's own run again is.
+#[test]
+fn another_ci_s_check_of_the_same_name_is_its_own_check_and_its_failure_still_counts() {
+    let outside = |conclusion: &str, url: &str, from: u8, to: u8| { let mut c = rerun(conclusion, url, from, to); c["workflowName"] = json!(""); c };
+    for (second, lands) in [("https://ci-b.example/build/2", false), ("https://ci-a.example/build/2", true), ("", false)] {
+        let w = pr_world(json!({ "review.rounds": 0 }));
+        let id = to_approval(&w, "Two CIs");
+        let head = task(&id).t("prHead");
+        w.gh_says(json!({ "view": rollup_of(&head, json!([outside("FAILURE", "https://ci-a.example/build/1", 0, 5), outside("SUCCESS", second, 7, 12)])) }));
+        finish_line::approve(&id, None, false).unwrap();
+        let t = settle(&id);
+        assert_eq!(merged(&w), lands, "{second}: {}", t.t("msg"));
+    }
+}

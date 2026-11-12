@@ -33,3 +33,24 @@ fn a_task_it_starts_while_herdr_leaves_completion_seq_out_is_counted_as_started(
     busy(&w, &co);
     assert!(!sw::autopilot::turn::autopilot_turn(&co), "a turn after the wake's is not autopilot's");
 }
+
+/// Nothing looked between the wake's turn ending and yours beginning: herdr's number for the state it works in is no
+/// longer the one the wake's turn began with.
+#[test]
+fn a_turn_typed_right_after_the_wakes_ended_is_not_autopilots_though_nothing_saw_it_end() {
+    let w = pilot_world();
+    let co = proj(&w);
+    w.script(json!({ "coordinator": [{ "said": "Hello." }, { "status": "working" }] }));
+    ok(&["coordinator", "tell", "--project", "proj", "hello"]);
+    drain();
+    ok(&["autopilot", "on", "--project", "proj", "--goal", "Docs", "--autopilot.scope", "all", "--autopilot.every", "none"]);
+    tick(&w);
+    in_pane(&w, &pane_of(&co));
+    assert!(sw::autopilot::turn::autopilot_turn(&co), "the wake's turn is still going");
+    end_turn(&w, &co);
+    busy(&w, &co);
+    let a = sw::herdr::Herdr::new(Some(w.socket.clone())).agent_get(&pane_of(&co)).unwrap().unwrap();
+    assert_eq!(a.s("agent_status"), "working"); assert!(a.at("completion_seq").is_null(), "{a}");
+    assert!(!sw::autopilot::turn::autopilot_turn(&co), "a turn after the wake's is not autopilot's");
+    in_pane(&w, "");
+}

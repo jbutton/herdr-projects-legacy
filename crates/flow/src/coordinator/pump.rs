@@ -227,6 +227,11 @@ fn run_pump(co: &Co, taken: &mut HashSet<String>) -> Res<()> {
             change(co, |c| { c.put("typed", if busy { let mut t = typed.as_ref().and_then(|t| t.as_object().cloned()).unwrap_or_default(); t.put("text", words.clone()); Value::Object(t) } else { Value::Null }); true })?;
             let mark = typed.clone().unwrap_or(Value::Null);
             if !confirm(&api, c.s("pane"), typed, Some(&|| said_in(co, &mark, &words))) { crate::fail!("{UNSENT}"); }
+            // The turn these words started, as herdr numbers it while it works: one typed straight into its terminal
+            // after it ended has another number, also when nothing saw it end (herdr/turns.rs).
+            if let Some(work) = api.agent_get(c.s("pane")).ok().flatten().and_then(|a| crate::herdr::turns::working_seq(&a)) {
+                change(co, |c| { if c.s("typedId") != id || !c.at("mark").b("rest") { return false; } c.obj_mut("mark").put("work", work.clone()); true })?;
+            }
         }
         if stuck { break; }
     }

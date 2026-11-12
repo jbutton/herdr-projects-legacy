@@ -22,7 +22,7 @@ pub fn caller() -> Option<Co> {
 /// Is it still in the turn its last typed message started?
 fn in_that_turn(c: &Obj, socket: &str) -> bool {
     if c.at("mark").i("run") != c.i("startedAt") || !c.b("pane") { return false; }
-    Herdr::new(Some(socket.to_string())).agent_get(c.s("pane")).ok().flatten().map(|a| crate::herdr::turns::same_turn(&a, c.at("mark").at("seq"))).unwrap_or(false)
+    Herdr::new(Some(socket.to_string())).agent_get(c.s("pane")).ok().flatten().map(|a| crate::herdr::turns::same_turn(&a, c.at("mark"))).unwrap_or(false)
 }
 /// The last message typed in was its wake, it went in at rest, and the turn it started has not ended (nor been seen to
 /// end by autopilot's tick: herdr leaves completion_seq out of a later turn typed straight into its terminal too).

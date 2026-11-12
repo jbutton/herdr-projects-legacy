@@ -64,8 +64,10 @@ fn latest_jobs(root: &Path, run: u64) -> Option<Vec<u64>> {
 }
 /// GitHub's list with each check only as last run. A GitHub Actions job listed twice in its workflow run: the one of the
 /// run's latest attempt, as GitHub says it (two jobs of one name in the same attempt are two checks). Another app's
-/// check: one of the same name that began after it was over. What cannot be told (GitHub does not say, the times are not
-/// known: not started yet, gh's `0001-…`) is kept, so that a failure is never dropped for a guess.
+/// check: one of the same name, from the same site (its link: two outside CIs may each call their check `build`, and
+/// one's pass says nothing of the other's failure), that began after it was over. What cannot be told (GitHub does not
+/// say, no link, the times are not known: not started yet, gh's `0001-…`) is kept, so that a failure is never dropped
+/// for a guess.
 pub fn newest(root: &Path, checks: &[Value]) -> Vec<Value> {
     let run_of = |c: &Value| link_id(c, "/actions/runs/");
     let key = |c: &Value| (c.s("__typename").to_string(), c.s("workflowName").to_string(), if c.b("name") { c.t("name") } else { c.t("context") }, run_of(c));
@@ -74,6 +76,7 @@ pub fn newest(root: &Path, checks: &[Value]) -> Vec<Value> {
         if let Some(r) = run_of(c) { if !latest.iter().any(|(x, _)| *x == r) { latest.push((r, latest_jobs(root, r))); } }
     }
     let known = |s: &str| !s.is_empty() && !s.starts_with("0001");
+    let site = |c: &Value| { let u = if c.b("detailsUrl") { c.s("detailsUrl") } else { c.s("targetUrl") }; u.split("://").nth(1).and_then(|r| r.split('/').next()).unwrap_or("").to_lowercase() };
     // A status has one time, when it was set.
     let older = |a: &Value, b: &Value| { let (end, start) = (if a.b("completedAt") { a.s("completedAt") } else { a.s("startedAt") }, b.s("startedAt")); known(end) && known(start) && end < start };
     let gone = |c: &Value| match run_of(c) {
@@ -82,7 +85,7 @@ pub fn newest(root: &Path, checks: &[Value]) -> Vec<Value> {
             let latest_job = |o: &Value| link_id(o, "/job/").map(|j| ids.contains(&j)).unwrap_or(false);
             link_id(c, "/job/").is_some() && !latest_job(c) && checks.iter().any(|o| key(o) == key(c) && latest_job(o))
         }
-        None => checks.iter().any(|o| key(o) == key(c) && older(c, o)),
+        None => !site(c).is_empty() && checks.iter().any(|o| key(o) == key(c) && site(o) == site(c) && older(c, o)),
     };
     checks.iter().filter(|c| !gone(c)).cloned().collect()
 }
