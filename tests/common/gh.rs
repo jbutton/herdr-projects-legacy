@@ -21,12 +21,34 @@ use sw::json::*;
 /// pull request's `headRefOid` is then what its head branch holds there (the one `pr create --head` named, or `headBranch`),
 /// and `newer` the checks of a commit pushed there after the one `view` names. The pull request's `body` is the one
 /// `pr create` or `pr edit` gave it last (or `view`'s own). `issueFail`: `issue close` fails with these words;
-/// `editFail`: `pr edit` does.
+/// `editFail`: `pr edit` does. `fork`: the checkout is a fork's, with an `upstream` remote (up/r), which real gh takes
+/// for a call that names no repo: such a call is answered as up/r would answer it (`upstream`).
 #[derive(Default)]
 pub struct FakeGh { pub cfg: RefCell<Value>, pub log: RefCell<Vec<String>>, pub merged: Cell<bool>, late: Cell<i64>, head_branch: RefCell<String>, body: RefCell<Option<String>>, dequeued: Cell<bool> }
 fn ok(out: &str) -> GhOut { GhOut { status: 0, stdout: if out.is_empty() { String::new() } else { format!("{out}\n") }, stderr: String::new() } }
 fn rows(v: &Value) -> String { v.as_array().map(|a| a.iter().map(|r| strings(r).join("\t")).collect::<Vec<_>>().join("\n")).unwrap_or_default() }
 fn fail(m: &str) -> GhOut { GhOut { status: 1, stdout: String::new(), stderr: format!("{m}\n") } }
+/// The call names the test's own repo, o/r: by a pull request's link, `--repo`, the API path, GraphQL's owner and name,
+/// or `repo view`'s argument. A call about no repo (who is logged in, a node by its id) needs none.
+pub fn names_ours(a: &[String]) -> bool {
+    let has = |f: &str| a.iter().any(|s| s == f);
+    let (x, y) = (a.first().map(|s| s.as_str()).unwrap_or(""), a.get(1).map(|s| s.as_str()).unwrap_or(""));
+    (x == "api" && (y == "user" || a.iter().any(|s| s.starts_with("id="))))
+        || a.iter().any(|s| s.starts_with("https://github.com/o/r/") || s.starts_with("repos/o/r/"))
+        || a.windows(2).any(|w| (w[0] == "--repo" || w[0] == "-R") && w[1] == "o/r")
+        || (has("owner=o") && has("name=r"))
+        || (x == "repo" && y == "view" && a.get(2).map(|s| s.as_str()) == Some("o/r"))
+}
+/// What up/r, the upstream of a fork, answers: its pull request 7 was merged long ago, and it has no branch of the
+/// fork's, so no pull request can be opened or found there for one; anything else is refused (no permission there).
+fn upstream(a: &[String]) -> GhOut {
+    match (a.first().map(|s| s.as_str()).unwrap_or(""), a.get(1).map(|s| s.as_str()).unwrap_or("")) {
+        ("pr", "view") => ok(&json!({ "state": "MERGED", "headRefOid": "1".repeat(40), "mergeCommit": { "oid": "2".repeat(40) }, "baseRefName": "main", "body": "", "statusCheckRollup": [], "comments": [], "reviews": [], "author": { "login": "someone" } }).to_string()),
+        ("pr", "create") => fail("pull request create failed: GraphQL: Head sha can't be blank, Base sha can't be blank, Head ref must be a branch (createPullRequest)"),
+        ("pr", "list") => ok("[]"),
+        _ => fail(&format!("fake gh: up/r refuses this (gh's default in a fork's checkout): {}", a.join(" "))),
+    }
+}
 impl FakeGh {
     /// What the pull request's head branch holds at `origin`.
     fn pushed(&self, c: &Value) -> String {
@@ -42,6 +64,7 @@ impl FakeGh {
         let has = |f: &str| a.iter().any(|s| s == f);
         let rollup = a.iter().any(|s| s.contains("statusCheckRollup"));
         if c.b("noLogin") { return GhOut { status: 4, stdout: String::new(), stderr: "To get started with GitHub CLI, please run:  gh auth login\nAlternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token.\n".into() }; }
+        if c.b("fork") && !names_ours(&a) { return upstream(&a); }
         if c.b("noChecks") && (rollup || a.iter().any(|s| s.contains("/check-runs"))) {
             return fail(if x == "api" { "gh: Resource not accessible by personal access token (HTTP 403)" } else { "GraphQL: Resource not accessible by personal access token (repository.pullRequest.statusCheckRollup)" });
         }

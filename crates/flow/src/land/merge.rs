@@ -7,7 +7,7 @@ use crate::err::Res;
 use crate::finish::auto_merge::called_off;
 use crate::finish::line::take_turn;
 use crate::flow;
-use crate::flow::git::{gh, pr_number, CHECK_BAD, CHECK_GOOD};
+use crate::flow::git::{gh, CHECK_BAD, CHECK_GOOD};
 use crate::json::*;
 use crate::runner::{claim, is_aborted, release, Guard};
 use crate::store::failures::{failure_patch, is_auth_failure};
@@ -73,7 +73,7 @@ pub(super) fn reverify(id: &str, g: &mut Guard, t: &Task, why: &str, synced: Opt
 /// merges into it, and with none by a push of its own (direct.rs). False: it may not merge, and that was said on the task.
 fn onto_named(g: &mut Guard, t: &Task, root: &Path, b: &str) -> Res<bool> {
     if !t.b("pr") { return Ok(true); }
-    let r = gh(&["pr", "view", &pr_number(t.s("pr")), "--json", "baseRefName"], root, 60000);
+    let r = gh(&["pr", "view", t.s("pr"), "--json", "baseRefName"], root, 60000);
     let base = if r.status == 0 { serde_json::from_str::<Value>(&r.stdout).map(|v| v.t("baseRefName")).unwrap_or_default() } else { String::new() };
     // Not known is not "into b": nothing merges until GitHub says which branch it merges into.
     if base.is_empty() {
@@ -84,7 +84,7 @@ fn onto_named(g: &mut Guard, t: &Task, root: &Path, b: &str) -> Res<bool> {
     }
     if base == b { return Ok(true); }
     fail(g, &format!("The pull request merges into {base}, not {b}"), &format!("Pull request: {}\nIt merges into: {base}\nThis task started from, and lands on: {b}\n\nNothing was merged.", t.s("pr")),
-        &format!("Change the pull request's base back to {b} (gh pr edit {} --base {b}), then approve again.", pr_number(t.s("pr"))), no_fix())?;
+        &format!("Change the pull request's base back to {b} (gh pr edit {} --base {b}), then approve again.", t.s("pr")), no_fix())?;
     Ok(false)
 }
 /// Main could not be fetched right before the merge: nothing is merged, and nothing failed. The task waits for your
@@ -151,8 +151,8 @@ pub fn land_core(id: &str, g: &mut Guard) -> Res<()> {
     t = g.check()?;
     if let Some(b) = &direct { return super::direct::land(id, g, &t, &tree, b, &how); }
     if t.b("pr") {
-        // By number, not link: gh then uses the repo's own remote for the host.
-        let pr = pr_number(t.s("pr"));
+        // By its link, not its number: gh then acts on the pull request's own repo, never on its default (flow/git.rs).
+        let pr = t.t("pr");
         // Only the commit that was checked and reviewed here may merge.
         let reviewed = t.at("mergeIntent").t("verifiedHead");
         if !reviewed.is_empty() {

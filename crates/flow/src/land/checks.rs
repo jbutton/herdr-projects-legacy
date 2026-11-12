@@ -10,7 +10,7 @@ use super::merge::{fail, no_fix};
 use crate::clock::now;
 use crate::err::Res;
 use crate::flow;
-use crate::flow::git::{gh, pr_number, CHECK_BAD, CHECK_GOOD};
+use crate::flow::git::{gh, CHECK_BAD, CHECK_GOOD};
 use crate::json::*;
 use crate::runner::Guard;
 use crate::store::failures::{bound_detail, is_auth_failure};
@@ -200,7 +200,7 @@ pub fn before_merge(id: &str, g: &mut Guard, t: &Task, root: &Path) -> Res<bool>
                 let timeout = setting_text("check.timeout", Some(t));
                 let which = if names.is_empty() { "none has started (an outside CI reports in this repo: on the branch it merges into, or on its other pull requests)".to_string() } else { names.join(", ") };
                 fail(g, "GitHub's checks did not finish", &format!("Pull request: {pr}\nStill not finished after {timeout} (check.timeout): {which}\n\nNothing was merged."),
-                    &format!("Look at the pull request's checks on GitHub (gh pr checks {}): one may be stuck, or wait for a runner. Approve again to wait for them again, or merge without them: herdr-projects approve {id} --anyway.", pr_number(&pr)), no_fix())?;
+                    &format!("Look at the pull request's checks on GitHub (gh pr checks {pr}): one may be stuck, or wait for a runner. Approve again to wait for them again, or merge without them: herdr-projects approve {id} --anyway."), no_fix())?;
                 return Ok(false);
             }
             let msg = waiting_words(listed, &checks, &flows);
