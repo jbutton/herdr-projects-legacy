@@ -21,12 +21,17 @@ fn at_origin(tp: &Path, b: &str) -> Res<String> { git_out(tp, &["rev-parse", "--
 fn holds(tp: &Path, older: &str, newer: &str) -> bool { git_out(tp, &["merge-base", "--is-ancestor", older, newer]).is_ok() }
 /// The commit that goes onto `parent`: the reviewed tree squashed into one, a merge of the two, or (rebase) the reviewed
 /// commit itself. `parent` when the work brings it nothing. A local merge builds its commit the same way (local.rs).
+/// Signed when the repo signs its commits (`commit.gpgSign`), as `git commit` would: `commit-tree` alone does not, and
+/// a signer that fails makes no commit.
 pub(super) fn build(tp: &Path, how: &str, parent: &str, head: &str, message: &str) -> Res<String> {
     let tree = format!("{head}^{{tree}}");
     if parent == head || how == "rebase" { return Ok(head.into()); }
-    if how == "merge" { return git_out(tp, &["commit-tree", &tree, "-p", parent, "-p", head, "-m", message]); }
-    if git_out(tp, &["rev-parse", &tree])? == git_out(tp, &["rev-parse", &format!("{parent}^{{tree}}")])? { return Ok(parent.into()); }
-    git_out(tp, &["commit-tree", &tree, "-p", parent, "-m", message])
+    if how != "merge" && git_out(tp, &["rev-parse", &tree])? == git_out(tp, &["rev-parse", &format!("{parent}^{{tree}}")])? { return Ok(parent.into()); }
+    let mut a = vec!["commit-tree", tree.as_str(), "-p", parent];
+    if how == "merge" { a.extend(["-p", head]); }
+    if git_out(tp, &["config", "--type=bool", "commit.gpgSign"]).is_ok_and(|v| v == "true") { a.push("-S"); }
+    a.extend(["-m", message]);
+    git_out(tp, &a)
 }
 /// Runs once `sync::sync_main` found the task's worktree up to date with `origin/<b>`.
 pub fn land(id: &str, g: &mut Guard, t: &Task, tree: &str, b: &str, how: &str) -> Res<()> {
@@ -42,7 +47,7 @@ pub fn land(id: &str, g: &mut Guard, t: &Task, tree: &str, b: &str, how: &str) -
     let message = format!("{}\n\nTask: {}", if t.b("title") { t.t("title") } else { id.to_string() }, task_ref(id, &repo_keys()));
     let new = match build(tp, how, &parent, &head, &message) {
         Ok(c) => c,
-        Err(e) => return fail(g, &format!("Could not make the commit for {b}"), &format!("Worktree: {tree}\nOnto: {parent} (origin/{b})\nReviewed: {head}\n\nWhat git said:\n{}\n\nNothing was merged.", e.msg), "Fix what git said (git config user.name and user.email, for one), then approve again.", Fail { agent_can_fix: false, ..Default::default() }),
+        Err(e) => return fail(g, &format!("Could not make the commit for {b}"), &format!("Worktree: {tree}\nOnto: {parent} (origin/{b})\nReviewed: {head}\n\nWhat git said:\n{}\n\nNothing was merged.", e.msg), "Fix what git said (git config user.name and user.email, or the signer for commit.gpgSign), then approve again.", Fail { agent_can_fix: false, ..Default::default() }),
     };
     if new == parent { return landed(id, g, t, &format!("{b} at origin has this work already."), &head, &parent); }
     if called_off(g) { return Ok(()); }

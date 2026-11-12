@@ -161,11 +161,12 @@ A conflict found here goes back to the agent the same way, and the merge you app
 staged or ignored file the work does not touch is left as it is and kept out of the merge commit (staged stays
 staged), so it no longer blocks the merge. A file the merge would overwrite stops it, named on the task (`Merge would
 overwrite your copy of local.env`): changed, untracked or ignored there, your copy is kept, nothing is merged, nothing
-in your checkout changes and nothing is stashed for you. Commit, stash, move or remove it, then approve again. A
-checkout that moved on since the work was brought up to date with it is caught up with and checked again first, under
-the same approval. The merge commit is made by git directly, not by `git commit` in your checkout, so your checkout's
-commit hooks do not run on it (its `post-merge` hook does). Merging without your yes:
-[merging by itself](gate.md#merging-by-itself).
+in your checkout changes (under `merge.syncRemote` it is not brought up to origin either) and nothing is stashed for
+you. Commit, stash, move or remove it, then approve again. A checkout that moved on since the work was brought up to
+date with it is caught up with and checked again first, under the same approval. The merge commit is made by git
+directly, not by `git commit` in your checkout, so your checkout's commit hooks do not run on it (its `post-merge` hook
+does). A repo that signs its commits (`commit.gpgSign`) gets it signed, here or pushed to a named branch; a signer that
+fails makes no commit and merges nothing. Merging without your yes: [merging by itself](gate.md#merging-by-itself).
 
 ### Closing GitHub issues
 
@@ -312,11 +313,12 @@ makes such a task keep up with the same branch as origin has it:
   task's own worktree when it moved: before the review, while the task waits (origin is asked every two minutes; under
   `merge.sync approve` a test merge only) and after your yes. `syncedTo` is origin's commit. Your checkout is not
   touched by a sync.
-- after your yes, right before the work lands in your checkout, your checkout is fast-forwarded to the commit of
-  origin the task holds (as `git pull --ff-only` would), so the landed commit adds the task's work alone. Your own
-  files it does not touch stay as they are; one of origin's commits would overwrite stops it by name, as for the
-  merge itself. A checkout with commits origin does not have is refused and nothing is merged: push them or move them
-  to another branch, or turn the setting off for that task to land in your checkout as it is.
+- after your yes, your checkout is brought up to the commit of origin the task holds (as `git pull --ff-only` would)
+  together with the work, in one fast-forward, so the landed commit adds the task's work alone. Your own files
+  neither touches stay as they are; one that origin's commits or the work would overwrite stops it by name, with your
+  checkout where it was, as for any merge here. A checkout with commits origin does not have is refused and nothing is
+  merged: push them or move them to another branch, or turn the setting off for that task to land in your checkout as
+  it is.
 - origin that cannot be fetched is not a sync, and your checkout is not used instead: the finished turn is checked,
   then held as "behind main" with what git said, never approvable, until a fetch works. Nothing is merged and
   `syncedTo` stays as it was.

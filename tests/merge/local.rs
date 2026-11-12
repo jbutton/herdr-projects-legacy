@@ -1,7 +1,8 @@
 //! Landing in your checkout with your own work in it: git alone says what is at risk. A stray, changed or staged file
 //! the merge does not touch stays as it was and out of its commit, under every `merge.method`; a file it would
 //! overwrite (changed, untracked or ignored there) stops it by name, with your checkout as it was and nothing stashed,
-//! also when it is first brought up to origin (`merge.syncRemote`).
+//! also when it is brought up to origin with the work (`merge.syncRemote`). A repo that signs its commits gets a
+//! signed merge commit, or none.
 use crate::common;
 use common::*;
 use serde_json::json;
@@ -11,6 +12,16 @@ use sw::json::*;
 fn plain(method: &str) -> World { world_with(Opts { repo: true, settings: json!({ "review.when": "never", "merge.method": method }), ..Default::default() }) }
 fn head(w: &World) -> String { git(&w.root, &["rev-parse", "HEAD"]) }
 fn ignore(w: &World, file: &str) { std::fs::write(w.root.join(".git/info/exclude"), format!("{file}\n")).unwrap(); }
+/// Your repo signs its commits (`commit.gpgSign`), with a signer that works or one that fails.
+pub fn signs_with(w: &World, works: bool) {
+    use std::os::unix::fs::PermissionsExt;
+    let prog = w.base.join(if works { "gpg-works" } else { "gpg-fails" });
+    let body = if works { "cat >/dev/null\nprintf '\\n[GNUPG:] SIG_CREATED D 1 8 00 0 0\\n' >&2\nprintf -- '-----BEGIN PGP SIGNATURE-----\\nfake\\n-----END PGP SIGNATURE-----\\n'\n" } else { "cat >/dev/null\nexit 1\n" };
+    std::fs::write(&prog, format!("#!/bin/sh\n{body}")).unwrap();
+    std::fs::set_permissions(&prog, std::fs::Permissions::from_mode(0o755)).unwrap();
+    git(&w.root, &["config", "commit.gpgSign", "true"]); git(&w.root, &["config", "gpg.program", &prog.display().to_string()]);
+}
+pub fn signed(dir: &std::path::Path, rev: &str) -> bool { git(dir, &["cat-file", "-p", rev]).contains("\ngpgsig ") }
 
 /// Your own work beside a task that adds f.txt: an untracked file, an edit, a staged file and an ignored one.
 fn lands_beside_your_work(method: &str) {
@@ -123,3 +134,42 @@ fn brought_up_to_origin_first_a_stray_file_stays_and_one_origin_adds_over_yours_
     assert_eq!(git(&w.root, &["rev-parse", "HEAD^"]), theirs);
     for (f, body) in [("f.txt", "v1\n"), ("g.txt", "theirs\n"), ("stray.txt", "stray\n")] { assert_eq!(read(&w.root.join(f)), body, "{f}"); }
 }
+
+#[test]
+fn refused_after_origin_moved_your_checkout_stays_where_it_was_not_brought_halfway_up_to_origin() {
+    let w = world_with(Opts { repo: true, origin: true, settings: json!({ "review.when": "never", "merge.pr": false, "merge.syncRemote": true }), ..Default::default() });
+    let id = to_approval(&w, "Work");
+    they_push(&w, "g.txt", "theirs\n");
+    std::fs::write(w.root.join("f.txt"), "yours\n").unwrap(); // your own copy of the file the work adds
+    let before = head(&w);
+    finish_line::approve(&id, None, false).unwrap();
+    let t = settle(&id);
+    assert_eq!(t.at("failure").s("title"), "Merge would overwrite your copy of f.txt", "{}", t.at("failure"));
+    assert!(t.at("failure").s("detail").contains("Nothing was merged, and nothing in your checkout was changed."), "{}", t.at("failure").s("detail"));
+    assert_eq!((head(&w), read(&w.root.join("f.txt"))), (before, "yours\n".to_string()), "not moved to origin's commit either");
+    assert!(!w.root.join("g.txt").exists());
+}
+
+/// A repo that signs its commits: a signer that fails stops the merge with nothing changed; one that works signs it.
+fn signs_its_commit(method: &str) {
+    let w = plain(method);
+    let id = to_approval(&w, "Work");
+    signs_with(&w, false);
+    let before = head(&w);
+    finish_line::approve(&id, None, false).unwrap();
+    let t = settle(&id);
+    assert_eq!(t.at("failure").s("title"), "Could not make the merge commit", "{method}: {}", t.at("failure"));
+    assert!(t.at("failure").s("detail").contains("gpg failed to sign"), "{}", t.at("failure").s("detail"));
+    assert_eq!(head(&w), before, "{method}"); assert!(!w.root.join("f.txt").exists(), "{method}");
+    signs_with(&w, true);
+    finish_line::approve(&id, None, false).unwrap();
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "done", "{method}: {}", t.at("failure"));
+    assert!(signed(&w.root, "HEAD"), "{method}: {}", git(&w.root, &["cat-file", "-p", "HEAD"]));
+}
+
+#[test]
+fn a_repo_that_signs_its_commits_gets_a_signed_squash_commit_or_none() { signs_its_commit("squash"); }
+
+#[test]
+fn and_a_signed_merge_commit_or_none() { signs_its_commit("merge"); }

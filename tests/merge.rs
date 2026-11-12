@@ -6,7 +6,7 @@ use serde_json::json;
 use std::path::Path;
 use sw::actions::finish_line;
 use sw::json::*;
-mod local;
+pub mod local;
 
 #[test]
 fn a_commit_that_reaches_the_branch_while_it_is_being_merged_is_neither_merged_unseen_nor_deleted_as_merged() {
