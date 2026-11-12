@@ -6,6 +6,7 @@ use serde_json::json;
 use sw::actions::{filing, finish_line, talk};
 use sw::json::*;
 mod git_file;
+mod review_range;
 
 #[test]
 fn delegate_makes_a_worktree_space_with_the_agent_in_its_root_pane_and_the_rules() {
