@@ -1,18 +1,21 @@
 //! What happens on the board that an automation can be fired by, and telling that it happened: a task was added,
-//! finished and waits for approval, failed its review, went wrong, needs you, was merged. Each is read off the task as it
-//! stands, and counted once: what was seen already is kept in the automations' folder.
+//! finished and waits for approval, failed its review, went wrong, needs you, stalled (stalled.rs), was merged. Each is
+//! read off the task as it stands, and counted once: what was seen already is kept in the automations' folder (a stall
+//! for as long as it stands: stalled.rs). A task that stalls both ways in one look fires once.
 use crate::json::*;
 use crate::notify::event_of;
+use crate::stalled::is_new;
 use crate::store::reviews::review_history;
 
 /// id: its name on the command line. words: after "when a task …". what: what the new task is told happened.
 pub struct Event { pub id: &'static str, pub words: &'static str, pub what: &'static str }
-pub const EVENTS: [Event; 6] = [
+pub const EVENTS: [Event; 7] = [
     Event { id: "added", words: "is added", what: "was added" },
     Event { id: "approval", words: "waits for approval", what: "finished and waits for approval" },
     Event { id: "review-failed", words: "failed its review", what: "failed its review" },
     Event { id: "failed", words: "went wrong", what: "went wrong" },
     Event { id: "needs-you", words: "needs you", what: "needs you" },
+    Event { id: "stalled", words: "stalls", what: "stalled: its agent showed nothing new for a while, or ran well past its estimate" },
     Event { id: "merged", words: "is merged", what: "was merged" },
 ];
 fn flat(s: &str) -> String {
@@ -21,7 +24,8 @@ fn flat(s: &str) -> String {
     s.split(|c: char| c.is_whitespace() || c == '_').filter(|w| !w.is_empty()).collect::<Vec<_>>().join("-")
 }
 pub fn event_named(typed: &str) -> Option<&'static Event> { let f = flat(typed); EVENTS.iter().find(|e| e.id == f || flat(e.words) == f || flat(e.what) == f) }
-/// What is so of a task right now, one mark per thing that happened: "added", "merged:<when>", "approval:<since>".
+/// What is so of a task right now, one mark per thing that happened: "added", "merged:<when>", "approval:<since>",
+/// "stalled:quiet:<since>:<at>".
 pub fn marks_of(t: &Obj) -> Vec<String> {
     let mut out = vec!["added".to_string()];
     match event_of(t) {
@@ -31,6 +35,7 @@ pub fn marks_of(t: &Obj) -> Vec<String> {
         _ => {}
     }
     if let Some(rv) = review_history(t).last() { if rv.b("error") || rv.at("pass") == &json!(false) || (rv.at("pass").is_null() && rv.at("recommend") == &json!(false)) { out.push(format!("review-failed:{}:{}", rv.t("round"), rv.t("at"))); } }
+    out.extend(crate::stalled::marks(t, crate::clock::now()));
     if t.b("mergedAt") { out.push(format!("merged:{}", t.t("mergedAt"))); }
     out
 }
@@ -43,11 +48,13 @@ pub fn new_events(tasks: &[Obj], seen: Option<&Obj>) -> (Vec<Happened>, Obj, boo
     let mut next = Obj::new();
     let mut events = vec![];
     for t in tasks {
-        let marks = marks_of(t);
         let had = seen.and_then(|s| s.get(t.s("id"))).map(strings);
+        let marks = crate::stalled::with_kept(t, marks_of(t), had.as_deref().unwrap_or(&[]));
         next.put(t.s("id"), marks.clone());
         if t.b("archivedAt") { continue; }
-        for m in &marks { if !had.as_ref().map(|h| h.contains(m)).unwrap_or(false) { events.push(Happened { event: m.split(':').next().unwrap_or("").into(), task: t.clone(), at: mark_at(t, m) }); } }
+        let mut new: Vec<&String> = marks.iter().filter(|m| had.as_ref().map(|h| is_new(m, h)).unwrap_or(true)).collect();
+        new.dedup_by(|a, b| a.starts_with("stalled:") && b.starts_with("stalled:")); // its stalls, side by side: one event
+        for m in new { events.push(Happened { event: m.split(':').next().unwrap_or("").into(), task: t.clone(), at: mark_at(t, m) }); }
     }
     let changed = Value::Object(next.clone()) != seen.cloned().map(Value::Object).unwrap_or(Value::Null);
     (events, next, changed)

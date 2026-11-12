@@ -5,6 +5,7 @@
 //! it said at the last look costs no call. What a look finds is kept on the task (`watch`); the sidebar is told by
 //! flow/sidebar.rs. Also here: stopping an instruction sent to another machine's Coordinator.
 pub mod one;
+pub mod output;
 pub mod pace;
 pub mod prompt;
 
@@ -141,8 +142,14 @@ pub fn watch_tick_with(tasks: &[Obj], now_ms: i64, load: Option<f64>, run: Run) 
             let Some(got) = found.get(&(i + 1)) else { if let Some(w) = p.looks.get_mut(id) { w.words = None; } continue }; // no answer: its next look is not skipped as unchanged
             let mut watch = got.as_object().cloned().unwrap_or_default();
             watch.put("at", at); watch.put("role", role.as_str());
-            // A late answer cannot overwrite a newer turn or its result.
-            let _ = update(id, |c| { if c.s("stage") != stage || turn_of(c) != *turn || watcher_off() { return Ok(Change::Keep); } c.put("watch", watch); Ok(Change::Write) });
+            // A late answer cannot overwrite a newer turn or its result. `movedAt`: when its guess last moved, the estimate
+            // a stall is told by (stalled.rs).
+            let _ = update(id, |c| {
+                if c.s("stage") != stage || turn_of(c) != *turn || watcher_off() { return Ok(Change::Keep); }
+                let was = c.at("watch");
+                let moved = if was.s("role") == role && was.at("progress") == watch.at("progress") && was.b("movedAt") { was.at("movedAt").clone() } else { json!(at) };
+                watch.put("movedAt", moved); c.put("watch", watch); Ok(Change::Write)
+            });
         }
     }));
 }

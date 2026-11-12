@@ -144,6 +144,7 @@ pub fn tick_once(socket: &str, watch: bool) -> Option<Vec<Obj>> {
     if let (Some(rs), true) = (&rows, watch) {
         // Each attempt of a task has an agent of its own to follow (attempts.rs).
         let every: Vec<Obj> = rs.iter().flat_map(|t| std::iter::once(t.clone()).chain(t.arr("tries").iter().filter_map(|x| x.as_object().cloned()))).collect();
+        crate::watcher::output::look(&every, now()); // each working agent's screen: when it last showed something new
         crate::watcher::watch_tick(&every, now());
     }
     rows
