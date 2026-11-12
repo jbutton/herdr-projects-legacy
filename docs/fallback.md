@@ -89,7 +89,8 @@ login" or failed review, plus a `Note` in the task panel that says who was passe
 `reviewer.fallback` works the same for the reviewer, where it applies:
 
 - **Its provider is down** (after the board's own five tries), it is out of allowance or logged out, or its model is not
-  there: the next one on the list reviews, **as the same review**. The tries that were cut off are not reviews, and use up
+  there: the next one on the list reviews, **as the same review**. Logged out includes a program that says so before it
+  starts: it is not started then ([its sign-in page](how-work-gets-done.md#the-reviewers-own-start-up-screens)). The tries that were cut off are not reviews, and use up
   no round.
 - **Its program is not installed on this machine**: the first one on the list that is installed reviews. That is a
   hand-over like the others (`claude took over the review from codex: codex is not installed here`). Without a list, the

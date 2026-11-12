@@ -69,6 +69,30 @@ did. They can run anything as you, without asking: the rules and the review brie
   `~/.pi/agent/trust.json`) before starting it. Only for a role with full or auto
   access.
 
+### The reviewer's own start-up screens
+
+Herdr reads two of Codex's own screens as `idle`, and the board types its brief into an idle agent: its enter then only
+picks the screen's first choice, and the review waits until `review.timeout` (20 minutes unless set) and fails as timed
+out. Seen on Codex 0.167.2 with Herdr 0.9.3 ([checked on Herdr](checked-on-herdr.md)). So for the reviewer, and for the
+attempts' picker ([attempts](attempts.md)), which are the same program:
+
+- **"Hooks need review"**: Codex shows it before its first prompt whenever a hook is new or changed: one of yours, or a
+  repo's (`.codex/hooks.json`; Codex keeps a hook's trust by its file's path, so a new worktree asks again). The
+  reviewer starts with Codex's hooks off (`-c features.hooks=false`): it only reads, so it needs none. Its turn-end
+  report is Codex's `notify`, not a hook, and still runs. The working agent keeps your hooks.
+- **Its sign-in page**: a signed-out Codex comes up at "Sign in with ChatGPT". Before the reviewer starts, the board
+  asks its program whether it is signed in here (`codex login status`, `claude auth status`: the program's own command,
+  as `herdr-projects doctor` does). Signed out, it is not started: the next one on `reviewer.fallback` reviews
+  (`claude took over the review from codex: logged out`, [fallback](fallback.md#the-reviewer)), or the task fails as
+  **Needs a login**, with what to run: `codex is not signed in here (codex login status says so): run codex login in a
+  terminal here, then retry the review`. "Not logged in" counts only where the provider it is set to needs that
+  sign-in: Codex on a `model_provider` of yours with `requires_openai_auth = false` says "Not logged in" too, yet shows
+  no sign-in page and works, so its app-server is asked (`account/read`, `requiresOpenaiAuth`); where that gives no
+  answer, a provider of your own needs none (Codex's `model_provider`, Claude Code's `ANTHROPIC_BASE_URL` or a cloud,
+  as for [model names](models.md)). An answer it can start on is kept a minute (`signins.json` in the data folder); a
+  signed-out one is asked again every time, so signing in counts at the very next try. A program that cannot say, or
+  does not answer in 5 seconds, is started, and a login error in its turn is handled as before.
+
 ## How the board knows a turn ended
 
 The plugin starts every agent itself, and passes at launch:
@@ -79,7 +103,8 @@ The plugin starts every agent itself, and passes at launch:
 - **the task's rules** as a standing system prompt: a file, or for Codex inline when short
   ([long rules and long messages](could-not-start.md#long-rules-and-long-messages)).
 
-Nothing is written to your own agent settings, and your own hooks keep running. Claude Code's launch settings also turn
+Nothing is written to your own agent settings, and your own hooks keep running, except in a reviewer on Codex
+([above](#the-reviewers-own-start-up-screens)). Claude Code's launch settings also turn
 its idle compaction off (`"idleCompaction": false`): it would shrink the session of a finished task left waiting about
 an hour, which Herdr counts as a turn. A compaction in the saved conversation is never read as a new prompt either.
 
@@ -173,6 +198,8 @@ When the agent's turn ends, the board:
      conversation (a message of its own, or a queued one taken into a turn still going), or its own saved conversation
      ends in its finished reply.
    - A reviewer whose turn its provider cut off is retried by the board ([a turn cut off by the provider](provider-errors.md)).
+   - It starts with your own hooks off, and is not started at all when its program says it is signed out here
+     ([the reviewer's own start-up screens](#the-reviewers-own-start-up-screens)).
    - The board decides from the findings ([the gate](gate.md)). A review that fails goes straight back to the agent.
    - The row says the result and a tally (`Pass · 2 minor`). Its `R#2` tag says which review it was and, by its colour,
      how it went. The task panel has its summary, and every earlier review of the task.

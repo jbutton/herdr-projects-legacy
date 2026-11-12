@@ -13,12 +13,14 @@ use crate::runner::{is_aborted, Guard};
 use crate::store::retries::{gave_up, retry_waits};
 use crate::store::tasks::{get, one_line, update_wait, Change};
 
-/// Why a reviewer stopped for good; for a model it could not use, the reason in plain words and what to do.
-fn refused_words(by: &str, error: &str) -> String {
-    let a = crate::store::settings::values::agent_of(by);
+/// Why a reviewer stopped for good: for a model it could not use, the reason in plain words and what to do; else what
+/// the review said (`the reviewer stopped: …`, or that its program is signed out here).
+fn refused_words(r: &Reviewed, error: &str) -> String {
+    let a = crate::store::settings::values::agent_of(&r.by);
     match crate::agents::model_refused::read(&a.kind, error) {
-        Some(r) => format!("{}. Choose a model it can use in reviewer.agent (`herdr-projects models {}` lists them), or leave the model out. Its error: {}", crate::agents::model_refused::say(&a.kind, &r), a.kind, error.trim_end_matches(|c: char| c == '.' || c.is_whitespace())),
-        None => format!("the reviewer stopped: {error}"),
+        Some(m) => format!("{}. Choose a model it can use in reviewer.agent (`herdr-projects models {}` lists them), or leave the model out. Its error: {}", crate::agents::model_refused::say(&a.kind, &m), a.kind, error.trim_end_matches(|c: char| c == '.' || c.is_whitespace())),
+        None if r.error.is_empty() => format!("the reviewer stopped: {error}"),
+        None => r.error.clone(),
     }
 }
 pub fn close_reviewer(id: &str) {
@@ -62,7 +64,7 @@ pub fn run_review_with(id: &str, g: &mut Guard, text: &str, change: Option<&Valu
                 Err(e) => return Err(e),
             }
         }
-        if !cut.passing { return Ok(Reviewed { error: refused_words(&r.by, &cut.error), auth: r.auth, cut: true, ..Default::default() }); }
+        if !cut.passing { return Ok(Reviewed { error: refused_words(&r, &cut.error), auth: r.auth, cut: true, ..Default::default() }); }
         if tries >= waits.len() as i64 { return Ok(Reviewed { error: format!("{}. Its error: {}", gave_up("reviewer", &cut.reason, tries + 1), cut.error.trim_end_matches(|c: char| c == '.' || c.is_whitespace())), cut: true, ..Default::default() }); }
         let until = crate::clock::now() + waits[tries as usize];
         let w = json!({ "who": "reviewer", "reason": cut.reason, "error": one_line(&cut.error, 400), "until": until, "tries": tries + 1 });
