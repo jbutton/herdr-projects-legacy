@@ -31,10 +31,10 @@ fn exits(w: &World, id: &str) {
     let pane = task(id).at("link").t("pane");
     w.patch(|s| { for p in s["panes"].as_array_mut().unwrap() { if p.s("pane_id") == pane { p["agent"] = Value::Null; } } });
 }
-/// Its terminal closes.
+/// Its terminal closes, and with it its space, as herdr leaves no empty one.
 fn closes(w: &World, id: &str) {
     let pane = task(id).at("link").t("pane");
-    w.patch(|s| s["panes"].as_array_mut().unwrap().retain(|p| p.s("pane_id") != pane));
+    w.patch(|s| { s["panes"].as_array_mut().unwrap().retain(|p| p.s("pane_id") != pane); common::herdr::FakeHerdr::drop_empty(s); });
 }
 /// Time goes by, and the board looks after its tasks.
 fn later(w: &World, id: &str, ms: i64) -> Obj { sw::clock::advance(ms); keep(w); settle(id) }
@@ -57,7 +57,7 @@ fn a_working_agent_whose_terminal_went_comes_back_by_itself_in_its_own_conversat
     let s = starts(&w);
     assert_eq!(s.len(), 2, "{s:?}");
     assert!(s[1].contains(&format!("--resume {session}")), "{}", s[1]);
-    assert_eq!((t.s("stage"), t.t("session"), row(&id).t("state")), ("working", session.clone(), "working".into()));
+    assert_eq!((t.s("stage"), t.t("session"), row(&id).t("state")), ("working", session.clone(), "working".into()), "{}", t.at("failure"));
     let said = prompts(&w, t.at("link").s("pane"));
     assert!(said.last().unwrap().contains("the board started it again. Continue the task where you left off."), "{said:?}");
     assert_eq!(t.at("relaunched").i("tries"), 1);
@@ -142,4 +142,21 @@ fn never_one_stopped_on_purpose_stopped_at_a_limit_done_or_archived() {
     assert_eq!(starts(&w).len(), before);
     for id in [&stopped, &limit, &done, &archived] { assert!(!task(id).b("relaunched"), "{id}"); }
     assert_eq!((task(&stopped).t("stage"), task(&limit).t("stage"), task(&done).t("stage")), ("stopped".into(), "stopped".into(), "done".into()));
+}
+
+#[test]
+fn nor_an_attempt_whose_agent_went_it_is_out_as_before() {
+    let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
+    w.script(json!({ "worker": [{ "status": "working" }, { "status": "working" }] }));
+    let id = w.add("Two ways");
+    delegate_with(&id, json!({ "attempts.by": "claude, codex" }));
+    sw::runner::drain_jobs(&|job, id, extra| { sw::jobs::run_job(job, id, extra); flush(); });
+    let a = kid(&id, "A");
+    assert_eq!(a.s("stage"), "working");
+    closes(&w, a.s("id"));
+    let before = starts(&w).len();
+    for ms in [21_000, 61_000, 301_000] { sw::clock::advance(ms); keep(&w); }
+    assert_eq!(starts(&w).len(), before);
+    assert!(!kid(&id, "A").b("relaunched"));
+    assert_eq!(sw::attempts::words::standing_of(&kid(&id, "A"), sw::clock::now()), "out");
 }

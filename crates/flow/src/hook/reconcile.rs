@@ -1,6 +1,6 @@
-//! Reconcile compares a linked task with herdr: pane gone, pane alive with no agent, a finished turn nobody handled,
-//! a runner lost before its step was done (hook/lost.rs). A task whose pane id no longer matches, or now names
-//! another's pane, is linked again.
+//! Reconcile compares a linked task with herdr: pane gone, pane alive with no agent (a working one's started again:
+//! hook/relaunch.rs), a finished turn nobody handled, a runner lost before its step was done (hook/lost.rs). A task
+//! whose pane id no longer matches, or now names another's pane, is linked again.
 use super::apply;
 use crate::clock::now;
 use crate::flow::task::is_agent_task;
@@ -27,17 +27,21 @@ pub fn reconcile(t: &Task, api: &Herdr) {
     if pane.is_none() { pane = relink(t, api); }
     let agent = pane.as_ref().and_then(|p| api.agent_get(p.s("pane_id")).ok().flatten());
     if agent.is_none() { check_sent(id, None, api); } // gone with typed text not taken: not started, the text kept
+    // Gone, or exited: a working task's agent is started again by itself, a few times at most (hook/relaunch.rs).
     let Some(_) = pane else {
-        return upd(id, |t| { if t.at("last").b("gone") { return false; } let l = t.obj_mut("last"); l.put("gone", true); l.put("status", Value::Null); l.put("at", now()); true });
+        upd(id, |t| { if t.at("last").b("gone") { return false; } let l = t.obj_mut("last"); l.put("gone", true); l.put("status", Value::Null); l.put("at", now()); true });
+        return super::relaunch::seen_down(id, api);
     };
     let Some(a) = agent else {
-        return upd(id, |t| {
+        upd(id, |t| {
             if t.at("last").has("status") == false && t.at("last").is_object() && !t.at("last").b("gone") && t.b("exitedAt") { return false; }
             let l = t.obj_mut("last"); l.put("status", Value::Null); l.put("gone", false); l.put("at", now());
             if !t.b("exitedAt") { t.put("exitedAt", now()); }
             true
         });
+        return super::relaunch::seen_down(id, api);
     };
+    super::relaunch::seen_up(t);
     let cwd = cwd_of(t);
     if !same_dir(a.s("cwd"), &cwd) && !same_dir(a.s("foreground_cwd"), &cwd) { return; }
     check_sent(id, Some(&a), api); // text typed in a while ago and not taken yet gets its enter again
