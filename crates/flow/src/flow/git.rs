@@ -22,8 +22,14 @@ pub fn has_origin(root: &Path) -> bool {
 pub struct GhOut { pub status: i32, pub stdout: String, pub stderr: String }
 thread_local! { static FAKE_GH: std::cell::RefCell<Option<std::rc::Rc<dyn Fn(&[String]) -> GhOut>>> = const { std::cell::RefCell::new(None) }; }
 pub fn set_fake_gh(f: Option<std::rc::Rc<dyn Fn(&[String]) -> GhOut>>) { FAKE_GH.with(|x| *x.borrow_mut() = f); }
+/// gh, run in `cwd`. Every call names its repo: a pull request by its link (the task's `pr`, never its bare number),
+/// the rest gets origin's here (store/github.rs). gh's own default would be the `upstream` remote of a fork's checkout.
+/// Where origin names no repo and gh would take another remote's, gh is not asked: the call fails, saying why.
 pub fn gh(args: &[&str], cwd: &Path, timeout_ms: u64) -> GhOut {
-    let a: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+    let a = match crate::store::github::for_gh(&args.iter().map(|s| s.to_string()).collect::<Vec<_>>(), cwd) {
+        Ok(a) => a,
+        Err(why) => return GhOut { status: 1, stdout: String::new(), stderr: why },
+    };
     if let Some(f) = FAKE_GH.with(|x| x.borrow().clone()) { return f(&a); }
     crate::runner::user_env();
     let child = Command::new("gh").args(&a).current_dir(cwd).env("GH_PROMPT_DISABLED", "1").env("GIT_TERMINAL_PROMPT", "0").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn();
@@ -57,7 +63,7 @@ pub fn remote_head(root: &Path, branch: &str) -> String {
 pub fn cancel_auto_merge(t: &Task) -> Res<()> {
     if !t.b("autoMerge") { return Ok(()); }
     if t.b("autoMergeLocal") { update_wait(t.s("id"), 10000, |t| { t.put("autoMerge", false); t.put("autoMergeLocal", false); t.put("requireApproval", true); Ok(Change::Write) })?; return Ok(()); }
-    let r = gh(&["pr", "merge", &pr_number(t.s("pr")), "--disable-auto"], &folder_of(t.s("id")), 60000);
+    let r = gh(&["pr", "merge", t.s("pr"), "--disable-auto"], &folder_of(t.s("id")), 60000);
     if r.status != 0 {
         let said = if r.stderr.trim().is_empty() { r.stdout.clone() } else { r.stderr.clone() };
         crate::fail!("{}", format!("Could not cancel the pending auto-merge; nothing was sent. {}", said.trim().lines().last().unwrap_or("")).trim());
