@@ -9,6 +9,7 @@ pub mod check_runs;
 pub mod failures;
 pub mod fetch;
 pub mod files;
+pub mod github;
 pub mod handovers;
 pub mod inbox;
 pub mod key_gen;
