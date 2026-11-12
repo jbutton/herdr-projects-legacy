@@ -22,13 +22,14 @@ is another one. A board that showed every machine goes back to this machine's ow
 Each other machine needs, once:
 
 ```sh
-# git, gh, the agent programs it will run, then:
-git clone https://github.com/eliasstravik/herdr-projects && cd herdr-projects
+# git, gh, Rust, the agent programs it will run, then:
+git clone https://github.com/jbutton/herdr-projects-legacy && cd herdr-projects-legacy
+cargo build --release
 herdr plugin link "$PWD"
-sh bin/run.sh install             # gets the program and writes its launcher
+sh bin/run.sh install             # writes its launcher
 ```
 
-…and `herdr-projects` on the PATH of a login shell there (next section). How the program is fetched and updated is in
+…and `herdr-projects` on the PATH of a login shell there (next section). How the program is built and updated is in
 [installing](install.md).
 
 Why SSH: the plugin's commands on another machine travel over the plugin's own SSH connection, because Herdr has no
