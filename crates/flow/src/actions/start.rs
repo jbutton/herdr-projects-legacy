@@ -53,6 +53,7 @@ const FRESH: &[&str] = &[
     "stillRunning",
     "tidy",
     "exitedAt",
+    "relaunched",
     "repoFile",
     "repoRefused",
     "researchRun",

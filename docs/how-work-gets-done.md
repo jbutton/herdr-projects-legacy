@@ -110,7 +110,9 @@ an hour, which Herdr counts as a turn. A compaction in the saved conversation is
 
 At each turn's end, the hook runs `herdr-projects turn-ended` (silent, at most two seconds, protected by a per-launch
 secret). The finish line then reads the end of that agent's saved conversation: its last message, an API or login error,
-its token use.
+its token use. That file is looked for only where the program keeps it, never by reading through a long history: pi's
+in the folder it keeps for the agent's working folder; Codex's in the folder of the day its conversation began, which
+the conversation's id tells (Codex's ids carry the moment they were made), then the day after and the day before.
 
 **An agent that stopped to wait for you** (a question, a permission, a sign-in) has not finished, however often it asks:
 none of the finish line runs. How an agent says so, and what the board does:
@@ -128,8 +130,13 @@ never finishes a task. The turn counts as ended when:
   one, as the fallback.
 
 Otherwise the task is held as "Stopped without a summary": `Ctrl+R` tells the agent to continue, `Ctrl+L` takes the work
-as it is. Its message is the agent's last words on its screen: what stands above the program's input box, never the
-status line or mode line drawn under it.
+as it is. Its message is the agent's last words on its screen: what stands above the program's input box, however many
+lines are typed into it, never the status line or mode line drawn under it. Claude Code's own lines over the box are
+left out too: the one after each turn (`✻ Worked for 8m 46s · done 8:30 PM`) and its notice pushed to the right
+(`new task? /clear to save 599.8k tokens`, `✔ Update installed · Restart to update`): only a row that is nothing but
+those notices, where Claude Code puts them, so that a line of the agent's own there is kept, even one that holds their
+words; a notice worded otherwise stays in. With no words of the agent's there, it says only "Stopped without a
+summary".
 
 A task whose finish the board missed (its agent at rest, the row still "Finishing") is finished with `Ctrl+L` or
 `herdr-projects finish <id>`. What the agent said last is the summary.
@@ -485,10 +492,11 @@ itself, and its worktree and branch are removed. `workspace.cleanup false` keeps
 - What an agent program keeps running as part of itself is no such command: its MCP servers, or its own program under
   an npm wrapper (`codex` installed with npm). They are in the agent's own process group, and an MCP server's input and
   output are wired to the agent itself (a pipe or a socket the agent holds the other end of). What such a helper runs
-  under it is its own too (a language server's telemetry, in a group of its own). So a finished agent with MCP or
-  language servers is closed like any other. A command whose streams go elsewhere (the terminal, a file, `/dev/null`) keeps
-  the space open, in the agent's group or not, and so does one in a group of its own. What cannot be told counts as a
-  command.
+  under it is its own too, whatever its streams: a language server's telemetry in a group of its own, or the MCP server
+  that `uv tool run` (`uvx`) starts in the agent's group with its input on `/dev/null`. So a finished agent with MCP or
+  language servers is closed like any other, and a stop keeps them. A command whose streams go elsewhere (the terminal, a
+  file, `/dev/null`) keeps the space open, in the agent's group or not, and so does one in a group of its own. What
+  cannot be told counts as a command.
 - Nor is one Herdr could not answer for, or whose Herdr session is not running: then nothing of the task is touched.
 - The clean-up is tried again by itself (about every half minute, board open or closed) and happens once the space is
   free. After a turn of the agent, only once that has been quiet for ten minutes. Work that appeared meanwhile is kept.

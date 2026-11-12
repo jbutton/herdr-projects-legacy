@@ -1,0 +1,13 @@
+  - Checked first: nobody had replied in those threads before.
+  - Read back: the 8 replies are stored as written.
+  - Not done: I didn't resolve any thread; that's left to you or the reviewer.
+
+  The report now notes that they're posted. The closing note still calls them drafts; I didn't change it.
+
+✻ Crunched for 57s · done 5:34 PM
+                                                                                                                new task? /clear to save 599.8k tokens
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  [Docs review fixes] work-154-docs-review-fixes git:(work-154-docs-review-fixes) Opus 5.5 · 40% left (5…
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← 1 agent
