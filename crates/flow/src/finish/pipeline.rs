@@ -226,7 +226,7 @@ pub fn pipeline(id: &str, g: &mut Guard, text: &str, keep_intent: bool, reason: 
             Ok(None) => {}
             Err(e) if is_aborted(&e) => return Err(e),
             Err(_) if already::archived(Path::new(&tree)) => { fail(g, already::archived_failure(t.s("branch"), &tree), FailHow::default())?; return Ok(()); }
-            Err(e) if e.msg.starts_with("prbase:") => { fail(g, failure("pr", "The agent's pull request merges into another branch", &format!("Branch: {}\nFolder: {tree}\n\n{}", t.s("branch"), &e.msg[7..]), &format!("Change that pull request's base to {0} (gh pr edit <number> --base {0}), or close it, then finish again. The board goes on with it once it merges into {0}.", sync::main_branch(&root, &t))), FailHow::default())?; return Ok(()); }
+            Err(e) if e.msg.starts_with("prbase:") => { fail(g, failure("pr", "The agent's pull request merges into another branch", &format!("Branch: {}\nFolder: {tree}\n\n{}", t.s("branch"), &e.msg[7..]), &format!("Change that pull request's base to {0} (gh pr edit <its link> --base {0}), or close it, then finish again. The board goes on with it once it merges into {0}.", sync::main_branch(&root, &t))), FailHow::default())?; return Ok(()); }
             // The remote cannot be reached (main could not be fetched either): it waits, and goes on by itself.
             Err(e) if offline(sync_r, &e.msg) => {
                 let (what, said) = if let Some(m) = e.msg.strip_prefix("pr:") { ("its pull request could not be opened", m) } else { ("the branch could not be pushed", e.msg.as_str()) };
