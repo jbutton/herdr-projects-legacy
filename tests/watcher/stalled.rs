@@ -73,8 +73,9 @@ fn a_task_that_waits_for_you_or_one_under_stall_after_none_never_stalls() {
     ok(&["set", "stall.after", "45m", "--task", &id]);
     minutes_on(&w, 10);
     assert!(stalls_of(&a, &id).is_empty(), "its own time, counted from its last new output");
-    minutes_on(&w, 6);
-    assert_eq!(stalls_of(&a, &id).len(), 1);
+    minutes_on(&w, 8);
+    let t = task(&id);
+    assert_eq!(stalls_of(&a, &id).len(), 1, "{:?} output {} since {} workAt {} now {}", firings_of(a.s("id")), t.at("output"), t.i("since"), t.i("workAt"), sw::clock::now());
     // waiting for you is not a stall: its agent asks
     w.script(json!({ "worker": [{ "status": "working", "screen": "● Reading the code\n" }] }));
     let other = w.add("Asks"); delegate(&other); working(&other);
@@ -144,6 +145,33 @@ fn a_task_well_past_the_watchers_estimate_stalls_once_though_its_screen_moves_an
     guess.set(80);
     for n in 40..60 { minute(n); }
     assert_eq!(stalls_of(&a, &id).len(), 1, "{:?}", task(&id).at("watch"));
+}
+
+#[test]
+fn a_stall_seen_is_remembered_while_its_status_flaps_and_fires_no_second_time() {
+    use sw::automations::events::new_events;
+    let _w = world();
+    let now = 100 * MIN;
+    sw::clock::set(Some(now));
+    let mut t = obj(json!({ "id": "proj/1", "stage": "working", "link": { "pane": "p1" }, "last": { "status": "working" }, "since": now - 30 * MIN, "output": { "hash": "aa", "at": now - 25 * MIN, "seen": now - MIN, "from": now - 25 * MIN } }));
+    let mut before = Obj::new(); before.put("proj/1", vec!["added"]);
+    let stalled = |e: &[sw::automations::events::Happened]| e.iter().filter(|x| x.event == "stalled").count();
+    let (first, seen, _) = new_events(&[t.clone()], Some(&before));
+    assert_eq!(stalled(&first), 1);
+    // its agent shows a dialog: no stall now, but the one seen is kept
+    t.obj_mut("last").put("status", "blocked");
+    let (none, seen, _) = new_events(&[t.clone()], Some(&seen));
+    assert_eq!(stalled(&none), 0);
+    assert!(strings(seen.at("proj/1")).iter().any(|m| m.starts_with("stalled:quiet:")), "{seen:?}");
+    t.obj_mut("last").put("status", "working");
+    let (again, seen, _) = new_events(&[t.clone()], Some(&seen));
+    assert_eq!(stalled(&again), 0, "the same stall: no new output, no new run");
+    // new output re-arms it: forgotten, and a stall twenty minutes on is a new one
+    t.put("output", json!({ "hash": "bb", "at": now + MIN, "seen": now + MIN, "from": now - 25 * MIN }));
+    let (_, seen, _) = new_events(&[t.clone()], Some(&seen));
+    assert!(!strings(seen.at("proj/1")).iter().any(|m| m.starts_with("stalled:")), "{seen:?}");
+    sw::clock::set(Some(now + 21 * MIN)); t.put("output", json!({ "hash": "bb", "at": now + MIN, "seen": now + 20 * MIN, "from": now - 25 * MIN }));
+    assert_eq!(stalled(&new_events(&[t], Some(&seen)).0), 1);
 }
 
 #[test]
