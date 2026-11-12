@@ -112,6 +112,8 @@ pub fn land_core(id: &str, g: &mut Guard) -> Res<()> {
     // Started from a named branch (origin's main too) with no pull request: pushed there at origin (direct.rs), your
     // checkout untouched.
     let direct = sync::pushed_to(&root, &t).filter(|_| !tree.is_empty());
+    // `merge.syncRemote`: the branch your checkout is on, and the commit of it at origin the task was found to hold.
+    let mut at_origin: Option<(String, String)> = None;
     if !tree.is_empty() {
         let tp = Path::new(&tree);
         let pre = (|| -> Res<Option<&'static str>> {
@@ -143,7 +145,7 @@ pub fn land_core(id: &str, g: &mut Guard) -> Res<()> {
             }
             // A clean update changed the commit: it is checked again, then merged under the approval given.
             "merged" => return reverify(id, g, &t, "Checking the branch updated with main", Some(&r)),
-            _ => { let p = sync::seen_patch(&t, Some(&r)); g.set(|t| sync::apply(t, p))?; }
+            _ => { let p = sync::seen_patch(&t, Some(&r)); g.set(|t| sync::apply(t, p))?; if r.at_origin { at_origin = r.onto.clone().map(|b| (b, r.target.clone())); } }
         }
     }
     t = g.check()?;
@@ -209,6 +211,7 @@ pub fn land_core(id: &str, g: &mut Guard) -> Res<()> {
     let local = (|| -> Res<Option<String>> {
         let mess = flow::git::dirty(&root);
         if !mess.is_empty() { fail(g, "Merge needs a clean checkout", &format!("Checkout: {}\n\nUncommitted or untracked files:\n{mess}", root.display()), "Commit, stash or move your own unsaved files, then approve again. The agent must not alter your checkout.", no_fix())?; return Ok(None); }
+        if let Some((b, at)) = &at_origin { if !super::catch_up::checkout_to(g, &t, &root, b, at)? { return Ok(None); } }
         let onto = git_out(&root, &["symbolic-ref", "--short", "HEAD"])?;
         let target = { let h = flow::git::head_of(&root); if h.is_empty() { git_out(&root, &["rev-parse", "HEAD"])? } else { h } };
         let conflict = |g: &mut Guard, e: crate::err::Error| -> Res<Option<String>> {

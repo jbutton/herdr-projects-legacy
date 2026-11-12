@@ -16,7 +16,7 @@ use crate::herdr::{cli::{same_socket, socket_exists}, Herdr};
 use crate::json::*;
 use crate::runner::{inline, runner_alive, spawn_claimed, spawn_runner, start_reaped, user_env, detach, JOBS};
 use crate::store::{files::{bin, data_dir, has_tasks, RUNNER_STAGES}, marks::due, old_suggestions::save_old_suggestions, repos::folder_of, retries::waiting_of, settings::lookup::setting, tasks::{get, list, ListOpts, Task}};
-use crate::sync::{fetch_main, known_target, main_branch, resyncable, tree_of, via_remote};
+use crate::sync::{fetch_main, known_target, main_branch, remote_base, resyncable, tree_of, via_remote};
 use std::collections::HashMap;
 
 fn key(s: &str) -> String { sha1_smol::Sha1::from(s).digest().to_string()[..8].to_string() }
@@ -95,15 +95,15 @@ fn resync(tasks: &[Task], socket: &str) {
     }
 }
 /// Ask the remote where main is, for every repo with a task waiting: main also moves without the board (a merge on
-/// GitHub, your own push). A fetch that fails says nothing about main, so nothing may go on looking ready: each waiting
-/// task of that repo gets a sync runner anyway, which finds the same failure and holds it "behind main".
+/// GitHub, your own push). Under `merge.syncRemote` a task that lands in your checkout asks for your checkout's branch.
+/// A fetch that fails says nothing about main, so nothing may go on looking ready: each waiting task of that repo gets a
+/// sync runner anyway, which finds the same failure and holds it "behind main".
 pub fn fetch_mains() {
     let mut done: HashMap<String, bool> = HashMap::new();
     for t in list(ListOpts::default()) {
         if !resyncable(&t) || tree_of(&t).is_empty() || runner_alive(&t) { continue; }
         let root = folder_of(t.s("id"));
-        if !via_remote(&root, &t) { continue; }
-        let b = main_branch(&root, &t);
+        let Some(b) = (if via_remote(&root, &t) { Some(main_branch(&root, &t)) } else { remote_base(&root, &t) }) else { continue };
         let k = format!("{}|{b}", root.display());
         let ok = *done.entry(k).or_insert_with(|| fetch_main(&root, &b).is_ok());
         if !ok && !t.b("syncBlocked") { spawn_claimed("sync", t.s("id"), &["--force"]); }

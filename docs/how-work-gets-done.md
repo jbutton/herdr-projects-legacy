@@ -287,8 +287,41 @@ and finish again.
 
 **"Main" is where the task will land**: the remote's main when it lands through a pull request, or the branch it was
 started from by name (`workspace.from develop`), with or without one. Otherwise (no remote, or `pr` off and no branch
-named), the branch your checkout was on when the task first finished. For those, checking out another branch merges
-nothing into waiting tasks, and they are held as "behind main" until your checkout is back on it.
+named), the branch your checkout was on when the task first finished, as your checkout has it (or as origin has it,
+with `merge.syncRemote` on: [below](#main-from-the-remote-mergesyncremote)). For those, checking out another branch
+merges nothing into waiting tasks, and they are held as "behind main" until your checkout is back on it.
+
+### Main from the remote: `merge.syncRemote`
+
+A task that lands in your checkout keeps up with your checkout's own commit. When the checkout is behind origin (not
+pulled for a while), the task looks up to date with that old commit, `syncedTo` is saved as it, and nothing new from
+origin is merged in. `herdr-projects set merge.syncRemote true --repo <name>` (or `--task <id>`, or for every repo)
+makes such a task keep up with the same branch as origin has it:
+
+- each sync fetches `origin/<branch>`, the branch your checkout is on, and merges it into the task's branch in the
+  task's own worktree when it moved: before the review, while the task waits (origin is asked every two minutes; under
+  `merge.sync approve` a test merge only) and after your yes. `syncedTo` is origin's commit. Your checkout is not
+  touched by a sync.
+- after your yes, right before the work lands in your checkout, your checkout is fast-forwarded to the commit of
+  origin the task holds (as `git pull --ff-only` would), so the landed commit adds the task's work alone. A checkout
+  with commits origin does not have is refused and nothing is merged: push them or move them to another branch, or
+  turn the setting off for that task to land in your checkout as it is.
+- origin that cannot be fetched is not a sync, and your checkout is not used instead: the finished turn is checked,
+  then held as "behind main" with what git said, never approvable, until a fetch works. Nothing is merged and
+  `syncedTo` stays as it was.
+
+What it costs:
+
+- **On**: an open task branch gets a merge commit from origin's branch before its review whenever origin moved, and
+  again while it waits (each checked again; under `merge.sync approve`, only after your yes). An agent that pushes its
+  branch itself carries those merge commits to its own pull request. Your checkout's branch moves to origin's commit
+  when a task lands in it.
+- **Off** (built in): exactly as before. Your checkout's commit is main, and a checkout that is behind keeps its tasks
+  behind too: `git pull` in it brings them along at their next sync.
+
+It changes nothing for a task that lands through origin anyway (a pull request, or a branch named at its start: those
+always keep up with origin), in a repo with no origin, or while your checkout is on no branch. Your checkout's branch
+must be at origin: one that is not is a fetch that fails, and holds its tasks as above. Read at each sync.
 
 ### A review that passed is not repeated for a merge of main
 

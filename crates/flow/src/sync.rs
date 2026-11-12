@@ -2,7 +2,8 @@
 //! before a finished turn is checked and reviewed, again whenever main moves while the task waits for you (under
 //! `merge.sync approve` only a test merge then, sync/probe.rs), and one last time after you approve (land/). The agent
 //! hears about it only when a real conflict exists. A merge attempt that fails is always rolled back, and the human's
-//! checkout is never touched.
+//! checkout is never touched. For a task that lands in that checkout, main is the checkout's own commit, or that branch
+//! as origin has it under `merge.syncRemote` (remote_base).
 pub mod conflict;
 pub mod conflict_log;
 pub mod merge_only;
@@ -44,6 +45,13 @@ pub fn pushed_to(root: &Path, t: &Obj) -> Option<String> { if t.b("pr") { None }
 /// Where a task lands decides what "main" is for it: through its pull request, the remote's main (or the branch it was
 /// started from by name, always); otherwise the branch your checkout is on.
 pub fn via_remote(root: &Path, t: &Obj) -> bool { t.b("pr") || (setting("merge.pr", Some(t)) == json!(true) && has_origin(root)) || (has_origin(root) && pushed_to(root, t).is_some()) }
+/// `merge.syncRemote` on, for a task that lands in your checkout: the branch your checkout is on, which the task keeps
+/// up with as origin has it (fetched), not as your checkout has it. None, as before: the setting off, no origin, your
+/// checkout on no branch, or a task that lands through the remote anyway.
+pub fn remote_base(root: &Path, t: &Obj) -> Option<String> {
+    if setting("merge.syncRemote", Some(t)) != json!(true) || via_remote(root, t) || !has_origin(root) { return None; }
+    Some(branch_of(root)).filter(|b| !b.is_empty())
+}
 /// "main", or the branch a task lands on when it was started from one by name: for the words that name it.
 pub fn main_word(t: &Obj) -> String { named_base(&folder_of(t.s("id")), t).or_else(|| by_name(t)).unwrap_or_else(|| "main".into()) }
 /// The branch a task's work lands on, in words, for the question that asks before a merge.
@@ -63,9 +71,11 @@ pub fn resyncable(t: &Obj) -> bool { t.s("stage") == "approval" && !t.b("archive
 /// Where main is known to stand, without asking the remote: cheap enough for every housekeeping pass.
 pub fn known_target(t: &Obj, cache: &mut HashMap<String, String>) -> String {
     let root = folder_of(t.s("id"));
-    let key = format!("{}|{}", root.display(), t.s("from"));
+    let at_origin = remote_base(&root, t);
+    let key = format!("{}|{}|{}", root.display(), t.s("from"), at_origin.as_deref().unwrap_or(""));
     if let Some(v) = cache.get(&key) { return v.clone(); }
     let sha = if via_remote(&root, t) { git_out(&root, &["rev-parse", "--verify", &format!("refs/remotes/origin/{}", main_branch(&root, t))]).unwrap_or_default() }
+        else if let Some(b) = at_origin { git_out(&root, &["rev-parse", "--verify", &format!("refs/remotes/origin/{b}")]).map(|h| format!("{h} {b}")).unwrap_or_default() }
         else { let h = head_of(&root); let h = if h.is_empty() { git_out(&root, &["rev-parse", "HEAD"]).unwrap_or_default() } else { h }; if h.is_empty() { String::new() } else { format!("{h} {}", branch_of(&root)) } };
     cache.insert(key, sha.clone());
     sha
@@ -85,17 +95,22 @@ fn remote_main(root: &Path, t: &Obj, tree: &Path) -> Result<(String, String), St
         let d = default_branch(root);
         if d != b { b = d; fetched = fetch_main(tree, &b); }
     }
+    fetched_at(tree, &b, fetched).map(|x| (x, b))
+}
+/// Where `b` stands at origin after its fetch: the remote-tracking ref, never FETCH_HEAD.
+fn fetched_at(tree: &Path, b: &str, fetched: crate::err::Res<()>) -> Result<String, String> {
     let known = git_out(tree, &["rev-parse", "--verify", "-q", &format!("refs/remotes/origin/{b}^{{commit}}")]);
     match (fetched, known) {
-        (Ok(()), Ok(x)) => Ok((x, b)),
-        (Err(e), Ok(x)) if fetch::moved(&e.msg) => Ok((x, b)),
+        (Ok(()), Ok(x)) => Ok(x),
+        (Err(e), Ok(x)) if fetch::moved(&e.msg) => Ok(x),
         (Err(e), _) => Err(e.msg),
         (Ok(()), Err(e)) => Err(format!("origin/{b} could not be read after the fetch.\n\nWhat git said:\n{}", e.msg)),
     }
 }
 /// What a sync found: current, merged, conflict, skip or error (and clean, for a test merge), with what it looked at.
+/// `at_origin`: `target` is your checkout's branch as origin has it (`merge.syncRemote`), not your checkout.
 #[derive(Clone, Debug, Default)]
-pub struct Synced { pub status: &'static str, pub target: String, pub seen: String, pub base: String, pub onto: Option<String>, pub adopt: bool, pub head: String, pub before: String, pub overlap: Option<Vec<String>>, pub files: String, pub restored: bool, pub out: String, pub want: String, pub detail: String }
+pub struct Synced { pub status: &'static str, pub target: String, pub seen: String, pub base: String, pub onto: Option<String>, pub adopt: bool, pub at_origin: bool, pub head: String, pub before: String, pub overlap: Option<Vec<String>>, pub files: String, pub restored: bool, pub out: String, pub want: String, pub detail: String }
 /// Fetch main and merge it into the task's branch. Every result that looked at main carries `seen`: where main stood in
 /// the form known_target gives it, for exactly the commit that was merged here.
 pub fn sync_main(t: &Task, tree: &str) -> Synced { look(t, tree, false) }
@@ -106,6 +121,7 @@ fn look(t: &Task, tree: &str, test: bool) -> Synced {
     let root = folder_of(t.s("id"));
     let tree = Path::new(tree);
     let (target, base, onto, adopt);
+    let mut at_origin = false;
     if via_remote(&root, t) {
         let b;
         (target, b) = match remote_main(&root, t, tree) { Ok(x) => x, Err(detail) => return Synced { status: "error", detail, ..Default::default() } };
@@ -118,15 +134,21 @@ fn look(t: &Task, tree: &str, test: bool) -> Synced {
             if !gone { return Synced { status: "skip", onto: Some(on), want: t.t("syncBranch"), ..Default::default() }; }
             ad = true;
         }
-        let h = head_of(&root);
-        target = if h.is_empty() { match git_out(&root, &["rev-parse", "HEAD"]) { Ok(x) => x, Err(e) => return Synced { status: "error", detail: e.msg, ..Default::default() } } } else { h };
-        base = if on.is_empty() { "HEAD".into() } else { on.clone() };
+        if let Some(b) = remote_base(&root, t) {
+            // `merge.syncRemote`: your checkout's branch as origin has it. Not fetched: nothing is merged or kept.
+            target = match fetched_at(tree, &b, fetch_main(tree, &b)) { Ok(x) => x, Err(detail) => return Synced { status: "error", detail, ..Default::default() } };
+            base = format!("origin/{b}"); at_origin = true;
+        } else {
+            let h = head_of(&root);
+            target = if h.is_empty() { match git_out(&root, &["rev-parse", "HEAD"]) { Ok(x) => x, Err(e) => return Synced { status: "error", detail: e.msg, ..Default::default() } } } else { h };
+            base = if on.is_empty() { "HEAD".into() } else { on.clone() };
+        }
         onto = Some(on); adopt = ad;
     }
     let seen = match &onto { None => target.clone(), Some(o) => format!("{target} {o}") };
     let tip = if test && !t.s("branch").is_empty() { format!("refs/heads/{}", t.s("branch")) } else { "HEAD".into() };
     let before = if test { git_out(tree, &["rev-parse", "--verify", "-q", &tip]).unwrap_or_default() } else { head_of(tree) };
-    let r = Synced { target: target.clone(), seen, base, onto, adopt, ..Default::default() };
+    let r = Synced { target: target.clone(), seen, base, onto, adopt, at_origin, ..Default::default() };
     if git_out(tree, &["merge-base", "--is-ancestor", &target, &tip]).is_ok() { return Synced { status: "current", head: before, ..r }; }
     if test { return probe::test_merge(tree, &tip, Synced { before, ..r }); }
     if let Err(e) = git_out(tree, &["merge", "--no-edit", &target]) {

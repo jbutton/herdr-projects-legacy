@@ -1,6 +1,7 @@
 //! Keeping tasks up to date with a remote's main: main moving there is noticed by the periodic fetch and the updated
 //! branch pushed; a fetch that fails is never a sync, and never fails finished work; with pull requests off, your
-//! local branch is the main. Under `merge.sync approve` a waiting task is only test-merged: no merge commit, no push.
+//! local branch is the main (or, under `merge.syncRemote`, that branch at origin: from_origin.rs). Under `merge.sync
+//! approve` a waiting task is only test-merged: no merge commit, no push.
 use crate::common;
 use common::*;
 use serde_json::json;
@@ -8,6 +9,7 @@ use std::path::Path;
 use sw::actions::{finish_line, talk};
 use sw::json::*;
 use sw::store::tasks::{update, Change};
+mod from_origin;
 
 fn holds(dir: &Path, sha: &str) -> bool { common::worktrees::git(dir, &["merge-base", "--is-ancestor", sha, "HEAD"]).is_ok() }
 fn tree(t: &Obj) -> &Path { Path::new(t.s("worktree")) }
