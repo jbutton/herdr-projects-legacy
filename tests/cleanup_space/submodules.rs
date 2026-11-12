@@ -45,6 +45,9 @@ fn landed_after(w: &World, n: &str, then: Value, before: impl FnOnce(&Path)) -> 
     t.put("was", wt);
     t
 }
+/// A process this test started: ended when the test ends, whatever happened in it.
+struct Ends(std::process::Child);
+impl Drop for Ends { fn drop(&mut self) { let _ = self.0.kill(); let _ = self.0.wait(); } }
 fn kept(t: &Obj) -> String { t.arr("kept").iter().map(text).collect::<Vec<_>>().join(", ") }
 fn removes(w: &World) -> Vec<String> { calls(w).into_iter().filter(|c| c.starts_with("worktree remove")).collect() }
 
@@ -112,12 +115,11 @@ fn a_file_saved_by_what_clean_up_ends_right_before_the_worktree_goes_is_kept() {
     // a dev server left running in it saves a tracked file when it is told to end, after the worktree was looked at
     let mut server = None;
     let a = landed_after(&w, "a", json!([init()]), |wt| {
-        let trap = "trap 'echo saved > a.txt; exit 0' TERM; while :; do sleep 1 & wait; done";
-        server = Some(Command::new("sh").args(["-c", trap]).current_dir(wt).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap());
+        let trap = "trap 'echo saved > a.txt; exit 0' TERM; i=0; while [ $i -lt 120 ]; do sleep 1 & wait; i=$((i + 1)); done";
+        server = Some(Ends(Command::new("sh").args(["-c", trap]).current_dir(wt).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap()));
     });
     let mut server = server.unwrap();
-    let gone = (0..50).any(|_| { if server.try_wait().unwrap().is_some() { return true; } std::thread::sleep(std::time::Duration::from_millis(20)); false });
-    if !gone { let _ = server.kill(); let _ = server.wait(); }
+    let gone = (0..50).any(|_| { if server.0.try_wait().unwrap().is_some() { return true; } std::thread::sleep(std::time::Duration::from_millis(20)); false });
     assert!(gone, "{}", a.s("msg"));
     assert!(kept(&a).contains("(uncommitted changes)"), "kept: {}; cleaned: {}", kept(&a), a.b("cleaned"));
     assert_eq!(read(&Path::new(a.s("was")).join("a.txt")), "saved\n");
