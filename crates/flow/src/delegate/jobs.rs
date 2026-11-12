@@ -174,24 +174,37 @@ fn delegate_steps(id: &str, g: &mut Guard, mut t: Task) -> Res<()> {
 }
 /// Restarting an exited agent: the same pane (or a new one in the task's workspace, reopened from the worktree if the
 /// workspace was closed). It resumes the same conversation where it can; otherwise it starts fresh with the task.
-pub fn restart_job(id: &str) {
+/// `relaunch`: the board's own restart of a working agent that went (hook/relaunch.rs), told why. One that fails fails
+/// nothing: it was that try, and the next one comes on time.
+pub fn restart_job(id: &str, relaunch: bool) {
     let Ok(Some(t)) = claim(id, "restart", |_| {}) else { return };
     let mut g = Guard::new(id);
     g.expect(&t, &[]);
-    if let Err(e) = restart_steps(id, &mut g, t) {
-        if !is_aborted(&e) { fail_start(id, "Could not restart the agent", &e.msg, &format!("reply, or delegate again ({})", key_name("delegate"))); }
+    match restart_steps(id, &mut g, t, relaunch) {
+        Err(e) if is_aborted(&e) => {}
+        Err(e) if relaunch => crate::hook::relaunch::not_started(id, &e.msg),
+        Err(e) => fail_start(id, "Could not restart the agent", &e.msg, &format!("reply, or delegate again ({})", key_name("delegate"))),
+        Ok(()) => {}
     }
     release(id, false);
 }
-fn restart_steps(id: &str, g: &mut Guard, mut t: Task) -> Res<()> {
+/// The pane under the task's pane id is its own: not one herdr handed to another since, a coordinator's above all.
+fn own_pane(t: &Task, p: &Value) -> bool { flow::live::owns_pane(t, p) && !flow::pane_owner::coordinators_pane(t.at("link").s("socket"), p.s("pane_id"), p.s("terminal_id")) }
+fn restart_steps(id: &str, g: &mut Guard, mut t: Task, relaunch: bool) -> Res<()> {
+    // The board's own restart goes ahead only while it is still one to make: a stop, a reply, the end of the task since
+    // it was asked for (a sandboxed hook leaves it to the keeper, a while later) leaves the task alone.
+    if relaunch && !crate::hook::relaunch::still_due(&t) { return Ok(()); }
     let api = flow::task::h(&t);
+    // herdr asked again as it runs: one that does not answer, or the agent there after all, leaves the task as it is.
+    if relaunch && !crate::hook::relaunch::really_down(&t, &api) { return Ok(()); }
     let root = folder_of(t.s("id"));
-    let mut pane = if t.at("link").b("pane") { api.pane_get(t.at("link").s("pane")) } else { None };
+    let mut pane = if t.at("link").b("pane") { api.pane_get(t.at("link").s("pane")).filter(|p| own_pane(&t, p)) } else { None };
     // Its box may still hold the text it never started on: the program is ended, and started again in the same pane.
     if t.b("unsent") && pane.is_some() && api.agent_get(t.at("link").s("pane"))?.is_some() && !api.pane_quit(t.at("link").s("pane"), 6000) {
         crate::fail!("The agent's program could not be ended to start it again. Go into the agent and press enter, or close its terminal and retry.");
     }
     if pane.is_some() && api.agent_get(t.at("link").s("pane"))?.is_some() { // it is back by itself: just deliver
+        if relaunch { return Ok(()); } // nothing to tell it: what waits for it goes in at its next rest (hook.rs)
         let waiting: Vec<String> = take_text(id)?.iter().map(|m| m.t("text")).collect();
         if !waiting.is_empty() { flow::send::deliver(&t, &waiting.join("\n\n"), None, false)?; }
         return Ok(());
@@ -211,9 +224,11 @@ fn restart_steps(id: &str, g: &mut Guard, mut t: Task) -> Res<()> {
     t = agent_now(g, t)?;
     // A start that was asked for and never got as far as its agent (its setup failed): this is that start.
     if t.b("researchOpen") { let mut refusal = None; t = g.set(|t| { if let Err(e) = r::starts_as(t) { refusal = Some(e); } })?; if let Some(e) = refusal { return Err(e); } }
-    let waiting: Vec<String> = take_text(id)?.iter().map(|m| m.t("text")).collect();
+    let mut waiting: Vec<String> = take_text(id)?.iter().map(|m| m.t("text")).collect();
+    let taken = waiting.len();
+    if relaunch { waiting.insert(0, crate::hook::relaunch::WORDS.into()); }
     let (resume, prompt) = if t.b("unsent") { unsent_prompt(&t, &waiting) } else { again_prompt(&t, &waiting) };
-    if let Err(e) = start_agent(id, g, &prompt, resume.as_deref()) { if !waiting.is_empty() { untake_text(id, waiting.len())?; } return Err(e); }
+    if let Err(e) = start_agent(id, g, &prompt, resume.as_deref()) { if taken > 0 { untake_text(id, taken)?; } return Err(e); }
     Ok(())
 }
 /// Reopen a task's space when it was closed (archive closes it) and, with `restart`, start its exited agent again in

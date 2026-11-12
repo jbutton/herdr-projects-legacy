@@ -15,7 +15,7 @@ pub fn run_job(job: &str, id: &str, extra: &[String]) -> i32 {
     let mut id = id.to_string();
     match job {
         "delegate" => crate::delegate::jobs::delegate_job(&id),
-        "restart" => crate::delegate::jobs::restart_job(&id),
+        "restart" => crate::delegate::jobs::restart_job(&id, has("--relaunch")),
         "finish" => crate::finish::turn_ended::finish_job(&id, has("--force")),
         "pipeline" => crate::finish::pipeline::pipeline_job(&id),
         "chatreview" => crate::finish::chat::chat_review_job(&id),
