@@ -24,8 +24,10 @@ fn pause(n: i64) {
 fn key(dir: &Path, b: &str) -> String { format!("{}|{b}", primary_root(dir).display()) }
 fn stamp(dir: &Path, b: &str) -> PathBuf { stamp_file(&format!("fetch-{}.json", base64url(key(dir, b).as_bytes()))) }
 /// Runs `f` while no other fetch of this repo runs (the board's lock, one per repo, whatever worktree asks).
-pub fn with_repo_lock<T>(dir: &Path, f: impl FnOnce() -> Res<T>) -> Res<T> {
-    with_lock_wait(&format!("fetch:{}", primary_root(dir).display()), WAIT_MS, f)
+pub fn with_repo_lock<T>(dir: &Path, f: impl FnOnce() -> Res<T>) -> Res<T> { with_repo_lock_for(dir, WAIT_MS, f) }
+/// `with_repo_lock`, waiting `ms` at most for another fetch of the repo (a start's, held to its own time).
+pub fn with_repo_lock_for<T>(dir: &Path, ms: i64, f: impl FnOnce() -> Res<T>) -> Res<T> {
+    with_lock_wait(&format!("fetch:{}", primary_root(dir).display()), ms, f)
 }
 /// `git <args>` that talks to origin: never asks for a password, and stops after `ms`.
 pub fn quiet_git(dir: &Path, args: &[&str], ms: u64) -> Result<String, String> {
@@ -69,7 +71,8 @@ pub fn plain_held(said: &str, b: &str, lock: Option<String>) -> String {
     if locked(said) { return "another fetch of this repo was writing the same branch at that moment, again on every try. Nothing is wrong with the work; the board tries again by itself".into(); }
     if no_such_branch(said) { return format!("origin has no branch {b}. If the remote's main branch has another name, run git fetch origin and then git remote set-head origin --auto in your checkout"); }
     if login(said) { return "origin asked for a login, and the board never types one in. Make sure git fetch origin works in your checkout without a prompt (an SSH key in the agent, or a credential helper)".into(); }
-    if has(said, &["did not answer within"]) { return format!("origin did not answer within {} seconds. If it waits for a password or a passphrase, make sure git fetch origin works without a prompt", FETCH_MS / 1000); }
+    // "origin did not answer within N seconds": the bound of the fetch that said it (a sync's, a start's).
+    if let Some(l) = said.lines().find(|l| has(l, &["did not answer within"])) { return format!("{}. If it waits for a password or a passphrase, make sure git fetch origin works without a prompt", l.trim().trim_end_matches('.')); }
     if network(said) { return "origin could not be reached (the network or the server). The board tries again by itself".into(); }
     if has(said, &["does not appear to be a git repository", "repository not found", "no such remote"]) { return "origin is not a repository the board can read. Check where it points with git remote -v".into(); }
     let first = said.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("git fetch failed");
@@ -103,14 +106,17 @@ pub fn fetch_branch(dir: &Path, b: &str) -> Res<()> {
 }
 /// origin's own main branch was never named here (no `origin/HEAD`, as after `git remote add`): asked of origin once,
 /// fetched (a branch renamed there has no copy here yet) and kept. True when it is known now.
-pub fn learn_origin_head(dir: &Path) -> bool {
+pub fn learn_origin_head(dir: &Path) -> bool { learn_origin_head_by(dir, 10000, |b| fetch_branch(dir, b)) }
+/// `learn_origin_head`, origin asked within `ms` and its branch fetched by `fetch`: a start's own, held to its time.
+pub fn learn_origin_head_by(dir: &Path, ms: u64, fetch: impl FnOnce(&str) -> Res<()>) -> bool {
     let known = || git_out(dir, &["symbolic-ref", "-q", "refs/remotes/origin/HEAD"]).is_ok();
     if known() { return true; }
-    let Ok(said) = quiet_git(dir, &["ls-remote", "--symref", "origin", "HEAD"], 10000) else { return false };
+    if ms == 0 { return false; }
+    let Ok(said) = quiet_git(dir, &["ls-remote", "--symref", "origin", "HEAD"], ms) else { return false };
     // "ref: refs/heads/trunk<TAB>HEAD"
     let Some(b) = said.lines().find_map(|l| l.strip_prefix("ref: refs/heads/").and_then(|r| r.split('\t').next())).map(str::to_string) else { return false };
     let tracking = format!("refs/remotes/origin/{b}");
-    if fetch_branch(dir, &b).is_err() && git_out(dir, &["rev-parse", "--verify", "-q", &tracking]).is_err() { return false; }
+    if fetch(&b).is_err() && git_out(dir, &["rev-parse", "--verify", "-q", &tracking]).is_err() { return false; }
     let _ = git_out(dir, &["symbolic-ref", "refs/remotes/origin/HEAD", &tracking]);
     known()
 }
@@ -129,6 +135,7 @@ mod tests {
         assert!(plain("fatal: unable to access 'https://x/': Could not resolve host: x", "main").starts_with("origin could not be reached"));
         assert!(plain("fatal: '/gone.git' does not appear to be a git repository", "main").starts_with("origin is not a repository"));
         assert_eq!(plain("fatal: something new", "main"), "something new");
+        assert!(plain("origin did not answer within 10 seconds", "main").starts_with("origin did not answer within 10 seconds. If it waits"));
         assert!(!network("fatal: couldn't find remote ref main") && !locked("Permission denied (publickey)"));
         // git 2.53's words for a lock file in the way, and for a real conflict: the lock only when its file is there
         let dir = std::env::temp_dir().join(format!("sw-fetch-plain-{}", std::process::id()));
