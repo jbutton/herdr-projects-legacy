@@ -3,7 +3,7 @@
 //! fetched last, and a named branch from its last copy too, both said in the task's log. A start that cannot begin from
 //! a named branch at all is refused with the reason.
 use crate::clock::{iso, now};
-use crate::err::Res;
+use crate::err::{Error, Kind, Res};
 use crate::flow;
 use crate::flow::git::has_origin;
 use crate::json::*;
@@ -17,20 +17,32 @@ use crate::store::settings::lookup::setting_text;
 use crate::sync::default_branch;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
-/// How long a start waits for origin to give its branch: never asking for a password.
-const FETCH_MS: u64 = 10000;
+/// How long a start waits for origin, all told: finding its main branch, another fetch of the repo, the fetch itself
+/// (`HERDR_PROJECTS_START_FETCH_MS` sets it, for a test).
+fn budget_ms() -> u64 { std::env::var("HERDR_PROJECTS_START_FETCH_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(10000) }
+fn budget_words() -> String { let ms = budget_ms(); if ms >= 1000 { format!("{} seconds", ms / 1000) } else { format!("{ms} ms") } }
+/// The moment a start stops waiting for origin, and what is left of its time.
+fn deadline() -> Instant { Instant::now() + Duration::from_millis(budget_ms()) }
+fn left(until: Instant) -> u64 { until.saturating_duration_since(Instant::now()).as_millis() as u64 }
 fn quiet_git(root: &Path, args: &[&str]) -> Command {
     let mut c = Command::new("git");
     c.args(args).current_dir(root).env("GIT_TERMINAL_PROMPT", "0").env("GIT_SSH_COMMAND", "ssh -oBatchMode=yes").stdin(Stdio::null());
     c
 }
-/// Fetch branch `b` of origin into `origin/<b>` for a start, `FETCH_MS` at most. One fetch at a time in a repo: every
-/// worktree of it writes the same remote-tracking refs. Err: what git said.
-fn fetch_now(root: &Path, b: &str) -> Result<(), String> {
+/// Fetch branch `b` of origin into `origin/<b>` for a start, done by `until`. One fetch at a time in a repo (every
+/// worktree of it writes the same remote-tracking refs): another one is waited for only that long too. Err: what git
+/// said.
+fn fetch_now(root: &Path, b: &str, until: Instant) -> Result<(), String> {
     let spec = format!("+refs/heads/{b}:refs/remotes/origin/{b}");
-    let ran = fetch::with_repo_lock(root, || Ok(quiet_git(root, &["fetch", "--no-tags", "origin", &spec]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())
-        .and_then(|c| crate::herdr::cli::wait_with_timeout(c, FETCH_MS).map_err(|e| if e.code == "timeout" { format!("origin did not answer within {} seconds", FETCH_MS / 1000) } else { e.message })))).unwrap_or_else(|e| Err(e.msg));
+    let late = || format!("origin did not answer within {}", budget_words());
+    let ran = fetch::with_repo_lock_for(root, left(until) as i64, || {
+        let ms = left(until);
+        if ms == 0 { return Ok(Err(late())); }
+        Ok(quiet_git(root, &["fetch", "--no-tags", "origin", &spec]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())
+            .and_then(|c| crate::herdr::cli::wait_with_timeout(c, ms).map_err(|e| if e.code == "timeout" { late() } else { e.message })))
+    }).unwrap_or_else(|e| Err(if e.kind == Kind::Busy { format!("another fetch of this repo was still running after the {} a start waits for origin", budget_words()) } else { e.msg }));
     match ran { Ok(r) if r.status == 0 => Ok(()), Ok(r) => Err(r.stderr.trim().to_string()), Err(e) => Err(e) }
 }
 /// A start whose fetch of `b` failed begins from `r` as this repo has it: the task's log says so, with what git said.
@@ -43,14 +55,17 @@ fn stale_start(t: &Obj, root: &Path, b: &str, r: &str, said: &str) {
     let _ = std::fs::OpenOptions::new().create(true).append(true).open(&log).and_then(|mut f| writeln!(f, "{} the start could not fetch {b} from origin, so the task starts from {what}: {}.\nWhat git said (git fetch origin {b}):\n{}\n",
         iso(now()), fetch::plain(said, b), if said.is_empty() { "nothing" } else { said }));
 }
-/// `main`: the remote's default branch, fetched first on every start (`FETCH_MS` at most), so the task starts from
-/// what was merged there since the last start. With no remote, or with `here`: your checkout's current commit.
+/// `main`: the remote's default branch, fetched first on every start (`budget_ms` at most, all told), so the task
+/// starts from what was merged there since the last start. With no remote, or with `here`: your checkout's commit.
 fn main_ref(root: &Path, t: &Obj, from: &str) -> String {
     if from == "here" || !has_origin(root) { return "HEAD".into(); }
+    let until = deadline();
     // Origin's main branch never named here (a remote added by hand): asked of origin, so the task keeps up with it.
-    fetch::learn_origin_head(root);
+    // The branch it names is fetched then, within the same time, and not again.
+    let mut first: Option<(String, Result<(), String>)> = None;
+    fetch::learn_origin_head_by(root, left(until), |b| { let r = fetch_now(root, b, until); first = Some((b.to_string(), r.clone())); r.map_err(Error::new) });
     let b = default_branch(root);
-    let fetched = fetch_now(root, &b);
+    let fetched = match first { Some((d, r)) if d == b => r, _ => fetch_now(root, &b, until) };
     let r = ["origin/HEAD", "origin/main", "origin/master"].into_iter().find(|r| git_out(root, &["rev-parse", "--verify", &format!("refs/remotes/{r}")]).is_ok()).unwrap_or("HEAD");
     // Another fetch (an agent's own, yours) moved the ref at that moment: the copy here is as new as that one made it.
     if let Err(said) = fetched { if !fetch::moved(&said) { stale_start(t, root, &b, r, &said); } }
@@ -63,7 +78,7 @@ pub fn base_ref(root: &Path, t: &Obj) -> Res<String> {
     let from = setting_text("workspace.from", Some(t));
     let Some(b) = named(&from) else { return Ok(main_ref(root, t, &from)) };
     if !has_origin(root) { crate::refuse!("workspace.from is {b}, a branch at the remote, and this repo has no remote named origin. Add the remote, or set workspace.from to main or here."); }
-    let said = match fetch_now(root, b) { Ok(()) => return Ok(format!("origin/{b}")), Err(e) => e };
+    let said = match fetch_now(root, b, deadline()) { Ok(()) => return Ok(format!("origin/{b}")), Err(e) => e };
     if fetch::no_such_branch(&said) {
         crate::refuse!("origin has no branch {b} (workspace.from), so the task cannot start from it. Push {b} first, or set workspace.from to a branch origin has (git ls-remote --heads origin lists them), main or here.");
     }

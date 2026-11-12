@@ -16,11 +16,13 @@ All of this runs with the board open or closed.
 - **In a git repo**, the plugin asks Herdr for a worktree space (`herdr worktree create`), on its own branch
   (`work/<n>-<title>`), started from the remote's default branch (or from your commit, with `--workspace.from here`, or
   from another branch at the remote, with `--workspace.from develop`). A task in a repo never works in your checkout.
-- **The remote's branch is fetched on every start**, the default branch (`origin/main`) as much as a named one: 10
-  seconds at most, never asking for a password, one fetch of a repo at a time. So a task starts from what was merged on
-  GitHub since the last start, not from an older copy, and the finish does not have to merge it in later. Your checkout
-  is never moved. If origin cannot be fetched, the task starts from the copy this repo fetched last, and its log
-  (`runner.log` in the task's folder) says so, with what git said.
+- **The remote's branch is fetched on every start**, the default branch (`origin/main`) as much as a named one, never
+  asking for a password. A start waits for origin 10 seconds at most, all told: asking origin which branch is its main
+  one (once, for a remote added by hand), waiting for another fetch of the same repo (one runs at a time) and the fetch
+  itself. So a task starts from what was merged on GitHub since the last start, not from an older copy, and the finish
+  does not have to merge it in later. Your checkout is never moved. If origin cannot be fetched in that time, the task
+  starts from the copy this repo fetched last, and its log (`runner.log` in the task's folder) says so, with what git
+  said.
 - **Tasks of one repo can start at the same moment.** Herdr is handed the commit the task starts from, not
   `origin/main`, so git writes no upstream into the repo's shared `.git/config` at the start (the push at the finish
   sets it). Another git command holding that file anyway (`could not lock config file`) is waited out, five tries in

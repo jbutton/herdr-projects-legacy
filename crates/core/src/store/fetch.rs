@@ -24,8 +24,10 @@ fn pause(n: i64) {
 fn key(dir: &Path, b: &str) -> String { format!("{}|{b}", primary_root(dir).display()) }
 fn stamp(dir: &Path, b: &str) -> PathBuf { stamp_file(&format!("fetch-{}.json", base64url(key(dir, b).as_bytes()))) }
 /// Runs `f` while no other fetch of this repo runs (the board's lock, one per repo, whatever worktree asks).
-pub fn with_repo_lock<T>(dir: &Path, f: impl FnOnce() -> Res<T>) -> Res<T> {
-    with_lock_wait(&format!("fetch:{}", primary_root(dir).display()), WAIT_MS, f)
+pub fn with_repo_lock<T>(dir: &Path, f: impl FnOnce() -> Res<T>) -> Res<T> { with_repo_lock_for(dir, WAIT_MS, f) }
+/// `with_repo_lock`, waiting `ms` at most for another fetch of the repo (a start's, held to its own time).
+pub fn with_repo_lock_for<T>(dir: &Path, ms: i64, f: impl FnOnce() -> Res<T>) -> Res<T> {
+    with_lock_wait(&format!("fetch:{}", primary_root(dir).display()), ms, f)
 }
 /// `git <args>` that talks to origin: never asks for a password, and stops after `ms`.
 pub fn quiet_git(dir: &Path, args: &[&str], ms: u64) -> Result<String, String> {
@@ -104,14 +106,17 @@ pub fn fetch_branch(dir: &Path, b: &str) -> Res<()> {
 }
 /// origin's own main branch was never named here (no `origin/HEAD`, as after `git remote add`): asked of origin once,
 /// fetched (a branch renamed there has no copy here yet) and kept. True when it is known now.
-pub fn learn_origin_head(dir: &Path) -> bool {
+pub fn learn_origin_head(dir: &Path) -> bool { learn_origin_head_by(dir, 10000, |b| fetch_branch(dir, b)) }
+/// `learn_origin_head`, origin asked within `ms` and its branch fetched by `fetch`: a start's own, held to its time.
+pub fn learn_origin_head_by(dir: &Path, ms: u64, fetch: impl FnOnce(&str) -> Res<()>) -> bool {
     let known = || git_out(dir, &["symbolic-ref", "-q", "refs/remotes/origin/HEAD"]).is_ok();
     if known() { return true; }
-    let Ok(said) = quiet_git(dir, &["ls-remote", "--symref", "origin", "HEAD"], 10000) else { return false };
+    if ms == 0 { return false; }
+    let Ok(said) = quiet_git(dir, &["ls-remote", "--symref", "origin", "HEAD"], ms) else { return false };
     // "ref: refs/heads/trunk<TAB>HEAD"
     let Some(b) = said.lines().find_map(|l| l.strip_prefix("ref: refs/heads/").and_then(|r| r.split('\t').next())).map(str::to_string) else { return false };
     let tracking = format!("refs/remotes/origin/{b}");
-    if fetch_branch(dir, &b).is_err() && git_out(dir, &["rev-parse", "--verify", "-q", &tracking]).is_err() { return false; }
+    if fetch(&b).is_err() && git_out(dir, &["rev-parse", "--verify", "-q", &tracking]).is_err() { return false; }
     let _ = git_out(dir, &["symbolic-ref", "refs/remotes/origin/HEAD", &tracking]);
     known()
 }
