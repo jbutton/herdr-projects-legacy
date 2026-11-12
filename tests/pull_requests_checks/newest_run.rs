@@ -1,9 +1,11 @@
 //! Each GitHub Actions check is judged by its workflow's newest run on the commit, whatever an older run said (#781): a
 //! workflow with `concurrency` and `cancel-in-progress` started again on the same commit (a label added, the pull
 //! request edited) cancels the run still going, and GitHub keeps both; a run that failed or still goes is outrun the
-//! same way. In GitHub's list, read from Actions (a fine-grained token) and in the runs of the branch's workflows. A
-//! newest run that failed or was cancelled still fails, one not begun yet is waited for, and a cancelled check with no
-//! newer run of its own still fails.
+//! same way. In GitHub's list, read from Actions (a fine-grained token) and in the runs of the branch's workflows. The
+//! newest is the job GitHub made last (its number): a job cancelled before it began is older than its replacement
+//! however late its cancel ended, and an older run's job run again after a newer run's is newer. A newest run that
+//! failed or was cancelled still fails, one not begun yet is waited for, and a cancelled check with no newer run of its
+//! own still fails.
 use crate::common;
 use crate::pull_requests_checks::{merged, none, pane_prompts, pr_world};
 use common::*;
@@ -35,6 +37,16 @@ fn cancelled() -> Value {
     json!([job("Quality", "quality_check", 100, "CANCELLED", "00:00", "01:10"), job("Quality", "quality_check", 101, "SUCCESS", "01:05", "06:00"),
         never_began, job("Safety net", "pull_request_safety_net", 103, "SUCCESS", "02:02", "03:00")])
 }
+/// The same job, numbered `number` by GitHub (run again after a newer run: a number of its own, higher).
+fn numbered(mut c: Value, run: u64, number: u64) -> Value { c["detailsUrl"] = json!(format!("https://github.com/o/r/actions/runs/{run}/job/{number}")); c }
+/// Quality's run 100 cancelled before its job began, the cancel ending after the job of run 101 that replaced it began.
+fn cancelled_before_it_began() -> Value {
+    let mut never_began = job("Quality", "quality_check", 100, "CANCELLED", "00:00", "01:10");
+    never_began["startedAt"] = json!("0001-01-01T00:00:00Z");
+    json!([never_began, job("Quality", "quality_check", 101, "SUCCESS", "01:05", "06:00")])
+}
+/// Quality's run 100 run again (a job numbered 1020) after run 101's job failed: its pass is the newest.
+fn run_again_after_it() -> Value { json!([job("Quality", "quality_check", 101, "FAILURE", "01:05", "02:00"), numbered(job("Quality", "quality_check", 100, "SUCCESS", "08:00", "09:00"), 100, 1020)]) }
 /// An older run of Quality that failed, or still goes, then a newer one that passed.
 fn failed_then_passed() -> Value { json!([job("Quality", "quality_check", 100, "FAILURE", "00:00", "01:00"), job("Quality", "quality_check", 101, "SUCCESS", "01:05", "06:00")]) }
 fn going_then_passed() -> Value { json!([going(100, "00:00"), job("Quality", "quality_check", 101, "SUCCESS", "01:05", "06:00")]) }
@@ -56,7 +68,7 @@ fn with_quality(w: &World, title: &str) -> (String, String) {
 
 #[test]
 fn an_older_run_cancelled_failed_or_still_going_wakes_no_one_once_the_newest_run_passed() {
-    for checks in [cancelled(), failed_then_passed(), going_then_passed()] {
+    for checks in [cancelled(), cancelled_before_it_began(), failed_then_passed(), going_then_passed(), run_again_after_it()] {
         let w = pr_world(json!({}));
         let id = to_approval(&w, "Labeled");
         let head = task(&id).t("prHead");
@@ -75,6 +87,8 @@ fn a_newest_run_that_failed_or_was_cancelled_still_fails_whatever_an_older_run_s
     for (checks, failed) in [
         (json!([job("Quality", "quality_check", 100, "SUCCESS", "00:00", "01:00"), job("Quality", "quality_check", 101, "CANCELLED", "01:05", "01:10")]), "quality_check"),
         (json!([job("Quality", "quality_check", 100, "SUCCESS", "00:00", "01:00"), job("Quality", "quality_check", 101, "FAILURE", "01:05", "02:00")]), "quality_check"),
+        // an older run's job run again after the newer run's passed, and failed
+        (json!([job("Quality", "quality_check", 101, "SUCCESS", "01:05", "02:00"), numbered(job("Quality", "quality_check", 100, "FAILURE", "08:00", "09:00"), 100, 1020)]), "quality_check"),
         // cancelled, and nothing of it ran again (another job did)
         (json!([job("Quality", "quality_check", 100, "CANCELLED", "00:00", "01:00"), job("Quality", "lint", 101, "SUCCESS", "01:05", "02:00")]), "quality_check"),
         // another workflow's job of the same name is another check
@@ -106,7 +120,7 @@ fn a_newest_run_that_failed_or_was_cancelled_still_fails_whatever_an_older_run_s
 #[test]
 fn a_merge_goes_by_the_newest_run_of_each_check_and_of_the_branchs_workflow() {
     // GitHub's list, and the runs of the branch's workflow Quality on the commit: the newest run passed, it merges
-    for (checks, older) in [(cancelled(), CANCELLED), (failed_then_passed(), FAILED), (going_then_passed(), GOING)] {
+    for (checks, older) in [(cancelled(), CANCELLED), (cancelled_before_it_began(), CANCELLED), (failed_then_passed(), FAILED), (going_then_passed(), GOING)] {
         let w = pr_world(json!({}));
         let (id, head) = with_quality(&w, "Newest passed");
         w.gh_says(json!({ "view": rollup_of(&head, checks.clone()), "runs": [run(100, older), run(101, PASSED)] }));

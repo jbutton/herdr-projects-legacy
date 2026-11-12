@@ -196,9 +196,14 @@ Each check is judged by its newest run, here and in the pull requests' watch, wh
   an older run said (cancelled, failed or still going). This happens with a workflow that has `concurrency` with
   `cancel-in-progress` and starts again on the same commit, for example when a label is added or the pull request is
   edited: the older run ends up cancelled. It also happens with a workflow that runs for both the push and the pull
-  request: the run that began last decides.
-- Newest means the run that began last, as GitHub says. A run not begun yet is the newest, and is waited for. Where
-  GitHub gives no times, the run with the higher number is the newer one.
+  request: the newer run decides.
+- Newest means the job GitHub made last. GitHub numbers jobs as it makes them, re-runs included, so the number decides,
+  not the times:
+  - a job cancelled before it began is older than the job that replaced it, however late its cancel ended;
+  - a job not begun yet in a newer run is the newest, and is waited for;
+  - an older run's job run again after a newer run's job is the newest.
+
+  With a fine-grained token, a workflow run read as a whole goes by when its latest attempt began, then by its number.
 - A newest run that failed or was cancelled still fails, and so does a cancelled check with no newer run of its own.
   Two jobs of the same name in one run are two checks.
 - Another CI's check counts as run again only when it has the very same link: two CIs that each call a check `build`
