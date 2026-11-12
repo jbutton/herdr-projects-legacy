@@ -395,6 +395,10 @@ itself, and its worktree and branch are removed. `workspace.cleanup false` keeps
 
 - A checkout with unsaved files, or with work that was never merged, stays on disk with its branch. The task says where,
   and a reply continues there.
+- A checkout with a submodule checked out in it (a set-up step that runs `git submodule update --init`) is removed
+  like any other. Git removes one only when forced, and then looks at nothing: the submodule's own repo goes with the
+  worktree. So it stays when a submodule holds a change (also one the repo tells `git status` to leave out, with
+  `ignore = all`) or a commit that no remote branch of that submodule has.
 - A space you are using again is not closed: a turn in the agent's own terminal, a command running in any of its panes
   (including one a finished agent left running in the background).
 - What an agent program keeps running as part of itself is no such command: its MCP servers, or its own program under

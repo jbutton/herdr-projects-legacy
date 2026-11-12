@@ -1,10 +1,10 @@
 //! Remove a task's herdr workspace, worktree and branch. Returns what was kept (and why), so no work is ever lost: a
-//! checkout with unsaved files is never forced. Only things the board created are closed. The space leaves herdr's
-//! sidebar either way: a kept checkout stays on disk, and a reply reopens it. Clean-up takes a while (teardown), and
-//! the agent's terminal is open until its end: whatever it was looked at is looked at again right before anything is
-//! removed. A clean-up put off because the space was in use says so (`retry`), and the housekeeping pass tries again;
-//! `since` is what the attempt before saw, so nothing that happened in between is missed. What keeps it in use is said
-//! in words (in_use.rs).
+//! checkout with unsaved files is never forced (one with submodules is, once nothing in them would be lost:
+//! cleanup_submodules.rs). Only things the board created are closed. The space leaves herdr's sidebar either way: a
+//! kept checkout stays on disk, and a reply reopens it. Clean-up takes a while (teardown), and the agent's terminal is
+//! open until its end: whatever it was looked at is looked at again right before anything is removed. A clean-up put
+//! off because the space was in use says so (`retry`), and the housekeeping pass tries again; `since` is what the
+//! attempt before saw, so nothing that happened in between is missed. What keeps it in use is said in words (in_use.rs).
 use crate::agents::installed::read_turn_of;
 use crate::clock::now;
 use crate::flow;
@@ -149,19 +149,21 @@ pub fn cleanup_with(t: &Task, o: Opts) -> Cleanup {
         if in_use() { return used(); }
         if !flow::git::dirty(Path::new(wt)).is_empty() { return keep(format!("{wt_short} (uncommitted changes)")); }
         if moved() { return keep(format!("{wt_short} (new work arrived during clean-up)")); }
+        let force = match super::cleanup_submodules::force(Path::new(wt)) { Ok(f) => f, Err(why) => return keep(format!("{wt_short} ({why})")) };
+        let rm: &[&str] = if force { &["worktree", "remove", "--force", wt] } else { &["worktree", "remove", wt] };
         ends = super::cleanup_ends::before_removal(t); // what it left running from its folders goes first
         let removed = (|| -> crate::err::Res<()> {
             match (&api, link.b("ownsWorkspace")) {
                 (Some(api), true) => {
                     // `herdr worktree remove` also closes its workspace. If the human closed the workspace, reopen it first.
                     let target = match &ws { Some(w) if w.at("worktree").s("checkout_path") == wt => w.t("workspace_id"), _ => flow::spaces::opening_worktree(api, &root, || api.worktree_open(&root.display().to_string(), wt, ""))?.at("workspace").t("workspace_id") };
-                    api.worktree_remove(&target, false)?;
+                    api.worktree_remove(&target, force)?;
                 }
-                _ => { git_out(&root, &["worktree", "remove", wt])?; }
+                _ => { git_out(&root, rm)?; }
             }
             Ok(())
         })();
-        if let Err(e) = removed { if git_out(&root, &["worktree", "remove", wt]).is_err() { return Cleanup { ends, ..keep(format!("{wt_short} ({})", e.msg.lines().next().unwrap_or("could not be removed"))) }; } }
+        if let Err(e) = removed { if git_out(&root, rm).is_err() { return Cleanup { ends, ..keep(format!("{wt_short} ({})", e.msg.lines().next().unwrap_or("could not be removed"))) }; } }
         let _ = git_out(&root, &["worktree", "prune"]);
         // git removed the checkout, herdr did not: its space is still there, or herdr does not say.
         if let (Some(api), true, true) = (&api, link.b("ownsWorkspace"), link.b("workspace")) {
