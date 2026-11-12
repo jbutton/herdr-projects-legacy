@@ -27,6 +27,7 @@ fn the_web_board_shows_the_terminal_boards_list_and_one_task_whole() {
     let mine = w.add("Write notes");
     sw::actions::filing::report(&mine, sw::actions::filing::Report { state: "working".into(), msg: "Drafting".into(), progress: Some(json!(40)), ..Default::default() }).unwrap();
     w.add("Later");
+    sw::clock::set(Some(sw::clock::now())); // one moment for every "ago" below: a busy machine can pass a second between two calls
     let term = open(&w.root, 40);
     let mut want: Vec<Vec<String>> = vec![];
     for r in &term.s.rows { match r { sw::board::state::Row::Head { name, .. } => want.push(vec![name.clone()]), sw::board::state::Row::Rec(o) => want.last_mut().unwrap().push(o.t("id")), _ => {} } }
