@@ -1,6 +1,6 @@
 //! A finished turn's end that is not a turn: Claude Code compacting a session left idle (#423) leaves a task waiting
 //! for approval where it was; and a turn that stopped without a summary says the agent's words, never the program's
-//! input box and the status lines under it (#406).
+//! input box, a draft typed into it, or the status lines under it (#406).
 use crate::common;
 use common::*;
 use serde_json::{json, Value};
@@ -57,6 +57,74 @@ fn a_turn_that_stopped_without_a_summary_says_the_agents_words_not_its_status_li
     for junk in ["bypass permissions", "42% context", "❯"] { assert!(!t.s("screen").contains(junk), "{}", t.s("screen")); }
 }
 
+/// A screen recorded from a real Claude Code (tests/fixtures/screens).
+fn recorded(name: &str) -> String { read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/screens").join(format!("{name}.txt"))) }
+const LAST_WORDS: &str = "⏺ The spec still fails on the missing fixture.\n  I stopped here; it needs the fixture file from you.";
+
+#[test]
+fn a_draft_of_more_than_eight_lines_in_claudes_input_box_is_not_taken_for_its_words_nor_is_its_footer() {
+    let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
+    w.script(json!({ "worker": [{ "files": { "x.txt": "x\n" }, "note": null, "screen": recorded("claude-draft-in-box") }] }));
+    let id = w.add("Draft in the box");
+    delegate(&id);
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "nosummary");
+    assert_eq!(t.s("msg"), "⏺ The spec still fails on the missing fixture.   I stopped here; it needs the fixture file from you.");
+    assert!(t.s("screen").ends_with(LAST_WORDS), "{}", t.s("screen"));
+    for junk in ["bypass permissions", "% left", "Draft reply", "❯ Draft"] { assert!(!t.s("screen").contains(junk), "{}", t.s("screen")); }
+}
+
+#[test]
+fn claude_codes_line_after_a_turn_is_not_the_agents_words() {
+    let words = sw::agents::screen_text::agent_words(&recorded("claude-at-rest"));
+    assert!(words.ends_with(LAST_WORDS), "{words}");
+    for junk in ["Cooked for", "Cogitated for", "bypass permissions"] { assert!(!words.contains(junk), "{words}"); }
+    assert!(words.contains("⏺ I looked at the failing test and stopped, the fixture is missing."), "{words}"); // the turn before stays
+}
+
+#[test]
+fn claude_codes_notice_over_its_input_box_is_not_the_agents_words() {
+    let words = sw::agents::screen_text::agent_words(&recorded("claude-notice-over-box"));
+    assert!(words.ends_with("  The report now notes that they're posted. The closing note still calls them drafts; I didn't change it."), "{words}");
+    for junk in ["new task?", "Crunched for", "bypass permissions"] { assert!(!words.contains(junk), "{words}"); }
+    // a line of the agent's own right over the box, indented, in a pane of any width, is its words, not a notice
+    for (width, indent) in [(80, 8), (40, 8), (40, 16), (24, 8), (40, 34)] {
+        let words = command_over_box(width, indent);
+        assert!(words.ends_with(&format!("\n\n{}{CURL}", " ".repeat(indent))), "width {width}, indent {indent}: {words:?}");
+    }
+    // so is a line that holds a notice's words and more, where a notice would stand (ending 2 columns from the right)
+    for line in ["echo 'Restart to update'", "Restart to update now", "see: new task? /clear to save 5k tokens", "new task? /clear to save many tokens", "Update installed"] {
+        let row = format!("{}{line}", " ".repeat(48 - line.chars().count()));
+        let words = sw::agents::screen_text::agent_words(&format!("⏺ Done.\n{row}\n{}\n❯\n{}\n  ⏵⏵ bypass permissions on", "─".repeat(50), "─".repeat(50)));
+        assert!(words.ends_with(&row), "{line:?}: {words:?}");
+    }
+    // while the notice of a narrow pane is left out all the same, one notice or several
+    for notice in ["new task? /clear to save 599.8k tokens", "✔ Update installed · Restart to update", "new task? /clear to save 2M tokens · ✔ Update installed"] {
+        let row = format!("{}{notice}", " ".repeat(58 - notice.chars().count()));
+        let words = sw::agents::screen_text::agent_words(&format!("⏺ Done.\n{row}\n{}\n❯\n{}\n  ⏵⏵ bypass permissions on", "─".repeat(60), "─".repeat(60)));
+        assert_eq!(words, "⏺ Done.", "{notice:?}");
+    }
+}
+const CURL: &str = "curl --retry 3 --connect-timeout 20 https://service.example.test/health";
+fn command_over_box(width: usize, indent: usize) -> String {
+    sw::agents::screen_text::agent_words(&format!("⏺ The command failed:\n\n{}{CURL}\n{}\n❯\n{}\n  Opus · 42% left\n  ⏵⏵ bypass permissions on", " ".repeat(indent), "─".repeat(width), "─".repeat(width)))
+}
+
+#[test]
+fn an_indented_command_over_the_input_box_of_a_narrow_pane_stays_in_the_message() {
+    let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
+    // the second ends 2 columns from the right of the box and holds a notice's words
+    for (indent, command) in [(16, CURL), (14, "echo 'Restart to update'")] {
+        let screen = format!("⏺ The command failed:\n\n{}{command}\n{}\n❯\n{}\n  Opus · 42% left\n  ⏵⏵ bypass permissions on", " ".repeat(indent), "─".repeat(40), "─".repeat(40));
+        w.script(json!({ "worker": [{ "files": { "x.txt": "x\n" }, "note": null, "screen": screen }] }));
+        let id = w.add("Narrow pane");
+        delegate(&id);
+        let t = settle(&id);
+        assert_eq!(t.s("stage"), "nosummary");
+        assert!(t.s("msg").contains(command), "{:?}", t.s("msg"));
+    }
+}
+
 #[test]
 fn a_screen_with_no_input_box_is_kept_whole() {
     let words = sw::agents::screen_text::agent_words;
@@ -71,4 +139,12 @@ fn a_screen_with_no_input_box_is_kept_whole() {
     assert_eq!(words("Stopped\n❯ \n  ⏵⏵ bypass permissions on\n"), "Stopped");
     // an older Claude Code's input box, with edges, and a line typed into it
     assert_eq!(words("Done here.\n╭──────────────╮\n│ > half typed │\n╰──────────────╯\n  ? for shortcuts"), "Done here.");
+    // the same box with ten lines typed into it
+    let typed: String = (2..=10).map(|n| format!("│   line {n:<6} │\n")).collect();
+    assert_eq!(words(&format!("Done here.\n╭──────────────╮\n│ > line 1     │\n{typed}╰──────────────╯\n  ? for shortcuts")), "Done here.");
+    // the agent's own rule near the end, after more than eight lines under a rule and a quote of its own: kept
+    let quoted = format!("Intro\n{}\n> a quote\n{}{}\nConclusion", "─".repeat(20), "line\n".repeat(9), "─".repeat(20));
+    assert!(words(&quoted).contains("Conclusion"), "{}", words(&quoted));
+    // what is not the line after a turn is kept
+    assert_eq!(words("✻ Note for the reviewer\nStopped\n❯ \n"), "✻ Note for the reviewer\nStopped");
 }

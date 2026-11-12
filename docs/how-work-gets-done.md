@@ -130,8 +130,13 @@ never finishes a task. The turn counts as ended when:
   one, as the fallback.
 
 Otherwise the task is held as "Stopped without a summary": `Ctrl+R` tells the agent to continue, `Ctrl+L` takes the work
-as it is. Its message is the agent's last words on its screen: what stands above the program's input box, never the
-status line or mode line drawn under it.
+as it is. Its message is the agent's last words on its screen: what stands above the program's input box, however many
+lines are typed into it, never the status line or mode line drawn under it. Claude Code's own lines over the box are
+left out too: the one after each turn (`✻ Worked for 8m 46s · done 8:30 PM`) and its notice pushed to the right
+(`new task? /clear to save 599.8k tokens`, `✔ Update installed · Restart to update`): only a row that is nothing but
+those notices, where Claude Code puts them, so that a line of the agent's own there is kept, even one that holds their
+words; a notice worded otherwise stays in. With no words of the agent's there, it says only "Stopped without a
+summary".
 
 A task whose finish the board missed (its agent at rest, the row still "Finishing") is finished with `Ctrl+L` or
 `herdr-projects finish <id>`. What the agent said last is the summary.
