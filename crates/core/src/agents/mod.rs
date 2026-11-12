@@ -16,6 +16,7 @@ pub mod opencode_v2;
 pub mod pi_trust;
 pub mod prompts;
 pub mod provider_error;
+pub mod read_kept;
 pub mod read_tokens;
 pub mod read_turn;
 pub mod roles;
