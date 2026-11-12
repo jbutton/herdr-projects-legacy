@@ -15,6 +15,8 @@ fn tick(b: &mut Board, at: i64) -> Vec<Effect> { update(&mut b.s, Event::Tick(at
 #[test]
 fn the_popup_says_how_to_get_back_before_it_closes_for_an_agent_and_takes_no_key_meanwhile() {
     let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
+    // The clock stands still: a key is stamped with it (update/mod.rs), so the press is at `now` however busy the machine.
+    sw::clock::set(Some(sw::clock::now()));
     unsafe { std::env::set_var("HERDR_ENV", "1") };
     w.script(json!({ "worker": [{ "status": "working", "screen": "● Editing\n" }] }));
     let id = w.add("Add a greeting"); delegate(&id); settle(&id);
@@ -48,6 +50,7 @@ fn an_agent_is_alive_while_it_works_waits_for_you_or_for_a_slot_and_not_once_it_
 #[test]
 fn closing_takes_ctrl_c_twice_and_the_hints_say_so_wherever_you_are() {
     let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
+    sw::clock::set(Some(sw::clock::now())); // as above: the hint's two seconds count from a press stamped at `t0`
     let id = w.add("Make f"); w.add("Other");
     let mut s = open(&w.root, 34); s.s.sel = id.clone(); s.load();
     let now = sw::clock::now(); tick(&mut s, now);

@@ -15,7 +15,7 @@ fn a_task_answers_through_another_path_to_its_own_socket_and_not_to_another_sess
     let id = w.add("Remote task");
     delegate(&id);
     assert_eq!(settle(&id).s("stage"), "working");
-    std::os::unix::fs::symlink(&w.base, w.base.join("config")).unwrap();
+    std::os::unix::fs::symlink(&w.sockets, w.base.join("config")).unwrap(); // the folder herdr's socket is in
     here_is(&w.base.join("config/herdr.sock"));
     let row = door("list", json!({})).arr("tasks").iter().find(|t| t.s("id") == id).cloned().unwrap();
     assert_eq!(row.s("state"), "working", "{row}");

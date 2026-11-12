@@ -6,6 +6,7 @@ use serde_json::json;
 use sw::actions::{filing, finish_line, talk};
 use sw::json::*;
 mod git_file;
+mod long_folder;
 mod review_range;
 
 #[test]

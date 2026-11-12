@@ -318,6 +318,11 @@ store refuses the real `~/.herdr-projects` (found from the system's list of user
 link too) and stops the test there, before anything is read or written in it, with a message that says what to do
 instead (`crates/core/src/store/never_real.rs`).
 
+That socket is in a short folder of the world's own, `/tmp/swt-<process>-<n>`, not in the world's folder: a Unix
+socket's path may be at most 103 bytes on macOS, and the temporary folder alone can be most of that (a long one per
+user, and the board's folder per task in it). A test that binds a socket of its own takes its path from `w.sock(name)`.
+`tests/flow/long_folder.rs` makes a world in a folder far longer than that and runs a task in it.
+
 When you run the program by hand while working on it, or a program of your own built on its code, set
 `HERDR_PROJECTS_HOME` to a scratch folder first: a new version may convert what it finds in the real one. That one
 variable is enough, also in a tab the board opened: the board hands what it starts its home folder, not the folders
