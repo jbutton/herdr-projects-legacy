@@ -105,13 +105,13 @@ fn it_keeps_up_with_that_branch_opens_its_pull_request_into_it_merges_there_and_
     finish_line::approve(&id, None, false).unwrap();
     let t = settle(&id);
     assert_eq!((t.s("stage"), t.at("failure").s("title")), ("approval", "The pull request merges into main, not develop"), "{}", t.at("failure"));
-    assert!(t.at("failure").s("next").contains("gh pr edit 7 --base develop") && !gh_log(&w).contains("pr merge"), "{}", t.at("failure"));
+    assert!(t.at("failure").s("next").contains("gh pr edit https://github.com/o/r/pull/7 --base develop") && !gh_log(&w).contains("pr merge"), "{}", t.at("failure"));
     // approved: GitHub's checks are those of the pull request into develop, and it merges there
     w.gh_says(json!({ "view": { "state": "OPEN", "headRefOid": t.at("prHead"), "baseRefName": "develop", "statusCheckRollup": [{ "name": "build", "conclusion": "SUCCESS" }], "comments": [], "reviews": [], "author": { "login": "me" } } }));
     finish_line::approve(&id, None, false).unwrap();
     let t = settle(&id);
     assert_eq!(t.s("stage"), "done", "{}", t.at("failure"));
-    assert!(gh_log(&w).contains("pr merge 7 --squash") && gh_log(&w).contains("branches/develop --jq"), "{}", gh_log(&w));
+    assert!(gh_log(&w).contains("pr merge https://github.com/o/r/pull/7 --squash") && gh_log(&w).contains("branches/develop --jq"), "{}", gh_log(&w));
     assert!(!gh_log(&w).contains("branches/main") && !gh_log(&w).contains("commits/main"), "{}", gh_log(&w));
     assert!(!tree(&t).exists(), "cleaned up");
 }

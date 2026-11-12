@@ -10,6 +10,7 @@ use sw::actions::{archive, finish_line, talk};
 use sw::housekeeping::poll_prs;
 use sw::json::*;
 use sw::store::tasks::{update, Change};
+mod fork;
 
 fn pr_world(more: serde_json::Value) -> World {
     let mut s = json!({ "review.when": "never" });

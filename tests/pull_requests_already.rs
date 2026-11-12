@@ -41,7 +41,7 @@ fn a_pull_request_the_agent_opened_itself_is_taken_on_and_merged_as_usual() {
     sw::actions::finish_line::approve(&id, None, false).unwrap();
     let t = settle(&id);
     assert_eq!(t.s("stage"), "done", "{} {}", t.s("msg"), t.at("failure"));
-    assert!(gh_log(&w).contains("pr merge 9"), "{}", gh_log(&w));
+    assert!(gh_log(&w).contains("pr merge https://github.com/o/r/pull/9 "), "{}", gh_log(&w));
 }
 
 #[test]
@@ -54,7 +54,7 @@ fn a_pull_request_the_agent_opened_itself_gets_the_closes_lines_it_lacks() {
     let id = sw::actions::filing::add(&w.root, "Own PR", sw::actions::filing::AddOpts { settings: vec![("merge.closes".into(), json!("4, 5"))], ..Default::default() }).unwrap().t("id");
     delegate(&id);
     assert_eq!(settle(&id).s("pr"), url);
-    assert!(gh_log(&w).contains("pr edit 9 --body Mine. Fixes #4\n\nCloses #5\n"), "only the line it lacks: {}", gh_log(&w));
+    assert!(gh_log(&w).contains("pr edit https://github.com/o/r/pull/9 --body Mine. Fixes #4\n\nCloses #5\n"), "only the line it lacks: {}", gh_log(&w));
     sw::actions::finish_line::approve(&id, None, false).unwrap();
     let t = settle(&id);
     assert_eq!(t.s("stage"), "done", "{} {}", t.s("msg"), t.at("failure"));
