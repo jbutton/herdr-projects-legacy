@@ -2,7 +2,7 @@
 //! to one the agent opened itself, and taken off again for an issue the setting no longer names), and after a merge that
 //! landed, `gh issue close` for each GitHub does not close by itself. A close that fails never fails the merge: the
 //! task's line says what was closed, or why not. The task keeps the issues whose lines the board wrote in `closesOnPr`.
-use crate::flow::git::{gh, pr_number};
+use crate::flow::git::gh;
 use crate::json::*;
 use crate::store::keys::{repo_keys, task_ref};
 use crate::store::settings::issues::numbers;
@@ -34,7 +34,7 @@ fn without(body: &str, gone: &[u64]) -> String {
 pub fn stale(t: &Task) -> Vec<u64> { let want = issues(t); numbers(t.at("closesOnPr")).into_iter().filter(|n| !want.contains(n)).collect() }
 /// The pull request's body, None when gh cannot say.
 fn body_of(pr: &str, cwd: &Path) -> Option<String> {
-    let r = gh(&["pr", "view", &pr_number(pr), "--json", "body"], cwd, 60000);
+    let r = gh(&["pr", "view", pr, "--json", "body"], cwd, 60000);
     if r.status != 0 { return None; }
     serde_json::from_str::<Value>(&r.stdout).ok().filter(|v| v.is_object()).map(|v| v.t("body"))
 }
@@ -53,7 +53,7 @@ pub fn onto_pr(t: &Task, pr: &str, cwd: &Path) -> Result<Vec<u64>, String> {
     let mut written = mine;
     for n in added { if !written.contains(&n) { written.push(n); } }
     if new == body { return Ok(written); }
-    let r = gh(&["pr", "edit", &pr_number(pr), "--body", &new], cwd, 60000);
+    let r = gh(&["pr", "edit", pr, "--body", &new], cwd, 60000);
     if r.status == 0 { Ok(written) } else { Err(said(&r)) }
 }
 fn list(ns: &[u64]) -> String { ns.iter().map(|n| format!("#{n}")).collect::<Vec<_>>().join(", ") }
