@@ -64,7 +64,7 @@ pub fn start_agent(id: &str, g: &mut Guard, prompt: &str, resume: Option<&str>) 
     let args = |hooked: bool| -> Res<Vec<String>> {
         let mut extra = if hooked { x.hook.clone() } else { vec![] };
         extra.extend(x.rules.clone());
-        start::start_args(&kind, &start::StartOpts { model: model.clone(), effort: level.clone(), fast, access: who.access.clone(), resume: resume.unwrap_or("").into(), session: x.session.clone().unwrap_or_default(), extra, folder: cwd.clone() })
+        start::start_args(&kind, &start::StartOpts { model: model.clone(), effort: level.clone(), fast, access: who.access.clone(), resume: resume.unwrap_or("").into(), session: x.session.clone().unwrap_or_default(), extra, folder: cwd.clone(), no_hooks: false })
     };
     let (mut blocked, mut hooked) = (false, x.hooked);
     let pane = t.at("link").t("pane");
