@@ -1,7 +1,8 @@
 //! The words on a program's screen, for a program whose saved conversation the board cannot read. What a terminal
 //! program draws is told from what it says by its shape alone: a line that is mostly drawing (a rule, a box's edge, a
 //! logo made of dots or blocks, a bar) holds few letters among its marks, and is left out; a box's edges are taken off.
-//! And what the agent said last, without the program's input box and the lines it draws under it.
+//! And what the agent said last, without the program's input box (with what is typed in it), the lines it draws under
+//! it, or Claude Code's line after each turn and its notice over the box.
 const EDGE: &[char] = &['│', '┃', '|', '╭', '╮', '╰', '╯', '┌', '┐', '└', '┘', '─', '━', '═'];
 fn edge_trim(s: &str) -> &str { s.trim_matches(|c: char| c.is_whitespace() || EDGE.contains(&c)) }
 fn drawn(line: &str) -> bool {
@@ -30,21 +31,39 @@ fn rule(line: &str) -> bool {
     let s = line.trim().trim_matches(['╭', '╮', '╰', '╯', '┌', '┐', '└', '┘']);
     s.chars().count() >= 8 && s.chars().all(|c| ['─', '━', '═'].contains(&c))
 }
+/// Claude Code's line after each turn, `✻ Worked for 8m 46s · done 8:30 PM`: the program's, never the agent's words.
+fn turn_line(line: &str) -> bool {
+    let mut w = line.split_whitespace();
+    w.next() == Some("✻") && w.next().is_some_and(|v| v.starts_with(char::is_uppercase)) && w.next() == Some("for")
+        && w.next().is_some_and(|d| d.starts_with(|c: char| c.is_ascii_digit()))
+}
+/// Claude Code's notice in the row right over its input box (`new task? /clear to save 599.8k tokens`, `✔ Update
+/// installed`): pushed to the right, it ends where the box's top rule ends, give or take a margin.
+fn notice(row: &str, top: &str) -> bool {
+    row.starts_with("        ") && row.trim_end().chars().count() + 4 >= top.trim_end().chars().count()
+}
 /// The words an agent left on its screen, for a turn that ended with nothing else: what stands above its program's
 /// input box. The box is its prompt mark near the end of the screen (Claude Code's `❯`, Codex's `›`, or `>` just under
 /// a rule), with the rule over it; what is drawn under it (a mode line, a status line: Claude Code's "⏵⏵ bypass
-/// permissions on") is the program's, never the agent's words.
+/// permissions on") is the program's, never the agent's words. A box with more than eight lines typed into it has its
+/// prompt further up: it is then found from its bottom rule near the end, up to the prompt line under its top rule.
+/// Claude Code's line after each turn, and its notice right over the box, are left out too.
 pub fn agent_words(screen: &str) -> String {
     let lines: Vec<&str> = screen.split('\n').collect();
     let below = |i: usize| lines[i + 1..].iter().filter(|l| !l.trim().is_empty()).count();
     let above = |i: usize| (0..i).rev().find(|j| !lines[*j].trim().is_empty());
     let ruled = |i: usize| above(i).filter(|j| rule(lines[*j]));
-    let input = (0..lines.len()).rev().take_while(|i| below(*i) <= 8).find(|i| {
-        let l = edge_trim(lines[*i]);
-        l.starts_with(['❯', '›']) || (l.starts_with('>') && ruled(*i).is_some())
+    let near_end = || (0..lines.len()).rev().take_while(move |i| below(*i) <= 8);
+    let marked = |i: usize| edge_trim(lines[i]).starts_with(['❯', '›']);
+    let quoted = |i: usize| edge_trim(lines[i]).starts_with('>');
+    let input = near_end().find(|i| marked(*i) || (quoted(*i) && ruled(*i).is_some())).or_else(|| {
+        // a tall box: a bare `>` counts only between a box's edges, so that the agent's own quote under its own rule is
+        // not taken for one
+        let edged = |i: usize| lines[i].trim_start().starts_with(['│', '┃', '|']);
+        let bottom = near_end().find(|i| rule(lines[*i]))?;
+        (0..bottom).rev().take_while(|i| !rule(lines[*i])).find(|i| ruled(*i).is_some() && (marked(*i) || (quoted(*i) && edged(*i))))
     });
-    match input {
-        Some(i) => screen_text(&lines[..ruled(i).unwrap_or(i)].join("\n")),
-        None => screen_text(screen),
-    }
+    let cut = |top: usize| if top > 0 && notice(lines[top - 1], lines[top]) { top - 1 } else { top };
+    let end = input.map(|i| ruled(i).map(cut).unwrap_or(i)).unwrap_or(lines.len());
+    screen_text(&lines[..end].iter().filter(|l| !turn_line(l)).copied().collect::<Vec<_>>().join("\n"))
 }

@@ -83,6 +83,13 @@ fn claude_codes_line_after_a_turn_is_not_the_agents_words() {
 }
 
 #[test]
+fn claude_codes_notice_over_its_input_box_is_not_the_agents_words() {
+    let words = sw::agents::screen_text::agent_words(&recorded("claude-notice-over-box"));
+    assert!(words.ends_with("  The report now notes that they're posted. The closing note still calls them drafts; I didn't change it."), "{words}");
+    for junk in ["new task?", "Crunched for", "bypass permissions"] { assert!(!words.contains(junk), "{words}"); }
+}
+
+#[test]
 fn a_screen_with_no_input_box_is_kept_whole() {
     let words = sw::agents::screen_text::agent_words;
     assert_eq!(words("I ran out of context\n> "), sw::agents::screen_text::screen_text("I ran out of context\n> "));
