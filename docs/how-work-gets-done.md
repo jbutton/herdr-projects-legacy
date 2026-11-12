@@ -192,13 +192,17 @@ merged in before it merges). Only the checks of the commit that would merge coun
 Each check is judged by its newest run, here and in the pull requests' watch, which wakes the agent when checks fail:
 
 - A job re-run in its workflow run counts by its latest attempt.
-- A run that its workflow cancelled for a newer one fails nothing; the newer run's job of the same name decides. That
-  happens with a workflow that has `concurrency` with `cancel-in-progress` and starts again on the same commit, for
-  example when a label is added or the pull request is edited.
-- A cancelled newest run still fails, and so does a cancelled check with no newer run of its own.
-- A failure in another run of the workflow (its run for the push) is its own check: a pass of the pull request's run
-  does not undo it.
-- Another CI's check counts as run again only when it has the very same link.
+- A workflow run more than once on the same commit counts by its newest run: the same job of that run decides, whatever
+  an older run said (cancelled, failed or still going). This happens with a workflow that has `concurrency` with
+  `cancel-in-progress` and starts again on the same commit, for example when a label is added or the pull request is
+  edited: the older run ends up cancelled. It also happens with a workflow that runs for both the push and the pull
+  request: the run that began last decides.
+- Newest means the run that began last, as GitHub says. A run not begun yet is the newest, and is waited for. Where
+  GitHub gives no times, the run with the higher number is the newer one.
+- A newest run that failed or was cancelled still fails, and so does a cancelled check with no newer run of its own.
+  Two jobs of the same name in one run are two checks.
+- Another CI's check counts as run again only when it has the very same link: two CIs that each call a check `build`
+  are two checks.
 
 Each check is counted once, a workflow for its jobs until GitHub lists them. `details` names what it waits for
 (`checksWaitingFor`).

@@ -3,8 +3,9 @@
 //! only): where GitHub refuses it, the list is made of what such a token reads, the jobs of the commit's GitHub Actions
 //! runs (every matrix member, with the link to its log) and its commit statuses (an outside CI, Vercel), in the same
 //! shape, and what cannot be read that way (another app's check runs) is named, to be said on the task. A check run
-//! again keeps its older runs in GitHub's list: only its newest one counts (#404), and a run its workflow cancelled for
-//! a newer one fails nothing (#781). Used by checks.rs, merge.rs and the pull requests' watch (housekeeping/prs.rs).
+//! again keeps its older runs in GitHub's list: only its newest one counts, a job by its run's latest attempt (#404)
+//! and by its workflow's newest run on the commit, whatever an older run said: cancelled for the newer one, failed or
+//! still going (#781). Used by checks.rs, merge.rs and the pull requests' watch (housekeeping/prs.rs).
 use crate::clock::now;
 use crate::flow::git::{gh, pr_number, GhOut};
 use crate::json::*;
@@ -63,17 +64,21 @@ fn run_of(c: &Value) -> Option<u64> { link_id(c, "/actions/runs/") }
 fn check_of(c: &Value) -> (String, String, String) { (c.s("__typename").to_string(), c.s("workflowName").to_string(), super::checks::name(c)) }
 /// A time GitHub gave: not none, nor gh's `0001-…` for none (not started yet).
 fn known(s: &str) -> bool { !s.is_empty() && !s.starts_with("0001") }
-/// `b` began after `a`, each as (when it began, its workflow run's number): by the times where both are known and
-/// differ, else by the numbers, which GitHub gives a later run higher.
-fn began_after(a: (&str, u64), b: (&str, u64)) -> bool { if known(a.0) && known(b.0) && a.0 != b.0 { a.0 < b.0 } else { a.1 < b.1 } }
-/// A GitHub Actions check cancelled for a newer run of its workflow (#781). A workflow with `concurrency` and
-/// `cancel-in-progress`, started again on the same commit (a label added, the pull request edited), cancels the run
-/// still going, and GitHub lists both: the cancelled one judged nothing, the newer run's job of the same name does. A
-/// cancelled newest run still counts, and so does any other result of an older run (its run for the push may fail where
-/// the pull request's passes).
+/// Where a workflow run's check stands among the runs of its workflow, the newest the greatest: by when it began (or
+/// ended, cancelled before it began) where GitHub says, one not begun yet after all of those, then by its run's number,
+/// which GitHub gives a later run higher. One order for all, so that of the runs of a check one is always the newest.
+fn order(times: [&str; 2], run: u64) -> (bool, String, u64) {
+    let t = times.into_iter().find(|t| known(t)).unwrap_or("");
+    (t.is_empty(), t.to_string(), run)
+}
+/// A GitHub Actions check of an older run of its workflow on the commit (#781): the same job of the newest run decides,
+/// whatever the older one said. A workflow with `concurrency` and `cancel-in-progress`, started again on the same commit
+/// (a label added, the pull request edited), cancels the run still going, and GitHub lists both; a workflow run for the
+/// push and for the pull request is two runs of it too. A check of no workflow run is not one of these (`newest`).
 fn superseded(c: &Value, checks: &[Value]) -> bool {
     let Some(r) = run_of(c) else { return false };
-    super::checks::word(c) == "CANCELLED" && checks.iter().any(|o| check_of(o) == check_of(c) && run_of(o).is_some_and(|q| q != r && began_after((c.s("startedAt"), r), (o.s("startedAt"), q))))
+    let at = |c: &Value, run: u64| order([c.s("startedAt"), c.s("completedAt")], run);
+    checks.iter().any(|o| check_of(o) == check_of(c) && run_of(o).is_some_and(|q| q != r && at(o, q) > at(c, r)))
 }
 /// The jobs of a workflow run's latest attempt, as GitHub gives them: None where it does not.
 fn latest_jobs(root: &Path, run: u64) -> Option<Vec<u64>> {
@@ -85,7 +90,8 @@ fn latest_jobs(root: &Path, run: u64) -> Option<Vec<u64>> {
 /// check: one of the same name with the very same link that began after it was over; with another link it may be
 /// another pipeline's or another CI's check of that name, whose pass says nothing of this one's failure. What cannot be
 /// told (GitHub does not say, no link, the times are not known: not started yet, gh's `0001-…`) is kept, so that a
-/// failure is never dropped for a guess. A run its workflow cancelled for a newer one is left out too (`superseded`).
+/// failure is never dropped for a guess. A GitHub Actions job of an older run of its workflow is left out too: the
+/// newest run decides (`superseded`).
 pub fn newest(root: &Path, checks: &[Value]) -> Vec<Value> {
     let key = |c: &Value| (check_of(c), run_of(c));
     let mut latest: Vec<(u64, Option<Vec<u64>>)> = vec![];
@@ -109,10 +115,10 @@ pub fn newest(root: &Path, checks: &[Value]) -> Vec<Value> {
 /// One GitHub Actions run of a commit. `started`: when its latest attempt began, where GitHub says.
 pub struct Run { pub id: String, pub path: String, pub status: String, pub conclusion: String, pub url: String, pub name: String, pub started: String }
 impl Run {
-    /// Cancelled for a newer run among `others`, its workflow's runs on the commit (as `superseded`, #781).
+    /// Not the newest among `others`, its workflow's runs on the commit: the newest decides (as `superseded`, #781).
     pub fn superseded(&self, others: &[&Run]) -> bool {
         let Ok(me) = self.id.parse::<u64>() else { return false };
-        self.conclusion.eq_ignore_ascii_case("cancelled") && others.iter().any(|o| o.id.parse::<u64>().is_ok_and(|n| n != me && began_after((&self.started, me), (&o.started, n))))
+        others.iter().any(|o| o.id.parse::<u64>().is_ok_and(|n| n != me && order([&o.started, ""], n) > order([&self.started, ""], me)))
     }
 }
 /// Every page of a list GitHub gives at most 100 to a page, each item a line of `jq`.
