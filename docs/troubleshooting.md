@@ -100,7 +100,7 @@ Find what its row says:
 | `queued after HSW-12` | it waits for other tasks to be done ([one task after another](after.md)) | wait, or `herdr-projects delegate <id> --now` |
 | `Has not started yet: pressing enter again` | the task's text sits in the agent's box | wait a moment: the board presses enter again |
 | `Not started: its instructions sit unsent in its box` | the text never went in | `Ctrl+L` (retry), or go into the agent and press enter ([handing over](handing-over.md)) |
-| `Finishing` for a long time, with the agent at rest | the board missed the end of its turn | `Ctrl+L`, or `herdr-projects finish <id>` |
+| `Finishing` for a long time, with the agent at rest | a command the agent runs in the background (Claude Code) has not ended, and the task waits for it ([how work gets done](how-work-gets-done.md)); or the board missed the end of its turn | wait for the command, or have the agent stop it; `Ctrl+L`, or `herdr-projects finish <id>`, takes the work as it is |
 | `Stopped without a summary` | the agent stopped and the board cannot tell if it finished | `Ctrl+R` tells it to go on; `Ctrl+L` takes the work as it is |
 | `Agent's connection dropped, trying again in 2m` | the provider cut the turn off | nothing: the board retries by itself ([a turn cut off by the provider](provider-errors.md)) |
 | `Agent stopped` | an error waiting cannot fix: a usage limit, a refusal | read the reason in the panel; reply, or `Ctrl+R` |
