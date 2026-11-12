@@ -238,10 +238,15 @@ pub fn read_pi(file: &Path, bytes: u64) -> Option<Turn> {
 pub fn read_turn(kind: &str, file: &Path, bytes: u64) -> Option<Turn> {
     match kind { "claude" => read_claude(file, bytes), "codex" => read_codex(file, bytes), "pi" => read_pi(file, bytes), _ => None }
 }
+thread_local! { static LISTED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+/// A folder's entries, looking for a saved conversation. Each one is counted: what a search costs is how many folders
+/// it lists (`folders_listed`, on this thread, for the tests).
+pub fn list_dir(dir: &Path) -> std::io::Result<std::fs::ReadDir> { LISTED.with(|n| n.set(n.get() + 1)); std::fs::read_dir(dir) }
+pub fn folders_listed() -> usize { LISTED.with(|n| n.get()) }
 /// A file whose name passes `test`, anywhere under a folder (a few levels deep), newest first.
 pub fn find_file(root: &Path, test: &dyn Fn(&str) -> bool, depth: usize) -> Vec<PathBuf> {
     fn walk(dir: &Path, d: usize, test: &dyn Fn(&str) -> bool, hits: &mut Vec<PathBuf>) {
-        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        let Ok(rd) = list_dir(dir) else { return };
         for e in rd.flatten() {
             let p = e.path();
             if e.file_type().map(|t| t.is_dir()).unwrap_or(false) { if d > 0 { walk(&p, d - 1, test, hits); } }

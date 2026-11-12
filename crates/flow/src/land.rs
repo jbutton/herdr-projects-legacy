@@ -9,6 +9,7 @@ pub mod catch_up;
 pub mod checks;
 pub mod cleanup;
 pub mod cleanup_ends;
+pub mod cleanup_submodules;
 pub mod closes;
 pub mod direct;
 pub mod expected;

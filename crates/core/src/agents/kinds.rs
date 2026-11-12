@@ -29,6 +29,7 @@
 //!   since        an argument and the first version that takes it               older: started without it
 //!   integration  herdr's own integration for it, and whether herdr sees its state only through it
 //!   login        its own command that says whether it is signed in, and how to sign in   none: not asked
+//!   no_hooks     the arguments that start it with your own hooks off, for a role that only looks   none: they run
 //!   cannot       roles it cannot do, and why                                    none
 pub struct Kind {
     pub name: &'static str,
@@ -68,9 +69,12 @@ pub struct Kind {
     pub integration: &'static str,
     /// herdr sees whether it works only through that integration: without it, it is never started.
     pub needs_integration: bool,
-    /// Its own command that says whether it is signed in (`herdr-projects doctor`): signed out when it fails or says
-    /// "not logged in". None: the board cannot tell.
+    /// Its own command that says whether it is signed in (`herdr-projects doctor`, and before a reviewer starts:
+    /// sign_in.rs): signed out when it fails or says "not logged in". None: the board cannot tell.
     pub login: Option<Login>,
+    /// The arguments that start it with your own hooks off: for the reviewer and the attempts' picker, which only look.
+    /// A program that stops before its prompt to have a new hook trusted would otherwise take their brief as the answer.
+    pub no_hooks: &'static [&'static str],
     /// (role, why): a role it cannot do well. The role is a setting's first part (worker, reviewer, coordinator,
     /// plan, watcher); `worker` also stands for the fallbacks and the attempts.
     pub cannot: &'static [(&'static str, &'static str)],
@@ -135,7 +139,7 @@ pub const NO_MODELS: Models = Models { list: &[], read: Read::None, server: &[],
 pub const BASE: Kind = Kind {
     name: "", program: "", aliases: &[], min_version: "0", efforts: &[], efforts_read: EffortsRead::Help, access_full: &[], access_ask: Some(&[]), access_auto: None, fast: false, tokens: false,
     interrupt: "esc", rules_file: None, since: &[], reads_turn: false, lead: &[], model: &[], models: NO_MODELS, effort: &[], effort_note: "",
-    resume: &[], session: &[], fresh: &[], standing: &[], headless: None, integration: "", needs_integration: false, login: None, cannot: &[], checked: "",
+    resume: &[], session: &[], fresh: &[], standing: &[], headless: None, integration: "", needs_integration: false, login: None, no_hooks: &[], cannot: &[], checked: "",
 };
 mod herdr;
 mod own;
