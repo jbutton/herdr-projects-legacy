@@ -1,7 +1,8 @@
 //! GitHub's checks on the pull request, looked at before it merges (`merge.checks`): still running, the merge waits
 //! and says so; failed, nothing merges and the failure goes back to the agent with the check's name and its log,
 //! within `review.rounds`, then waits for you (`approve` refuses, `--anyway` merges); stuck past `check.timeout`, it
-//! waits for you; `none` merges as before. A check run again is judged by its newest run (#404).
+//! waits for you; `none` merges as before. A check run again is judged by its newest run (#404), and so is one whose
+//! run its workflow cancelled for a newer one (cancelled.rs, #781).
 use crate::common;
 use common::*;
 use serde_json::{json, Value};
@@ -10,6 +11,7 @@ use sw::housekeeping::poll_prs;
 use sw::json::*;
 use sw::store::settings::{change::set_value, lookup::Scope};
 use sw::store::tasks::{update, Change};
+mod cancelled;
 
 pub fn pr_world(more: Value) -> World {
     let mut s = json!({ "review.when": "never" });
