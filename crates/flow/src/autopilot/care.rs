@@ -3,8 +3,9 @@
 //! It may look after the tasks it added and, under `autopilot.scope all`, your to-do tasks it started; never a task of
 //! yours it did not start. One needs looking after when it failed (the check, the review after its rounds, a limit, its
 //! agent's program exiting, its setup) or its agent waits with a question; under `autopilot.approve yes`, also when it
-//! waits for a yes autopilot may give (never work landed through code review on GitHub, `merge.by none`). A task that
-//! fails or asks again after `autopilot.retries` retries is left to you.
+//! waits for a yes autopilot may give (never work landed through code review on GitHub, `merge.by none`), and while it
+//! stalls (stalled.rs), so a stall wakes it also with its slots full. A task that fails or asks again after
+//! `autopilot.retries` retries is left to you.
 use super::record::{key_of, task_rec, tasks};
 use crate::coordinator::co::{Co, Level};
 use crate::json::*;
@@ -56,9 +57,11 @@ pub fn may_look_after(ap: &Obj, t: &Obj) -> bool { task_rec(ap, t.s("id")).map(|
 pub fn under_way_count(ap: &Obj, board: &[Obj]) -> usize {
     tasks(ap).iter().filter(|r| r.b("pending") || match board.iter().find(|t| t.s("id") == r.s("id")) { Some(t) => under_way(t), None => crate::after::far::is_far(r.s("id")) && r.b("started") && !r.b("over") }).count()
 }
-/// Its tasks that need looking after now, with why.
+/// Its tasks that need looking after now, with why: as `need_of` says, or "stalled".
 pub fn needing(ap: &Obj, board: &[Obj], approve: bool) -> Vec<(String, &'static str)> {
-    board.iter().filter(|t| may_look_after(ap, t)).filter_map(|t| need_of(t, approve).map(|w| (t.t("id"), w))).collect()
+    let now = crate::clock::now();
+    let why = |t: &Obj| need_of(t, approve).or_else(|| (!crate::stalled::stalls(t, now).is_empty()).then_some("stalled"));
+    board.iter().filter(|t| may_look_after(ap, t)).filter_map(|t| why(t).map(|w| (t.t("id"), w))).collect()
 }
 /// Your to-do tasks in its area that it could start (`autopilot.scope all`): never started, nobody's but yours, and
 /// it the nearest coordinator to them on autopilot with `scope all`.

@@ -18,7 +18,10 @@ Each look starts a whole program (`claude -p`, `codex exec`, `pi -p`, or another
 - **At most about once a minute per working agent** (`watcher.every`). It used to be every 15 seconds.
 - **Only at an agent that is working.** One that is idle, waits for you or has finished is not looked at.
 - **Only when its screen changed.** The words on screen are compared with the last look. A spinner, a timer or a token
-  count that moved is not a change, so an agent waiting on a long command costs nothing.
+  count that moved is not a change, so an agent waiting on a long command costs nothing. The board also reads each
+  working agent's screen about once a minute on its own, with no model call and with the Watcher off too, and keeps
+  when its words last changed: a screen that shows nothing new for `stall.after` is a stalled task
+  ([stalled tasks](stalled.md)).
 - **At the reviewer during a review**, and only while Herdr says the reviewer's own pane is working.
 - **One call for everyone.** A call takes every agent whose minute is up, longest wait first, up to 8 per call. Nobody is
   looked at before its minute is up. To bring agents that started at different moments into the same call, a call
@@ -41,6 +44,9 @@ It works the same with the board open or closed: the open board and the keeper r
 
 The Watcher guesses only a percent. The board works out the minutes left from that percent and the time spent, each
 time it draws, so they keep counting between looks and do not jump.
+
+When the Watcher's guess last moved is kept with it: the minutes left at that moment are the estimate a task can run
+past and count as stalled ([stalled tasks](stalled.md)).
 
 Herdr's sidebar is sent the row itself ([Herdr's sidebar](sidebar.md)), so it gets the line, the percent and the
 minutes afresh as soon as one of them changes, look or no look. The Watcher itself writes nothing to Herdr.
