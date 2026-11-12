@@ -42,14 +42,14 @@ fn a_pull_request_only_merges_at_the_commit_that_was_reviewed_a_commit_pushed_fr
     // it arrives between that look and the merge: GitHub itself refuses (the look itself is first answered late, with a
     // commit the branch at the remote does not stand at: asked again, not taken for a commit nobody reviewed)
     w.gh_says(json!({ "head": other, "late": { "head": other, "times": 1 } }));
-    let looks = || gh_log(&w).lines().filter(|l| *l == "pr view 7 --json headRefOid").count();
+    let looks = || gh_log(&w).lines().filter(|l| *l == "pr view https://github.com/o/r/pull/7 --json headRefOid").count();
     let looked = looks();
     finish_line::approve(&id, None, false).unwrap();
     let t = settle(&id);
     assert_eq!(t.s("stage"), "approval"); assert!(!t.b("autoMerge")); assert_eq!(t.at("failure").s("title"), "Pull request could not merge");
     assert!(t.at("failure").s("detail").contains("Head branch was modified"), "{}", t.at("failure"));
     assert_eq!(looks(), looked + 2);
-    assert!(gh_log(&w).contains(&format!("pr merge 7 --squash --match-head-commit {reviewed}\n")), "{}", gh_log(&w));
+    assert!(gh_log(&w).contains(&format!("pr merge https://github.com/o/r/pull/7 --squash --match-head-commit {reviewed}\n")), "{}", gh_log(&w));
     assert!(!regex::Regex::new("--auto|--delete-branch").unwrap().is_match(&gh_log(&w)));
     assert!(Path::new(t.s("worktree")).exists()); assert!(!t.b("tidy"));
     // checks still running: remembered. Someone pushes to the pull request meanwhile: the approval is withdrawn

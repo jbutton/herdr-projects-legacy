@@ -16,6 +16,13 @@ All of this runs with the board open or closed.
 - **In a git repo**, the plugin asks Herdr for a worktree space (`herdr worktree create`), on its own branch
   (`work/<n>-<title>`), started from the remote's default branch (or from your commit, with `--workspace.from here`, or
   from another branch at the remote, with `--workspace.from develop`). A task in a repo never works in your checkout.
+- **The remote's branch is fetched on every start**, the default branch (`origin/main`) as much as a named one, never
+  asking for a password. A start waits for origin 10 seconds at most, all told: asking origin which branch is its main
+  one (once, for a remote added by hand), waiting for another fetch of the same repo (one runs at a time) and the fetch
+  itself. So a task starts from what was merged on GitHub since the last start, not from an older copy, and the finish
+  does not have to merge it in later. Your checkout is never moved. If origin cannot be fetched in that time, the task
+  starts from the copy this repo fetched last, and its log (`runner.log` in the task's folder) says so, with what git
+  said.
 - **Tasks of one repo can start at the same moment.** Herdr is handed the commit the task starts from, not
   `origin/main`, so git writes no upstream into the repo's shared `.git/config` at the start (the push at the finish
   sets it). Another git command holding that file anyway (`could not lock config file`) is waited out, five tries in
@@ -27,7 +34,7 @@ All of this runs with the board open or closed.
 - **Started from a named branch** (`workspace.from develop`, for a long branch with small tasks on top), the task lands
   there too. The branch is fetched from origin on every start (10 seconds at most, never asking for a password); one
   origin does not have is refused with the reason, and the task waits as failed. If origin cannot be reached, the copy it
-  last gave is used. The task keeps up with that branch, its pull request merges into it (`gh pr create --base develop`),
+  last gave is used, and the task's log says so. The task keeps up with that branch, its pull request merges into it (`gh pr create --base develop`),
   a pull request the agent opened itself is taken on only while it merges into it, and `merge.checks` reads the checks of
   a pull request into it.
 - **A named branch with `merge.pr` off** (a host with no GitHub, so no `gh`) lands there with no pull request, also when
@@ -115,6 +122,13 @@ When the agent's turn ends, the board:
    - A new round starts clean: the failure of the round before (a failed commit, a reviewer out of credits) is cleared
      as soon as the check starts, so the row and the details never show it while the work is checked and reviewed.
 2. **Pushes the branch and opens a draft pull request**, when there is an `origin` remote and `gh`.
+   - The pull request is on origin's repo, and every `gh` call names its repo: the task's pull request by its link,
+     everything else with origin's (`--repo`, or in the API's path). In a fork's checkout, with an `upstream` remote,
+     gh's own default is upstream: a bare `gh pr view 7` there reads upstream's pull request 7. Origin's repo is read
+     from the URL git uses (`insteadOf` applied), else from the one written, with an ssh alias read as ssh reads it
+     (`ssh -G`). With an origin that names no repo on a host (a folder), or none, gh is not asked about a repo while the
+     checkout has another remote it would take instead: that call fails, saying so. With origin the only remote, gh has
+     no other to take.
    - A pull request the agent already opened for the task's branch is taken on instead, and goes through the review and
      the merge as usual.
    - The push may run for `merge.pushTimeout` (2 minutes unless set), the repo's pre-push hook included. A repo whose

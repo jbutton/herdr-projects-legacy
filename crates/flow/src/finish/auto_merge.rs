@@ -72,7 +72,7 @@ fn start(id: &str) {
 fn hold(seen: &Task) {
     // Where GitHub's own auto-merge is what waits (a merge queue), that is switched off first.
     let github = !seen.b("autoMergeLocal");
-    if github && flow::git::gh(&["pr", "merge", &flow::git::pr_number(seen.s("pr")), "--disable-auto"], &folder_of(seen.s("id")), 60000).status != 0 { return; }
+    if github && flow::git::gh(&["pr", "merge", seen.s("pr"), "--disable-auto"], &folder_of(seen.s("id")), 60000).status != 0 { return; }
     // Under `merge.by none` one GitHub already queued is taken out of its queue too; until it is, the task says why.
     if github && code_review::by_code_review(seen) { if let Err(why) = code_review::dequeue(seen) { code_review::still_queued(seen, &why); return; } }
     let Ok(t) = update(seen.s("id"), |t| {
