@@ -28,10 +28,13 @@ in. `none` turns stalls off.
 - **A coordinator on autopilot:** `stalled` in `autopilot.when` (on unless you left it out) wakes it for a task it may
   look after: `Autopilot: HSW-84 has shown nothing new for 21m`, or `HSW-84 ran well past its estimate`
   ([autopilot](autopilot.md)). Its rules say to look at the task first (`details`), then nudge it with `tell`, or stop
-  it.
+  it. A stalled task needs looking after, so it wakes the coordinator also when its `autopilot.tasksAtOnce` are full,
+  and `autopilot show` lists it (`HSW-84 (has stalled)`).
 
-Each stall is heard of once, however long it lasts. New output on the screen, or a guess of the Watcher's that moved,
-makes the next stall a new one. A task that stalls both ways at once is one event.
+Each stall is heard of once, however long it lasts. It is remembered until something re-arms it: new output on the
+screen, a new run of the agent, or a guess of the Watcher's that moved. Only that makes the next stall a new one; a
+dialog for a minute or a status that flapped does not, nor does a change of `stall.after`. A task that stalls both ways
+at once is one event.
 
 ## What counts
 

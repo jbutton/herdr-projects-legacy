@@ -1,9 +1,10 @@
 //! What happens on the board that an automation can be fired by, and telling that it happened: a task was added,
 //! finished and waits for approval, failed its review, went wrong, needs you, stalled (stalled.rs), was merged. Each is
-//! read off the task as it stands, and counted once: what was seen already is kept in the automations' folder. A task
-//! that stalls both ways in one look fires once.
+//! read off the task as it stands, and counted once: what was seen already is kept in the automations' folder (a stall
+//! for as long as it stands: stalled.rs). A task that stalls both ways in one look fires once.
 use crate::json::*;
 use crate::notify::event_of;
+use crate::stalled::is_new;
 use crate::store::reviews::review_history;
 
 /// id: its name on the command line. words: after "when a task …". what: what the new task is told happened.
@@ -47,11 +48,11 @@ pub fn new_events(tasks: &[Obj], seen: Option<&Obj>) -> (Vec<Happened>, Obj, boo
     let mut next = Obj::new();
     let mut events = vec![];
     for t in tasks {
-        let marks = marks_of(t);
         let had = seen.and_then(|s| s.get(t.s("id"))).map(strings);
+        let marks = crate::stalled::with_kept(t, marks_of(t), had.as_deref().unwrap_or(&[]));
         next.put(t.s("id"), marks.clone());
         if t.b("archivedAt") { continue; }
-        let mut new: Vec<&String> = marks.iter().filter(|m| !had.as_ref().map(|h| h.contains(m)).unwrap_or(false)).collect();
+        let mut new: Vec<&String> = marks.iter().filter(|m| had.as_ref().map(|h| is_new(m, h)).unwrap_or(true)).collect();
         new.dedup_by(|a, b| a.starts_with("stalled:") && b.starts_with("stalled:")); // its stalls, side by side: one event
         for m in new { events.push(Happened { event: m.split(':').next().unwrap_or("").into(), task: t.clone(), at: mark_at(t, m) }); }
     }

@@ -43,9 +43,16 @@ fn an_automation_waiting_for_a_stall_fires_once_when_the_screen_shows_nothing_ne
     assert_eq!(stalls_of(&a, &id).len(), 1, "{:?}", firings_of(a.s("id")));
     minutes_on(&w, 15);
     assert_eq!(stalls_of(&a, &id).len(), 1, "once per stall");
-    // the task it made is done; the agent's screen moves on, then shows nothing new again: a new stall, after twenty minutes more
+    // the task it made is done (another firing would make one); its agent shows a dialog for two minutes and works on
+    // with the same screen: the same stall, never heard of again
     let made = firings_of(a.s("id")).iter().find(|f| f.b("task")).map(|f| f.t("task")).unwrap();
     sw::store::tasks::patch(&made, |t| t.put("stage", "done")).unwrap();
+    let pane = task(&id).at("link").t("pane");
+    set_status(&w, &pane, "blocked"); minutes_on(&w, 2);
+    assert_eq!((task(&id).s("stage"), task(&id).at("last").s("status")), ("working", "blocked"));
+    set_status(&w, &pane, "working"); minutes_on(&w, 2);
+    assert_eq!(stalls_of(&a, &id).len(), 1, "a status that flapped: {:?}", firings_of(a.s("id")));
+    // the agent's screen moves on, then shows nothing new again: a new stall, after twenty minutes more
     screen(&w, &id, "● Fixing the two failing tests\n");
     minutes_on(&w, 19);
     assert_eq!(stalls_of(&a, &id).len(), 1, "new output re-arms it, counting again from then");
@@ -77,10 +84,11 @@ fn a_task_that_waits_for_you_or_one_under_stall_after_none_never_stalls() {
 }
 
 #[test]
-fn a_task_of_its_own_that_stalls_wakes_its_coordinator_on_autopilot_once() {
+fn a_task_of_its_own_that_stalls_wakes_its_coordinator_on_autopilot_once_also_with_its_slots_full() {
     let w = pilot_world();
     let co = proj(&w);
-    ok(&["autopilot", "on", "--project", "proj", "--goal", "Docs", "--autopilot.every", "none", "--autopilot.gap", "1m", "--autopilot.when", "stalled"]);
+    // one task at once: the one that stalls fills it, and a stall needs looking after all the same
+    ok(&["autopilot", "on", "--project", "proj", "--goal", "Docs", "--autopilot.every", "none", "--autopilot.gap", "1m", "--autopilot.when", "stalled", "--autopilot.tasksAtOnce", "1"]);
     keeper(&w); keeper(&w);
     assert_eq!(prompts_of(&w, &co).len(), 1, "the wake of turning on");
     assert_eq!(record(&co).arr("wakes")[0].at("answered"), &json!(true));
@@ -94,8 +102,14 @@ fn a_task_of_its_own_that_stalls_wakes_its_coordinator_on_autopilot_once() {
     assert_eq!(prompts_of(&w, &co).len(), 2, "{:?}", prompts_of(&w, &co));
     let said = prompts_of(&w, &co)[1].clone();
     assert!(said.starts_with(&format!("Autopilot: {} has shown nothing new for 2", short(&id))), "{said}");
+    let shown = ok(&["autopilot", "show", "--project", "proj"]);
+    assert!(shown.contains("Today: 1 of 5 added · 1 of 1 under way") && shown.contains(&format!("Needs looking after: {} (has stalled)", short(&id))), "{shown}");
     minutes_on(&w, 20);
     assert_eq!(prompts_of(&w, &co).len(), 2, "once per stall");
+    // its status flaps: still the same stall
+    let pane = task(&id).at("link").t("pane");
+    set_status(&w, &pane, "blocked"); minutes_on(&w, 2); set_status(&w, &pane, "working"); minutes_on(&w, 12);
+    assert_eq!(prompts_of(&w, &co).len(), 2, "{:?}", prompts_of(&w, &co));
 }
 
 #[test]

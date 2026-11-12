@@ -41,12 +41,12 @@ pub fn look(co: &Co, ap: &mut Obj, board: &[Obj], when: &str, approve: bool, ret
         let id = t.t("id");
         // Another machine's task of its own, seen over: its slot is free also once that machine is heard no more.
         if t.b("host") && super::care::over(t) && task_rec(ap, &id).map(|r| !r.b("over")).unwrap_or(false) { with_task(ap, &id, |r| { r.put("over", true); }); }
-        let marks = marks_of(ap, t, approve);
         let had: Vec<String> = seen.get(&id).map(strings).unwrap_or_default();
+        let marks = crate::stalled::with_kept(t, marks_of(ap, t, approve), &had); // a stall for as long as it stands
         next.put(&id, marks.clone());
         // Never seen and from before it was turned on (another machine's, heard only now): nothing new happened.
         if first || t.b("archivedAt") || (had.is_empty() && t.i("created") < ap.i("since")) { continue; }
-        for m in marks.iter().filter(|m| !had.contains(m)) {
+        for m in marks.iter().filter(|m| crate::stalled::is_new(m, &had)) {
             match m.split(':').next().unwrap_or("") {
                 "added" if !added_by(co, t) && wants("added") => out.push(reason("added", &id, &format!("{} was added", tag(&id)))),
                 "done" if wants("done") => out.push(reason("done", &id, &format!("{} finished", tag(&id)))),

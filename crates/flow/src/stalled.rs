@@ -3,8 +3,10 @@
 //! keeper and an open board judge alike: its screen's last change (watcher/output.rs) and the Watcher's guess with when
 //! it last moved (`watch.movedAt`). Judged only while the board looks at that screen: a look older than FRESH_MS says
 //! nothing. Each stall is one mark, `stalled:quiet:<since>:<at>` or `stalled:late:<guess>:<at>`, that automations
-//! (automations/events.rs) and autopilot (autopilot/events.rs) fire once; new output, or a guess that moved, makes the
-//! next stall a new mark. A hint that something may hang, never proof of it: nothing is stopped.
+//! (automations/events.rs) and autopilot (autopilot/events.rs) fire once. A stall seen is remembered until something
+//! re-arms it (new output, a new run, a guess that moved), also while the task does not stall for a moment (a dialog,
+//! a status that flapped), so the same stall is never heard of twice. A hint that something may hang, never proof of
+//! it: nothing is stopped.
 use crate::flow::task::is_agent_task;
 use crate::json::*;
 use crate::shown::words::age;
@@ -40,6 +42,28 @@ pub fn stalls(t: &Obj, now: i64) -> Vec<Stall> {
 }
 /// Its stalls as marks: `stalled:quiet:<since>:<at>`.
 pub fn marks(t: &Obj, now: i64) -> Vec<String> { stalls(t, now).iter().map(|s| format!("stalled:{}:{}:{}", s.how, s.since, s.at)).collect() }
+/// A mark as it is told apart: a stall by its kind and since, whenever it counts from (`stall.after` changed, the looks
+/// began again); any other mark as it is.
+pub fn key(mark: &str) -> &str { if mark.starts_with("stalled:") { mark.rsplit_once(':').map(|(k, _)| k).unwrap_or(mark) } else { mark } }
+/// Is this mark new against those seen before?
+pub fn is_new(mark: &str, had: &[String]) -> bool { !had.iter().any(|h| key(h) == key(mark)) }
+/// The marks of a look, with the stalls seen before that still stand though the task does not stall right now.
+pub fn with_kept(t: &Obj, mut marks: Vec<String>, had: &[String]) -> Vec<String> {
+    for h in had.iter().filter(|h| h.starts_with("stalled:")) { if is_new(h, &marks) && stands(t, h) { marks.push(h.clone()); } }
+    marks
+}
+/// A stall stands while its task still works and nothing re-armed it: for a quiet one no new output and no new run since,
+/// for a late one the same guess.
+fn stands(t: &Obj, mark: &str) -> bool {
+    if t.b("archivedAt") || t.s("stage") != "working" { return false; }
+    let mut p = mark.split(':').skip(1);
+    let (how, since) = (p.next().unwrap_or(""), p.next().and_then(|x| x.parse::<i64>().ok()).unwrap_or(-1));
+    match how {
+        "quiet" => began(t, "agent").max(t.at("output").i("at")) <= since,
+        "late" => t.at("watch").s("role") == "agent" && t.at("watch").i("movedAt") == since,
+        _ => false,
+    }
+}
 /// A stall's mark in a few words, after the task's name: `has shown nothing new for 25m`, `ran well past its estimate`.
 pub fn say(mark: &str, now: i64) -> String {
     let mut p = mark.split(':').skip(1);

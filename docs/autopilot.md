@@ -140,7 +140,8 @@ stalled: no check-in for 3h, last 4 wakes added nothing`.
 
 **No wake while** it is off; it says `needs you`; it is outside `autopilot.hours`; it is within `autopilot.gap` of the end
 of its last wake's turn or of a turn of yours; `autopilot.wakesPerDay` are used today; it is mid-turn, or a message of
-yours waits for it; or it has no room and none of its tasks needs looking after. The reasons are kept and go out as one
+yours waits for it; or it has no room and none of its tasks needs looking after (one that stalls does: its slots full
+of hung work still wake it). The reasons are kept and go out as one
 wake when that ends. A reason that is only the timer is dropped if the look then finds nothing new.
 
 **You come first.** At most one wake waits in its queue. When a message of yours is queued, a wake not yet typed in is
