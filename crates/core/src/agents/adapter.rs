@@ -104,7 +104,8 @@ pub fn transcript(kind: &str, session: &str, cwd: &Path) -> Option<PathBuf> {
             let want = format!("{session}.jsonl");
             find_file(&claude_home().join("projects"), &|n| n == want, 1).into_iter().next()
         }
-        "codex" => { let want = format!("{session}.jsonl"); find_file(&codex_home().join("sessions"), &|n| n.ends_with(&want), 4).into_iter().next() }
+        // Only the day folder its id names (codex_files.rs), never every day of a long history.
+        "codex" => super::codex_files::transcript(session),
         // Also where it was saved before its folder moved (the Coordinator's, under the board's old home).
         "pi" => { let (want, was) = (format!("_{session}.jsonl"), crate::store::move_home::moved_from(cwd)); pi_files(&[Some(cwd), was.as_deref()].into_iter().flatten().collect::<Vec<_>>(), &|n| n.ends_with(&want)).into_iter().next() }
         _ => None,
