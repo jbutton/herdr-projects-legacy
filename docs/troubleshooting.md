@@ -117,6 +117,10 @@ Find what its row says:
 **An agent shows a dialog** (a permission prompt, a question with choices): the chat says so. Press `Enter` to go into the
 agent and answer it there.
 
+**A review fails as `Needs a login`** before any reviewer tab opened: the reviewer's program says it is signed out on
+this machine (`codex login status`). Run what the failure names (`codex login`) in a terminal, then retry; or set a
+`reviewer.fallback` that is signed in ([the reviewer's own start-up screens](how-work-gets-done.md#the-reviewers-own-start-up-screens)).
+
 **An agent asked a question in plain words and stopped**: the board takes that as finished and reviews it. Reply to the
 agent, and it goes on ([an agent that waits for you](waiting-for-you.md)).
 
@@ -128,6 +132,9 @@ task panel ends in `Kept:` and says why:
 | It says | Why | What to do |
 |---|---|---|
 | `(uncommitted changes)` | its checkout has files that were never committed | look at them; reply to the task, or remove the worktree yourself |
+| `(uncommitted changes in its submodules)` | a submodule checked out in it, or one nested in that, has a change, maybe one a repo tells `git status` to leave out (`ignore = all`) | look at it: `git -C <worktree> submodule foreach --recursive git status --ignore-submodules=none`; reply to the task, or remove the worktree yourself (`git worktree remove --force`: git removes one with submodules only so) |
+| `(commits in its submodule <name> found nowhere else)` | that submodule has a commit no remote branch of it has: it would go with the worktree | push them from `<worktree>/<name>`, then remove the worktree yourself (`--force`, as above) |
+| `(its submodules could not be looked at)` | git failed on its submodules (a broken `.gitmodules`) | look at `git -C <worktree> submodule status`, then remove the worktree yourself |
 | `(unmerged work on <branch>)` | its branch holds commits that were not merged | merge them, or reply to the task to go on with them |
 | `(its space is in use: a turn in its agent's terminal)` | you talked to its agent in its own terminal | nothing: it is tried again about every half minute, and closes once the agent has been quiet a while |
 | `(its space is in use beside its agent: <process> (pid <n>) <why>)` | a process runs in the agent's pane that is not one of its helpers; `<why>` says what is wrong with it (below) | end it if it is yours, and the space closes on the next try |

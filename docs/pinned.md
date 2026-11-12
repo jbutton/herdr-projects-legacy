@@ -26,8 +26,8 @@ Pinning moves nothing: the row stays where it always sorts and gets a small yell
   tag, a machine by its name, a project by its name or its key; `--on MACHINE` for another machine's project, and
   `vm-b:web/7` for another machine's task. `pin` pins whatever it was, `unpin` unpins.
   `herdr-projects list --pinned` lists what is pinned on this machine: the machine, its projects, its tasks.
-- A pinned done task is never archived by `archive --done`. An archived task or project cannot be pinned; a pinned
-  project that is archived leaves the Pinned filter until it is restored.
+- A pinned done task is never archived by `archive --done`, nor by itself (`archive.doneAfter`). An archived task or
+  project cannot be pinned; a pinned project that is archived leaves the Pinned filter until it is restored.
 
 ## The Pinned filter
 

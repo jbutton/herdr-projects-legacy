@@ -57,6 +57,7 @@ pub fn agent(f: &F, verb: &str, arg2: &str, argv: &[String], flag: &dyn Fn(&str)
             if refused { return fail("invalid_input", &canonical); }
             let d = st.at("dialogs").i(&kind);
             if d > 0 { st["dialogs"][&kind] = json!(d - 1); st["panes"][pi]["agent"]["status"] = json!("blocked"); return fail("agent_not_ready", &format!("agent {arg2} is blocked during startup and is not ready for prompts")); }
+            if let Some(held) = held_screen(&st, &kind, &rest) { let a = &mut st["panes"][pi]["agent"]; a["held"] = json!(true); a["screen"] = json!(held); }
             let p = st["panes"][pi].clone();
             return ok(json!({ "type": "agent_started", "agent": F::agent_out(&p) }));
         }
@@ -76,6 +77,8 @@ pub fn agent(f: &F, verb: &str, arg2: &str, argv: &[String], flag: &dyn Fn(&str)
         "prompt" => {
             if st["panes"][pi]["agent"].s("status") == "blocked" { return fail("agent_blocked", "agent is blocked"); }
             let typed = read_named(&argv.get(3).cloned().unwrap_or_default());
+            // Its own start-up screen (held_screen): the text is lost, its enter picks the first choice, the counters move.
+            if st["panes"][pi]["agent"].b("held") { arr(&mut st["panes"][pi]["agent"], "lost").push(json!(typed)); F::bump(&mut st, pi, "done", true); let p = st["panes"][pi].clone(); return ok(json!({ "type": "agent_prompted", "agent": F::agent_out(&p) })); }
             let box_ = st["panes"][pi]["agent"].at("box").clone();
             let text = if box_.is_string() { format!("{}\n{typed}", text_of(&box_)) } else { typed };
             if st["panes"][pi]["agent"].i("boot") > 0 || st.i("swallow") > 0 {
@@ -109,6 +112,15 @@ pub fn agent(f: &F, verb: &str, arg2: &str, argv: &[String], flag: &dyn Fn(&str)
         "read" => out(st["panes"][pi]["agent"].s("screen")),
         _ => fail("unknown_command", "agent"),
     }
+}
+/// A screen of the program's own before its prompt that herdr reads as `idle` (seen with codex 0.167.2 under herdr
+/// 0.9.3, docs/checked-on-herdr.md): the sign-in page of a kind in `signedOut`, and Codex's "Hooks need review" for a
+/// kind in `hooksToReview` (a hook new or changed) unless it was started with its hooks off.
+fn held_screen(st: &Value, kind: &str, args: &[Value]) -> Option<String> {
+    let listed = |key: &str| st.at(key).as_array().map(|l| l.iter().any(|k| text(k) == kind)).unwrap_or(false);
+    if listed("signedOut") { return Some("  Welcome to Codex, OpenAI's command-line coding agent\n\n  Choose how you want to use Codex.\n\n> 1. Sign in with ChatGPT\n     Usage included with Plus, Pro, Business, and Enterprise plans\n  2. Sign in with Device Code\n  3. Sign in another way\n\n  Press enter to continue\n".into()); }
+    if listed("hooksToReview") && !args.iter().any(|a| text(a) == "features.hooks=false") { return Some("  Hooks need review\n  1 hook is new or changed.\n  Hooks can run outside the sandbox after you trust them.\n\n› 1. Review hooks\n  2. Trust all and continue\n  3. Continue without trusting (hooks won't run)\n\n  enter confirm · esc skip\n".into()); }
+    None
 }
 /// A message handed over in a file (too long to type in): the agent reads that file, and takes it as the message.
 fn read_named(typed: &str) -> String {
