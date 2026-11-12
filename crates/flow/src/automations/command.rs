@@ -23,7 +23,7 @@ pub const HOW: &str = "automations takes:
   automations add \"<name>\" --prompt \"<what its task is to do>\" (--schedule \"<when>\" | --when <event> [--every-repo] [--if '…'])
                   [--repo NAME|PATH] [--<setting> VALUE ...] [--research|--no-research] [--chat|--no-chat]
       --schedule   every 2h · daily 09:00 · mon 09:00 · mon,thu 09:00 · cron \"0 9 * * 1\"   (this machine's time zone)
-      --when       added · approval · review-failed · failed · needs-you · merged   (a task of its repo; --every-repo: of any)
+      --when       added · approval · review-failed · failed · needs-you · stalled · merged   (a task of its repo; --every-repo: of any)
       --if         only for a task like this: 'branch = feature/KIC-*' · 'title != *wip*'   (branch, title or repo; * anything, ? one)
   automations show <name>                       all of it: prompt, trigger, settings, last firings
   automations change <name> [--name NEW] [--prompt TEXT] [--schedule … | --when …] [--if '…' | --if none] [--research | --no-research] [--chat | --no-chat]

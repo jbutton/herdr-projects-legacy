@@ -1,6 +1,7 @@
-//! A stalled task: its agent works, but its screen shows nothing new for `stall.after` (20 minutes by default). An
-//! automation that waits for it (`--when stalled`) and a coordinator on autopilot (`autopilot.when stalled`) hear of
-//! each stall once; new output re-arms it.
+//! A stalled task: its agent works, but its screen shows nothing new for `stall.after` (20 minutes by default), or it
+//! runs past the Watcher's estimate by as much again. An automation that waits for it (`--when stalled`) and a
+//! coordinator on autopilot (`autopilot.when stalled`) hear of each stall once; new output or a moved guess re-arms it,
+//! and a gap in looking (the machine slept) is never counted as quiet.
 use crate::common;
 use common::pilot::{ok, pilot_world, prompts_of, proj, record};
 use common::*;
@@ -20,7 +21,7 @@ fn screen(w: &World, id: &str, s: &str) {
     w.patch(|st| { for p in st["panes"].as_array_mut().unwrap() { if p.s("pane_id") == pane { p["agent"]["screen"] = json!(s); } } });
 }
 /// A task whose agent works on, its screen as the script left it.
-fn working(w: &World, id: &str) {
+fn working(id: &str) {
     settle(id);
     assert_eq!((task(id).s("stage"), task(id).at("last").s("status")), ("working", "working"), "{:?}", task(id));
 }
@@ -32,7 +33,7 @@ fn an_automation_waiting_for_a_stall_fires_once_when_the_screen_shows_nothing_ne
     sw::clock::set(Some(sw::clock::now()));
     let a = l::add(Add { name: "Look at a stall", prompt: "See why it stopped.", trigger: Some(parse_event("stalled", false).unwrap()), repo: "", folder: &w.root, settings: Obj::new(), research: None }).unwrap();
     w.script(json!({ "worker": [{ "status": "working", "screen": "● Running the tests\n" }] }));
-    let id = w.add("Slow one"); delegate(&id); working(&w, &id);
+    let id = w.add("Slow one"); delegate(&id); working(&id);
     keeper(&w);
     // nineteen minutes with nothing new on its screen: not yet
     minutes_on(&w, 19);
@@ -58,7 +59,7 @@ fn a_task_that_waits_for_you_or_one_under_stall_after_none_never_stalls() {
     sw::clock::set(Some(sw::clock::now()));
     let a = l::add(Add { name: "Look at a stall", prompt: "See why it stopped.", trigger: Some(parse_event("stalled", true).unwrap()), repo: "", folder: &w.root, settings: Obj::new(), research: None }).unwrap();
     w.script(json!({ "worker": [{ "status": "working", "screen": "● Running the tests\n" }] }));
-    let id = w.add("Never stalls"); delegate(&id); working(&w, &id);
+    let id = w.add("Never stalls"); delegate(&id); working(&id);
     ok(&["set", "stall.after", "none", "--task", &id]);
     minutes_on(&w, 30);
     assert!(stalls_of(&a, &id).is_empty(), "stall.after none: {:?}", firings_of(a.s("id")));
@@ -68,7 +69,8 @@ fn a_task_that_waits_for_you_or_one_under_stall_after_none_never_stalls() {
     minutes_on(&w, 6);
     assert_eq!(stalls_of(&a, &id).len(), 1);
     // waiting for you is not a stall: its agent asks
-    let other = w.add("Asks"); delegate(&other); working(&w, &other);
+    w.script(json!({ "worker": [{ "status": "working", "screen": "● Reading the code\n" }] }));
+    let other = w.add("Asks"); delegate(&other); working(&other);
     sw::store::tasks::patch(&other, |t| { t.put("stage", "asks"); t.put("kind", "question"); }).unwrap();
     minutes_on(&w, 30);
     assert!(stalls_of(&a, &other).is_empty(), "{:?}", firings_of(a.s("id")));
@@ -84,7 +86,7 @@ fn a_task_of_its_own_that_stalls_wakes_its_coordinator_on_autopilot_once() {
     assert_eq!(record(&co).arr("wakes")[0].at("answered"), &json!(true));
     w.script(json!({ "worker": [{ "status": "working", "screen": "● Running the tests\n" }] }));
     let id = sw::autopilot::add::add(&co, &w.root, "Its own", Default::default(), &[], false).unwrap().task.t("id");
-    working(&w, &id);
+    delegate(&id); working(&id);
     keeper(&w);
     minutes_on(&w, 19);
     assert_eq!(prompts_of(&w, &co).len(), 1, "{:?}", prompts_of(&w, &co));
@@ -94,4 +96,59 @@ fn a_task_of_its_own_that_stalls_wakes_its_coordinator_on_autopilot_once() {
     assert!(said.starts_with(&format!("Autopilot: {} has shown nothing new for 2", short(&id))), "{said}");
     minutes_on(&w, 20);
     assert_eq!(prompts_of(&w, &co).len(), 2, "once per stall");
+}
+
+#[test]
+fn a_task_well_past_the_watchers_estimate_stalls_once_though_its_screen_moves_and_a_moved_guess_re_arms_it() {
+    let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never", "watcher.agent": "claude" }), ..Default::default() });
+    sw::clock::set(Some(sw::clock::now()));
+    let a = l::add(Add { name: "Look at a stall", prompt: "See why it stopped.", trigger: Some(parse_event("stalled", false).unwrap()), repo: "", folder: &w.root, settings: Obj::new(), research: None }).unwrap();
+    w.script(json!({ "worker": [{ "status": "working", "screen": "● Running the tests\n" }] }));
+    let id = w.add("Loops"); delegate(&id); working(&id);
+    sw::store::tasks::patch(&id, |t| { t.put("since", sw::clock::now() - 9 * MIN); t.put("workAt", 0); }).unwrap(); // ten minutes in at the Watcher's first guess, a minute on
+    sw::watcher::watcher_reset();
+    let guess = std::cell::Cell::new(50);
+    // a minute: its screen moves on, the board looks at it, the Watcher guesses (the same percent until told), the automations look
+    let minute = |n: i64| {
+        sw::clock::advance(MIN);
+        screen(&w, &id, if n % 2 == 0 { "● Running the tests again\n" } else { "● Reading the same failure\n" }); // digits are no change
+        let rows = sw::flow::live::board(true);
+        sw::watcher::output::look(&rows, sw::clock::now());
+        sw::watcher::watch_tick_with(&rows, sw::clock::now(), Some(0.0), &|_, _, done| done(0, json!([{ "n": 1, "msg": "running the tests again", "progress": guess.get() }]).to_string(), String::new()));
+        sw::automations::tick::automations_tick(sw::clock::now());
+    };
+    // at 50% after ten minutes: ten minutes left. Past them by as much again, at least stall.after (20m): thirty minutes on
+    for n in 0..29 { minute(n); }
+    assert!(stalls_of(&a, &id).is_empty(), "never quiet, and not yet past its estimate: {:?}", firings_of(a.s("id")));
+    minute(29); minute(30);
+    assert_eq!(stalls_of(&a, &id).len(), 1, "{:?}", task(&id).at("watch"));
+    for n in 31..40 { minute(n); }
+    assert_eq!(stalls_of(&a, &id).len(), 1, "once per stall");
+    // its guess moves: a new estimate, so no stall until that one runs out too
+    let made = firings_of(a.s("id")).iter().find(|f| f.b("task")).map(|f| f.t("task")).unwrap();
+    sw::store::tasks::patch(&made, |t| t.put("stage", "done")).unwrap();
+    guess.set(80);
+    for n in 40..60 { minute(n); }
+    assert_eq!(stalls_of(&a, &id).len(), 1, "{:?}", task(&id).at("watch"));
+}
+
+#[test]
+fn a_gap_in_looking_is_never_counted_as_quiet() {
+    use sw::watcher::output::{noted, FRESH_MS, NOTE_MS};
+    let first = noted(&json!(null), "aa", 1000).unwrap();
+    assert_eq!(first, json!({ "hash": "aa", "at": 1000, "seen": 1000, "from": 1000 }));
+    assert_eq!(noted(&first, "aa", 1000 + MIN), None, "the same words a minute on: nothing to write");
+    let later = noted(&first, "aa", 1000 + NOTE_MS).unwrap();
+    assert_eq!((later.i("at"), later.i("seen"), later.i("from")), (1000, 1000 + NOTE_MS, 1000), "the look itself, now and then");
+    assert_eq!(noted(&later, "bb", 2 * NOTE_MS).unwrap().i("at"), 2 * NOTE_MS, "new words");
+    let woke = noted(&later, "aa", 1000 + NOTE_MS + FRESH_MS + 1).unwrap();
+    assert_eq!((woke.i("at"), woke.i("from")), (1000 + NOTE_MS + FRESH_MS + 1, 1000 + NOTE_MS + FRESH_MS + 1), "after a gap the count starts again");
+    // a task judged from what it keeps: quiet only while it is looked at
+    let _w = world();
+    let t = |o: serde_json::Value| obj(json!({ "id": "proj/1", "stage": "working", "link": { "pane": "p1" }, "last": { "status": "working" }, "since": 0, "output": o }));
+    let now = 100 * MIN;
+    assert_eq!(sw::stalled::marks(&t(json!({ "hash": "aa", "at": 0, "seen": now - MIN, "from": 0 })), now), [format!("stalled:quiet:0:{}", 20 * MIN)]);
+    assert!(sw::stalled::marks(&t(json!({ "hash": "aa", "at": 0, "seen": now - FRESH_MS - 1, "from": 0 })), now).is_empty(), "a last look too old says nothing");
+    assert!(sw::stalled::marks(&t(json!(null)), now).is_empty(), "never looked at");
+    assert_eq!(sw::stalled::say("stalled:quiet:0:1200000", 25 * MIN), "has shown nothing new for 25m");
 }
