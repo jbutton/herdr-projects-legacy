@@ -175,7 +175,7 @@ fn merge_by_none_takes_your_approved_pull_request_out_of_githubs_merge_queue_and
     assert_eq!((t.t("stage"), t.b("autoMerge"), t.at("failure").t("title")), ("merging".into(), true, "Still in GitHub's merge queue".into()));
     assert!(t.at("failure").s("detail").contains("Could not dequeue the pull request"), "{}", t.at("failure"));
     let log = gh_log(&w);
-    assert!(log.contains("pr merge 7 --disable-auto") && log.contains("dequeuePullRequest"), "{log}");
+    assert!(log.contains("pr merge https://github.com/o/r/pull/7 --disable-auto") && log.contains("dequeuePullRequest"), "{log}");
     // the queue is asked of GitHub's GraphQL API: `gh pr view --json` has no field for it, and refuses one
     assert!(log.lines().any(|l| l.starts_with("api graphql -f owner=o -f name=r -F number=7 ") && l.contains("isInMergeQueue")) && !log.lines().any(|l| l.starts_with("pr view") && l.contains("isInMergeQueue")), "{log}");
     // GitHub takes it out: the task waits for code review, its failure gone

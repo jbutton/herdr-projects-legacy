@@ -4,7 +4,7 @@
 use crate::actions::finish_line::send_failure;
 use crate::clock::now;
 use crate::finish::shared::approval_message;
-use crate::flow::{git::{board_comment, drop_remote_branch, gh, gh_user, pr_number, remote_head, CHECK_BAD, CHECK_GOOD}, sidebar::tell_sidebar, spaces::tidy_mark};
+use crate::flow::{git::{board_comment, drop_remote_branch, gh, gh_user, remote_head, CHECK_BAD, CHECK_GOOD}, sidebar::tell_sidebar, spaces::tidy_mark};
 use crate::json::*;
 use crate::land::{checks, readable};
 use crate::runner::{runner_alive, spawn_runner};
@@ -199,7 +199,7 @@ fn poll_one(id: &str, pr: &str, j: &Value, via: &str) {
             let t = get(id).unwrap_or(t);
             drop_remote_branch(&root, t.s("branch"), &if mode == "always" { if head.is_empty() { t.t("prHead") } else { head.clone() } } else { String::new() });
         }
-        Then::Unreviewed => { tell_sidebar(&t); if legacy { gh(&["pr", "merge", &pr_number(pr), "--disable-auto"], &root, 60000); } }
+        Then::Unreviewed => { tell_sidebar(&t); if legacy { gh(&["pr", "merge", pr, "--disable-auto"], &root, 60000); } }
         Then::Closed => tell_sidebar(&t),
         Then::Land => { spawn_runner("land", id, &[]); }
         Then::Wake => {

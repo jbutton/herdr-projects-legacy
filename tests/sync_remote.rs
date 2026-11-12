@@ -189,6 +189,6 @@ fn with_approve_main_moving_at_the_remote_makes_no_merge_and_no_push_while_it_wa
     let t = settle(&calm);
     assert_eq!(t.s("stage"), "done", "{}", t.at("failure"));
     // merged through its pull request at a commit that holds main, the one pushed after main was merged in
-    let at = gh_log(&w).lines().filter_map(|l| l.strip_prefix("pr merge 7 --squash --match-head-commit ")).last().unwrap_or("").to_string();
+    let at = gh_log(&w).lines().filter_map(|l| l.strip_prefix("pr merge https://github.com/o/r/pull/7 --squash --match-head-commit ")).last().unwrap_or("").to_string();
     assert!(w.gh.merged.get()); assert!(!at.is_empty() && common::worktrees::git(&w.base.join("origin.git"), &["merge-base", "--is-ancestor", &target, &at]).is_ok(), "merged at a commit that holds main: {at}");
 }
