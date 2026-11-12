@@ -7,7 +7,9 @@ use sw::herdr::cli::{Fake, Ran};
 use sw::herdr::procs::Wiring;
 use sw::json::*;
 
-pub struct FakeHerdr { pub st: RefCell<Value>, pub dir: std::path::PathBuf, pub script: RefCell<Value>, pub env: Vec<(String, String)> }
+/// `during`: what a test said happens while herdr answers a call, by the call's first words, each once (World::during).
+pub struct FakeHerdr { pub st: RefCell<Value>, pub dir: std::path::PathBuf, pub script: RefCell<Value>, pub env: Vec<(String, String)>, pub during: During }
+pub type During = RefCell<Vec<(String, Box<dyn FnOnce()>)>>;
 pub struct Exit(pub i32, pub String, pub String);
 pub type Out = Result<Exit, Exit>;
 pub fn ok(result: Value) -> Out { Err(Exit(0, format!("{}\n", json!({ "id": "fake", "result": result })), String::new())) }
@@ -18,25 +20,31 @@ pub fn arr<'a>(v: &'a mut Value, k: &str) -> &'a mut Vec<Value> { if !v.at(k).is
 
 impl Fake for FakeHerdr {
     fn run(&self, args: &[String], _input: &str) -> Ran {
+        let call = args.join(" ");
+        let now: Vec<_> = { let mut d = self.during.borrow_mut(); let (now, later) = d.drain(..).partition(|(w, _)| call.starts_with(w.as_str())); *d = later; now };
+        for (_, f) in now { f(); }
         let r = self.answer(args);
         let Exit(status, stdout, stderr) = match r { Ok(e) | Err(e) => e };
         Ran { status, stdout, stderr }
     }
     /// pid 1 is an agent with one process under it: 2, wired to it (an MCP server), or 3, which is not (`child`, `wrapped`).
     /// A helper that is a language server (`helper: "lsp"`) has one of its own, 4, in a group of its own; one the agent
-    /// started in a group of its own (`helper: "own"`) is 5, wired to the agent
-    fn kids(&self, pid: i64) -> Vec<i64> { let h = |v: &str| self.st.borrow().arr("panes").iter().any(|p| p.s("helper") == v); if pid == 2 && h("lsp") { vec![4] } else if pid == 1 && h("own") { vec![5] } else if pid != 1 { vec![] } else if self.st.borrow().arr("panes").iter().any(|p| p.b("child") || p.b("wrapped")) { vec![3] } else { vec![2] } }
+    /// started in a group of its own (`helper: "own"`) is 5, wired to the agent; `uv tool run` (`helper: "uv"`) runs
+    /// its MCP server, 6, in the agent's group
+    fn kids(&self, pid: i64) -> Vec<i64> { let h = |v: &str| self.st.borrow().arr("panes").iter().any(|p| p.s("helper") == v); if pid == 2 && h("lsp") { vec![4] } else if pid == 2 && h("uv") { vec![6] } else if pid == 1 && h("own") { vec![5] } else if pid != 1 { vec![] } else if self.st.borrow().arr("panes").iter().any(|p| p.b("child") || p.b("wrapped")) { vec![3] } else { vec![2] } }
     fn wired_to(&self, pid: i64, group: &[i64]) -> Option<bool> { self.wiring(pid, group).wired() }
-    /// 2 and 5 are wired to the agent (but 2 is a dev server, `tool`); 3 streams to the terminal, or (`child` says) is wired to a
-    /// file, closed, or cannot be looked at
+    /// 2 and 5 are wired to the agent (but 2 is a dev server, `tool`); 6 is not, its input being `/dev/null`; 3 streams to
+    /// the terminal, or (`child` says) is wired to a file, closed, or cannot be looked at
     fn wiring(&self, pid: i64, _group: &[i64]) -> Wiring {
         if (pid == 2 && !self.st.borrow().arr("panes").iter().any(|p| p.b("tool"))) || pid == 5 { return Wiring::Agent; }
+        if pid == 6 { return Wiring::Elsewhere; }
         match self.st.borrow().arr("panes").iter().find(|p| p.b("child")).map(|p| p.t("child")).as_deref() { Some("file") => Wiring::Elsewhere, Some("closed") => Wiring::Closed, Some("unknown") => Wiring::Unknown, _ => Wiring::Terminal }
     }
-    /// 2 is an MCP server, or a dev server the agent left running (`tool`); 3 a command; 4 a language server's own
+    /// 2 is an MCP server, or a dev server the agent left running (`tool`); 3 a command; 4 a language server's own; 6
+    /// the MCP server `uv tool run` runs
     fn command(&self, pid: i64) -> Option<String> {
         let tool = self.st.borrow().arr("panes").iter().any(|p| p.b("tool"));
-        match pid { 2 if tool => Some("node /srv/app/dev-server.js --port 3000".into()), 2 => Some("node /opt/mcp/server.js --stdio".into()), 3 => Some("sleep 600".into()), 4 => Some("gopls telemetry".into()), 5 => Some("gopls".into()), _ => None }
+        match pid { 2 if tool => Some("node /srv/app/dev-server.js --port 3000".into()), 2 => Some("node /opt/mcp/server.js --stdio".into()), 6 => Some("/usr/bin/python3 /home/me/.cache/uv/archive-v0/x/bin/analytics-mcp".into()), 3 => Some("sleep 600".into()), 4 => Some("gopls telemetry".into()), 5 => Some("gopls".into()), _ => None }
     }
     /// Ending a fake agent's process: its pane is at its shell again. Every process ended is noted (`killed`).
     fn kill(&self, pid: i64) {
@@ -44,8 +52,8 @@ impl Fake for FakeHerdr {
         arr(&mut st, "killed").push(json!(pid));
         for p in st["panes"].as_array_mut().unwrap() { if p.at("agent").i("pid") == pid { p["agent"] = Value::Null; } }
     }
-    /// 2 and 3 run until they are ended
-    fn alive(&self, pid: i64) -> Option<bool> { [2, 3].contains(&pid).then(|| !self.st.borrow().arr("killed").contains(&json!(pid))) }
+    /// 2, 3 and 6 run until they are ended
+    fn alive(&self, pid: i64) -> Option<bool> { [2, 3, 6].contains(&pid).then(|| !self.st.borrow().arr("killed").contains(&json!(pid))) }
     /// The herdr program cannot be found from here (`noProgram`): run where it is not on PATH nor anywhere usual.
     fn found(&self) -> bool { !self.st.borrow().b("noProgram") }
 }
@@ -148,6 +156,7 @@ impl FakeHerdr {
                     "focus" => { arr(&mut st, "focus").push(json!(format!("workspace {arg2}"))); return ok(json!({ "type": "workspace_info", "workspace": Self::ws_out(&st, &w) })); }
                     "rename" => { st["workspaces"][wi]["label"] = json!(argv[3..].join(" ")); let w = st["workspaces"][wi].clone(); return ok(json!({ "type": "workspace_info", "workspace": Self::ws_out(&st, &w) })); }
                     "report-metadata" => { arr(&mut st, "metadata").push(json!({ "workspace": arg2, "args": argv[3..] })); return ok(json!({ "type": "ok" })); }
+                    "close" if st.b("workspaceCloseFails") => return fail("timeout", "timed out"),
                     "close" => { arr(&mut st, "workspaces").remove(wi); arr(&mut st, "panes").retain(|p| p.s("workspace_id") != arg2); Self::drop_empty(&mut st); return ok(json!({ "type": "ok" })); }
                     _ => {}
                 }

@@ -1,17 +1,16 @@
 //! The merge itself, with the task in stage "merging": the last catch-up with main, then through the pull request (at
 //! the reviewed commit only), by a push to the branch it started from by name (direct.rs), or locally into the branch
-//! your checkout is on, squashed by default.
+//! your checkout is on, squashed by default (local.rs).
 use super::cleanup::tidy;
 use crate::clock::now;
 use crate::err::Res;
 use crate::finish::auto_merge::called_off;
 use crate::finish::line::take_turn;
 use crate::flow;
-use crate::flow::git::{gh, pr_number, CHECK_BAD, CHECK_GOOD};
+use crate::flow::git::{gh, CHECK_BAD, CHECK_GOOD};
 use crate::json::*;
 use crate::runner::{claim, is_aborted, release, Guard};
 use crate::store::failures::{failure_patch, is_auth_failure};
-use crate::store::keys::{repo_keys, task_ref};
 use crate::store::repos::{folder_of, git_out, git_slow};
 use crate::store::settings::lookup::setting_text;
 use crate::store::tasks::Task;
@@ -73,7 +72,7 @@ pub(super) fn reverify(id: &str, g: &mut Guard, t: &Task, why: &str, synced: Opt
 /// merges into it, and with none by a push of its own (direct.rs). False: it may not merge, and that was said on the task.
 fn onto_named(g: &mut Guard, t: &Task, root: &Path, b: &str) -> Res<bool> {
     if !t.b("pr") { return Ok(true); }
-    let r = gh(&["pr", "view", &pr_number(t.s("pr")), "--json", "baseRefName"], root, 60000);
+    let r = gh(&["pr", "view", t.s("pr"), "--json", "baseRefName"], root, 60000);
     let base = if r.status == 0 { serde_json::from_str::<Value>(&r.stdout).map(|v| v.t("baseRefName")).unwrap_or_default() } else { String::new() };
     // Not known is not "into b": nothing merges until GitHub says which branch it merges into.
     if base.is_empty() {
@@ -84,7 +83,7 @@ fn onto_named(g: &mut Guard, t: &Task, root: &Path, b: &str) -> Res<bool> {
     }
     if base == b { return Ok(true); }
     fail(g, &format!("The pull request merges into {base}, not {b}"), &format!("Pull request: {}\nIt merges into: {base}\nThis task started from, and lands on: {b}\n\nNothing was merged.", t.s("pr")),
-        &format!("Change the pull request's base back to {b} (gh pr edit {} --base {b}), then approve again.", pr_number(t.s("pr"))), no_fix())?;
+        &format!("Change the pull request's base back to {b} (gh pr edit {} --base {b}), then approve again.", t.s("pr")), no_fix())?;
     Ok(false)
 }
 /// Main could not be fetched right before the merge: nothing is merged, and nothing failed. The task waits for your
@@ -117,7 +116,6 @@ pub fn land_core(id: &str, g: &mut Guard) -> Res<()> {
     if !tree.is_empty() {
         let tp = Path::new(&tree);
         let pre = (|| -> Res<Option<&'static str>> {
-            if !t.b("pr") && direct.is_none() && !flow::git::dirty(&root).is_empty() { fail(g, "Merge needs a clean checkout", &format!("Checkout: {}\n{}", root.display(), flow::git::dirty(&root)), "Commit, stash or move your own unsaved files, then approve again. The agent must not alter your checkout.", no_fix())?; return Ok(Some("done")); }
             if git_out(tp, &["symbolic-ref", "--short", "HEAD"])? != t.s("branch") { fail(g, "Task is on the wrong branch", &tree, "Restore the task's own branch before retrying.", no_fix())?; return Ok(Some("done")); }
             // Approve refuses unless the worktree is clean and its HEAD is exactly the commit that was checked and reviewed.
             let vh = t.at("mergeIntent").t("verifiedHead");
@@ -151,8 +149,8 @@ pub fn land_core(id: &str, g: &mut Guard) -> Res<()> {
     t = g.check()?;
     if let Some(b) = &direct { return super::direct::land(id, g, &t, &tree, b, &how); }
     if t.b("pr") {
-        // By number, not link: gh then uses the repo's own remote for the host.
-        let pr = pr_number(t.s("pr"));
+        // By its link, not its number: gh then acts on the pull request's own repo, never on its default (flow/git.rs).
+        let pr = t.t("pr");
         // Only the commit that was checked and reviewed here may merge.
         let reviewed = t.at("mergeIntent").t("verifiedHead");
         if !reviewed.is_empty() {
@@ -206,39 +204,10 @@ pub fn land_core(id: &str, g: &mut Guard) -> Res<()> {
         let head = if reviewed.is_empty() { t.t("prHead") } else { reviewed.clone() };
         return landed(id, g, &t, &format!("Merged: {}", t.s("pr")), &head, &seen.at("mergeCommit").t("oid"));
     }
-    // No pull request: merge into the branch your checkout is on.
+    // No pull request: merge into the branch your checkout is on (local.rs).
     if tree.is_empty() { let m = if t.b("msg") && !t.s("msg").to_lowercase().starts_with("merging") { t.t("msg") } else { "Done".into() }; return landed(id, g, &t, &m, "", ""); }
-    let local = (|| -> Res<Option<String>> {
-        let mess = flow::git::dirty(&root);
-        if !mess.is_empty() { fail(g, "Merge needs a clean checkout", &format!("Checkout: {}\n\nUncommitted or untracked files:\n{mess}", root.display()), "Commit, stash or move your own unsaved files, then approve again. The agent must not alter your checkout.", no_fix())?; return Ok(None); }
-        if let Some((b, at)) = &at_origin { if !super::catch_up::checkout_to(g, &t, &root, b, at)? { return Ok(None); } }
-        let onto = git_out(&root, &["symbolic-ref", "--short", "HEAD"])?;
-        let target = { let h = flow::git::head_of(&root); if h.is_empty() { git_out(&root, &["rev-parse", "HEAD"])? } else { h } };
-        let conflict = |g: &mut Guard, e: crate::err::Error| -> Res<Option<String>> {
-            let files = git_out(&root, &["diff", "--name-only", "--diff-filter=U"]).unwrap_or_default();
-            let detail = format!("{}Task branch: {}\nTarget branch: {onto}\nTarget commit: {target}\nCheckout: {}\n\nGit output:\n{}", if files.is_empty() { String::new() } else { format!("Conflicting files:\n{files}\n\n") }, t.s("branch"), root.display(), e.msg);
-            // Save the evidence before restoring the initially clean checkout. Never delete untracked files.
-            let restored = git_out(&root, &["merge", "--abort"]).is_ok() || git_out(&root, &["reset", "--merge", "HEAD"]).is_ok();
-            fail(g, if files.is_empty() { "Merge failed" } else { "Merge conflict" }, &format!("{detail}{}", if restored { "\n\nThe merge attempt was rolled back; the human's checkout is unchanged." } else { "\n\nRollback failed. The human must inspect the checkout before retrying." }),
-                &if restored { format!("In your own worktree on {}, bring in target commit {target} ({onto}), resolve the conflicts, run the checks and commit. Do not change the human's checkout. Finish again for review, then ask for merge approval.", t.s("branch")) } else { "Inspect and restore the human's checkout before retrying. Do not let the agent reset or discard it.".into() },
-                Fail { agent_can_fix: restored, auth: Some(false), keep_intent: false })?;
-            Ok(None)
-        };
-        let message = format!("{}\n\nTask: {}", if t.b("title") { t.t("title") } else { id.to_string() }, task_ref(id, &repo_keys()));
-        // The commit that was checked and reviewed is the one merged, by its id.
-        let head = { let v = t.at("mergeIntent").t("verifiedHead"); if v.is_empty() { git_out(&root, &["rev-parse", "--verify", &format!("refs/heads/{}", t.s("branch"))])? } else { v } };
-        if called_off(g) { return Ok(None); }
-        if how == "squash" {
-            if let Err(e) = git_out(&root, &["merge", "--squash", &head]) { return conflict(g, e); }
-            if !git_out(&root, &["diff", "--cached", "--name-only"])?.is_empty() { if let Err(e) = git_out(&root, &["commit", "-m", &message]) { return conflict(g, e); } }
-        } else if let Err(e) = git_out(&root, &["merge", if how == "rebase" { "--ff" } else { "--no-ff" }, "-m", &message, &head]) { return conflict(g, e); }
-        let made = git_out(&root, &["rev-parse", "HEAD"]).unwrap_or_default();
-        Ok(Some(format!("Merged into {onto}.|{head}|{made}")))
-    })();
-    match local {
-        Ok(Some(done)) => { let p: Vec<&str> = done.splitn(3, '|').collect(); landed(id, g, &t, p[0], p.get(1).unwrap_or(&""), p.get(2).unwrap_or(&"")) }
-        Ok(None) => Ok(()),
-        Err(e) if is_aborted(&e) => Err(e),
-        Err(e) => fail(g, "Merge failed", &e.msg, "Investigate the Git error in your own worktree, then finish again. Approve again only after the problem is fixed.", Fail::default()),
+    match super::local::land(id, g, &t, &how, at_origin) {
+        Err(e) if !is_aborted(&e) => fail(g, "Merge failed", &e.msg, "Investigate the Git error in your own worktree, then finish again. Approve again only after the problem is fixed.", Fail::default()),
+        r => r,
     }
 }

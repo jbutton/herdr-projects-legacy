@@ -107,7 +107,7 @@ fn the_settings_page_every_work_setting_plain_and_a_mark_on_this_tasks_own() {
     set_value("review.rounds", &json!(5), &Scope::default()).unwrap();
     set_value("merge.by", &json!("itself"), &Scope::repo("proj")).unwrap();
     set_value("reviewer.agent", &json!("claude"), &Scope::task(&task(&id))).unwrap();
-    let mut s = open(&w.root, 64); s.s.sel = id.clone(); s.load();
+    let mut s = open(&w.root, 69); s.s.sel = id.clone(); s.load();
     s.press(&["ctrl+e"]);
     let text = s.screen(120).join("\n");
     assert!(text.starts_with(" Settings  PRJ-1 \"One\""), "{text}");
@@ -166,7 +166,7 @@ fn the_settings_page_move_change_and_put_back() {
     go(&mut s, "check.timeout"); s.press(&["enter"]); s.typed("20m"); s.press(&["esc"]);
     assert!(mine().at("check.timeout").is_null() && s.s.value().is_empty() && s.s.editing.is_some());
     s.press(&["enter"]); s.typed("20"); s.press(&["enter"]);
-    assert!(s.screen(120).join("\n").contains("check.timeout is a time with a unit, such as 15m (s, m or h), not \"20\". Did you mean 20m?"), "{}", s.screen(120).join("\n"));
+    assert!(s.screen(120).join("\n").contains("check.timeout is a time with a unit, such as 15m (s, m, h or d), not \"20\". Did you mean 20m?"), "{}", s.screen(120).join("\n"));
     assert!(mine().at("check.timeout").is_null()); assert_eq!(s.s.value(), "20");
     s.press(&["esc"]); s.typed("m"); assert_eq!(s.s.value(), "20m"); s.press(&["enter"]); assert_eq!(mine().s("check.timeout"), "20m");
     s.press(&["ctrl+u"]); assert!(mine().at("check.timeout").is_null());

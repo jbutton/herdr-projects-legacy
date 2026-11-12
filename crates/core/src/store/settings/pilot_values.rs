@@ -8,7 +8,7 @@ use chrono::{Datelike, Local, TimeZone, Timelike};
 
 fn refuse<T>(msg: String) -> Res<T> { Err(Error::refused(msg)) }
 /// The events, in the order they are kept and said.
-pub const EVENTS: [&str; 3] = ["done", "stuck", "added"];
+pub const EVENTS: [&str; 4] = ["done", "stuck", "stalled", "added"];
 pub const DAYS: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 /// Areas whose settings autopilot may never give a task.
 pub const NEVER: [&str; 3] = ["merge.", "limit.", "autopilot."];
@@ -22,8 +22,8 @@ pub fn check(e: &Entry, v: &Value) -> Res<Value> {
     match name {
         "autopilot.when" => {
             if w.len() == 1 && w[0] == "none" { return Ok(json!("none")); }
-            if w.is_empty() { return refuse(format!("{name} is one or more of done, stuck, added, or none.")); }
-            if let Some(bad) = w.iter().find(|x| !EVENTS.contains(&x.as_str())) { return refuse(format!("{name}: \"{bad}\" is not an event autopilot wakes on. One or more of: done, stuck, added; or none.")); }
+            if w.is_empty() { return refuse(format!("{name} is one or more of done, stuck, stalled, added, or none.")); }
+            if let Some(bad) = w.iter().find(|x| !EVENTS.contains(&x.as_str())) { return refuse(format!("{name}: \"{bad}\" is not an event autopilot wakes on. One or more of: done, stuck, stalled, added; or none.")); }
             Ok(json!(EVENTS.iter().filter(|x| w.iter().any(|y| y == *x)).copied().collect::<Vec<_>>().join(" ")))
         }
         "autopilot.hours" => {

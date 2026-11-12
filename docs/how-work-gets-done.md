@@ -16,6 +16,13 @@ All of this runs with the board open or closed.
 - **In a git repo**, the plugin asks Herdr for a worktree space (`herdr worktree create`), on its own branch
   (`work/<n>-<title>`), started from the remote's default branch (or from your commit, with `--workspace.from here`, or
   from another branch at the remote, with `--workspace.from develop`). A task in a repo never works in your checkout.
+- **The remote's branch is fetched on every start**, the default branch (`origin/main`) as much as a named one, never
+  asking for a password. A start waits for origin 10 seconds at most, all told: asking origin which branch is its main
+  one (once, for a remote added by hand), waiting for another fetch of the same repo (one runs at a time) and the fetch
+  itself. So a task starts from what was merged on GitHub since the last start, not from an older copy, and the finish
+  does not have to merge it in later. Your checkout is never moved. If origin cannot be fetched in that time, the task
+  starts from the copy this repo fetched last, and its log (`runner.log` in the task's folder) says so, with what git
+  said.
 - **Tasks of one repo can start at the same moment.** Herdr is handed the commit the task starts from, not
   `origin/main`, so git writes no upstream into the repo's shared `.git/config` at the start (the push at the finish
   sets it). Another git command holding that file anyway (`could not lock config file`) is waited out, five tries in
@@ -27,7 +34,7 @@ All of this runs with the board open or closed.
 - **Started from a named branch** (`workspace.from develop`, for a long branch with small tasks on top), the task lands
   there too. The branch is fetched from origin on every start (10 seconds at most, never asking for a password); one
   origin does not have is refused with the reason, and the task waits as failed. If origin cannot be reached, the copy it
-  last gave is used. The task keeps up with that branch, its pull request merges into it (`gh pr create --base develop`),
+  last gave is used, and the task's log says so. The task keeps up with that branch, its pull request merges into it (`gh pr create --base develop`),
   a pull request the agent opened itself is taken on only while it merges into it, and `merge.checks` reads the checks of
   a pull request into it.
 - **A named branch with `merge.pr` off** (a host with no GitHub, so no `gh`) lands there with no pull request, also when
@@ -62,6 +69,30 @@ did. They can run anything as you, without asking: the rules and the review brie
   `~/.pi/agent/trust.json`) before starting it. Only for a role with full or auto
   access.
 
+### The reviewer's own start-up screens
+
+Herdr reads two of Codex's own screens as `idle`, and the board types its brief into an idle agent: its enter then only
+picks the screen's first choice, and the review waits until `review.timeout` (20 minutes unless set) and fails as timed
+out. Seen on Codex 0.167.2 with Herdr 0.9.3 ([checked on Herdr](checked-on-herdr.md)). So for the reviewer, and for the
+attempts' picker ([attempts](attempts.md)), which are the same program:
+
+- **"Hooks need review"**: Codex shows it before its first prompt whenever a hook is new or changed: one of yours, or a
+  repo's (`.codex/hooks.json`; Codex keeps a hook's trust by its file's path, so a new worktree asks again). The
+  reviewer starts with Codex's hooks off (`-c features.hooks=false`): it only reads, so it needs none. Its turn-end
+  report is Codex's `notify`, not a hook, and still runs. The working agent keeps your hooks.
+- **Its sign-in page**: a signed-out Codex comes up at "Sign in with ChatGPT". Before the reviewer starts, the board
+  asks its program whether it is signed in here (`codex login status`, `claude auth status`: the program's own command,
+  as `herdr-projects doctor` does). Signed out, it is not started: the next one on `reviewer.fallback` reviews
+  (`claude took over the review from codex: logged out`, [fallback](fallback.md#the-reviewer)), or the task fails as
+  **Needs a login**, with what to run: `codex is not signed in here (codex login status says so): run codex login in a
+  terminal here, then retry the review`. "Not logged in" counts only where the provider it is set to needs that
+  sign-in: Codex on a `model_provider` of yours with `requires_openai_auth = false` says "Not logged in" too, yet shows
+  no sign-in page and works, so its app-server is asked (`account/read`, `requiresOpenaiAuth`); where that gives no
+  answer, a provider of your own needs none (Codex's `model_provider`, Claude Code's `ANTHROPIC_BASE_URL` or a cloud,
+  as for [model names](models.md)). An answer it can start on is kept a minute (`signins.json` in the data folder); a
+  signed-out one is asked again every time, so signing in counts at the very next try. A program that cannot say, or
+  does not answer in 5 seconds, is started, and a login error in its turn is handled as before.
+
 ## How the board knows a turn ended
 
 The plugin starts every agent itself, and passes at launch:
@@ -72,13 +103,16 @@ The plugin starts every agent itself, and passes at launch:
 - **the task's rules** as a standing system prompt: a file, or for Codex inline when short
   ([long rules and long messages](could-not-start.md#long-rules-and-long-messages)).
 
-Nothing is written to your own agent settings, and your own hooks keep running. Claude Code's launch settings also turn
+Nothing is written to your own agent settings, and your own hooks keep running, except in a reviewer on Codex
+([above](#the-reviewers-own-start-up-screens)). Claude Code's launch settings also turn
 its idle compaction off (`"idleCompaction": false`): it would shrink the session of a finished task left waiting about
 an hour, which Herdr counts as a turn. A compaction in the saved conversation is never read as a new prompt either.
 
 At each turn's end, the hook runs `herdr-projects turn-ended` (silent, at most two seconds, protected by a per-launch
 secret). The finish line then reads the end of that agent's saved conversation: its last message, an API or login error,
-its token use.
+its token use. That file is looked for only where the program keeps it, never by reading through a long history: pi's
+in the folder it keeps for the agent's working folder; Codex's in the folder of the day its conversation began, which
+the conversation's id tells (Codex's ids carry the moment they were made), then the day after and the day before.
 
 **An agent that stopped to wait for you** (a question, a permission, a sign-in) has not finished, however often it asks:
 none of the finish line runs. How an agent says so, and what the board does:
@@ -96,8 +130,13 @@ never finishes a task. The turn counts as ended when:
   one, as the fallback.
 
 Otherwise the task is held as "Stopped without a summary": `Ctrl+R` tells the agent to continue, `Ctrl+L` takes the work
-as it is. Its message is the agent's last words on its screen: what stands above the program's input box, never the
-status line or mode line drawn under it.
+as it is. Its message is the agent's last words on its screen: what stands above the program's input box, however many
+lines are typed into it, never the status line or mode line drawn under it. Claude Code's own lines over the box are
+left out too: the one after each turn (`✻ Worked for 8m 46s · done 8:30 PM`) and its notice pushed to the right
+(`new task? /clear to save 599.8k tokens`, `✔ Update installed · Restart to update`): only a row that is nothing but
+those notices, where Claude Code puts them, so that a line of the agent's own there is kept, even one that holds their
+words; a notice worded otherwise stays in. With no words of the agent's there, it says only "Stopped without a
+summary".
 
 A task whose finish the board missed (its agent at rest, the row still "Finishing") is finished with `Ctrl+L` or
 `herdr-projects finish <id>`. What the agent said last is the summary.
@@ -115,12 +154,38 @@ When the agent's turn ends, the board:
    - A new round starts clean: the failure of the round before (a failed commit, a reviewer out of credits) is cleared
      as soon as the check starts, so the row and the details never show it while the work is checked and reviewed.
 2. **Pushes the branch and opens a draft pull request**, when there is an `origin` remote and `gh`.
+   - The pull request is on origin's repo, and every `gh` call names its repo: the task's pull request by its link,
+     everything else with origin's (`--repo`, or in the API's path). In a fork's checkout, with an `upstream` remote,
+     gh's own default is upstream: a bare `gh pr view 7` there reads upstream's pull request 7. Origin's repo is read
+     from the URL git uses (`insteadOf` applied), else from the one written, with an ssh alias read as ssh reads it
+     (`ssh -G`). With an origin that names no repo on a host (a folder), or none, gh is not asked about a repo while the
+     checkout has another remote it would take instead: that call fails, saying so. With origin the only remote, gh has
+     no other to take.
    - A pull request the agent already opened for the task's branch is taken on instead, and goes through the review and
      the merge as usual.
    - The push may run for `merge.pushTimeout` (2 minutes unless set), the repo's pre-push hook included. A repo whose
      hook runs its tests needs more: `herdr-projects set merge.pushTimeout 10m --repo <name>`, or `none`. A push that
      runs out of time is stopped and the finish fails, saying so (`git push did not end within 2m
      (merge.pushTimeout)`); finish again once it is raised.
+   - The board pushes the exact commit it read (`git push origin <commit>:refs/heads/<branch>`) and keeps that commit
+     as the one it pushed. What origin holds on the branch is pushed over only where it is exactly the commit the board
+     pushed there last (its agent may have rebased or amended it since), leased on that commit
+     (`--force-with-lease=refs/heads/<branch>:<commit>`, no branch at all the first time); or, not forced, where the
+     new commit holds it. Anything else (a suggestion accepted on GitHub, a commit from another machine, one the agent
+     pushed by hand and rewrote since) is never lost: nothing is pushed, and the finish fails with `The branch at origin
+     has commits this task does not have`, telling the agent to bring them in (`git pull origin <branch>`). It is asked
+     of origin itself (where the push goes) right before the push, so a fetch that moved `origin/<branch>`, before or
+     right after the push, changes nothing; a commit pulled into the branch and dropped again is not the task's either;
+     and a push that lands in between is refused by git. The push sets the branch's upstream when it has none.
+   - A branch origin already has at its head is not pushed again, so the repo's pre-push hook does not run for nothing
+     (git runs it even when there is nothing to push): a later round that ends on the same commit, or work the agent
+     pushed itself.
+   - A repo that names its tools for mise (`.tool-versions`, `mise.toml`, `.mise.toml`, `.config/mise.toml`, …) is
+     pushed with them: the board runs `mise env --json` in the worktree and gives `git push` what it says, as the repo's
+     agents run `mise exec -- git push`. A pre-push hook in Ruby (overcommit) then runs with the repo's own Ruby, not
+     with the first `ruby` on the board's PATH: the keeper's PATH comes from a login shell in your home folder, where
+     that is often macOS's own, without the hook's gems (`the overcommit gem is not installed`). With no such file,
+     no mise, or a mise that cannot say (an untrusted `mise.toml`), the push runs as before.
    - A branch that brings main nothing gets no pull request: no change was needed, or the work is on main already (the
      agent merged its own pull request, or pushed to main itself). The task is done, and its row says why: "No change
      needed", "Already on main" or "Already merged in #133". Nothing is pushed then, so a repo the task archived on
@@ -145,6 +210,8 @@ When the agent's turn ends, the board:
      ends (a server left running) holds it there: the agents are told to stop theirs before they finish, and `Ctrl+L`
      takes the work as it is.
    - A reviewer whose turn its provider cut off is retried by the board ([a turn cut off by the provider](provider-errors.md)).
+   - It starts with your own hooks off, and is not started at all when its program says it is signed out here
+     ([the reviewer's own start-up screens](#the-reviewers-own-start-up-screens)).
    - The board decides from the findings ([the gate](gate.md)). A review that fails goes straight back to the agent.
    - The row says the result and a tally (`Pass · 2 minor`). Its `R#2` tag says which review it was and, by its colour,
      how it went. The task panel has its summary, and every earlier review of the task.
@@ -159,10 +226,21 @@ it merges:
   withdraws the approval. On a repo with a merge queue, the task waits until GitHub says the pull request is merged;
 - **by a push to the branch it started from by name**, with no pull request (`workspace.from develop`, `merge.pr` off):
   the reviewed commit, built by `merge.method`, never forced and never through your checkout;
-- **or locally**, squashed by default.
+- **or locally**, squashed by default: the commit is built from the reviewed one beside your checkout, as for a push
+  to a named branch, and your checkout is fast-forwarded to it.
 
-A conflict found here goes back to the agent the same way, and the merge you approved is retried after its repair. A
-checkout with unsaved files is never forced. Merging without your yes: [merging by itself](gate.md#merging-by-itself).
+A conflict found here goes back to the agent the same way, and the merge you approved is retried after its repair.
+
+**Your own work in your checkout stays yours.** Git alone judges what a local merge would touch. A stray, changed,
+staged or ignored file the work does not touch is left as it is and kept out of the merge commit (staged stays
+staged), so it no longer blocks the merge. A file the merge would overwrite stops it, named on the task (`Merge would
+overwrite your copy of local.env`): changed, untracked or ignored there, your copy is kept, nothing is merged, nothing
+in your checkout changes (under `merge.syncRemote` it is not brought up to origin either) and nothing is stashed for
+you. Commit, stash, move or remove it, then approve again. A checkout that moved on since the work was brought up to
+date with it is caught up with and checked again first, under the same approval. The merge commit is made by git
+directly, not by `git commit` in your checkout, so your checkout's commit hooks do not run on it (its `post-merge` hook
+does). A repo that signs its commits (`commit.gpgSign`) gets it signed, here or pushed to a named branch; a signer that
+fails makes no commit and merges nothing. Merging without your yes: [merging by itself](gate.md#merging-by-itself).
 
 ### Closing GitHub issues
 
@@ -195,6 +273,26 @@ every repo the board merges in. `merge.checks: none` does not look at GitHub's c
 
 A failure is of one commit: once a repair is pushed, the old commit's failed checks block nothing (also when main is
 merged in before it merges). Only the checks of the commit that would merge count.
+
+Each check is judged by its newest run, here and in the pull requests' watch, which wakes the agent when checks fail:
+
+- A job re-run in its workflow run counts by its latest attempt.
+- A workflow run more than once on the same commit counts by its newest run: the same job of that run decides, whatever
+  an older run said (cancelled, failed or still going). This happens with a workflow that has `concurrency` with
+  `cancel-in-progress` and starts again on the same commit, for example when a label is added or the pull request is
+  edited: the older run ends up cancelled. It also happens with a workflow that runs for both the push and the pull
+  request: the newer run decides.
+- Newest means the job GitHub made last. GitHub numbers jobs as it makes them, re-runs included, so the number decides,
+  not the times:
+  - a job cancelled before it began is older than the job that replaced it, however late its cancel ended;
+  - a job not begun yet in a newer run is the newest, and is waited for;
+  - an older run's job run again after a newer run's job is the newest.
+
+  With a fine-grained token, a workflow run read as a whole goes by when its latest attempt began, then by its number.
+- A newest run that failed or was cancelled still fails, and so does a cancelled check with no newer run of its own.
+  Two jobs of the same name in one run are two checks.
+- Another CI's check counts as run again only when it has the very same link: two CIs that each call a check `build`
+  are two checks.
 
 Each check is counted once, a workflow for its jobs until GitHub lists them. `details` names what it waits for
 (`checksWaitingFor`).
@@ -309,10 +407,12 @@ makes such a task keep up with the same branch as origin has it:
   task's own worktree when it moved: before the review, while the task waits (origin is asked every two minutes; under
   `merge.sync approve` a test merge only) and after your yes. `syncedTo` is origin's commit. Your checkout is not
   touched by a sync.
-- after your yes, right before the work lands in your checkout, your checkout is fast-forwarded to the commit of
-  origin the task holds (as `git pull --ff-only` would), so the landed commit adds the task's work alone. A checkout
-  with commits origin does not have is refused and nothing is merged: push them or move them to another branch, or
-  turn the setting off for that task to land in your checkout as it is.
+- after your yes, your checkout is brought up to the commit of origin the task holds (as `git pull --ff-only` would)
+  together with the work, in one fast-forward, so the landed commit adds the task's work alone. Your own files
+  neither touches stay as they are; one that origin's commits or the work would overwrite stops it by name, with your
+  checkout where it was, as for any merge here. A checkout with commits origin does not have is refused and nothing is
+  merged: push them or move them to another branch, or turn the setting off for that task to land in your checkout as
+  it is.
 - origin that cannot be fetched is not a sync, and your checkout is not used instead: the finished turn is checked,
   then held as "behind main" with what git said, never approvable, until a fetch works. Nothing is merged and
   `syncedTo` stays as it was.
@@ -402,15 +502,21 @@ itself, and its worktree and branch are removed. `workspace.cleanup false` keeps
 
 - A checkout with unsaved files, or with work that was never merged, stays on disk with its branch. The task says where,
   and a reply continues there.
+- A checkout with a submodule checked out in it (a set-up step that runs `git submodule update --init`) is removed
+  like any other. Git removes one only when forced, and then looks at nothing: the submodule's own repo goes with the
+  worktree. So it stays when it or any of its submodules, nested ones too, holds a change (also one a repo's
+  `ignore = all` leaves out of `git status`), or a submodule holds a commit that no remote branch of it has. That is
+  looked at again right before the worktree goes, after what still ran from it was ended (it may save a file as it ends).
 - A space you are using again is not closed: a turn in the agent's own terminal, a command running in any of its panes
   (including one a finished agent left running in the background).
 - What an agent program keeps running as part of itself is no such command: its MCP servers, or its own program under
   an npm wrapper (`codex` installed with npm). They are in the agent's own process group, and an MCP server's input and
   output are wired to the agent itself (a pipe or a socket the agent holds the other end of). What such a helper runs
-  under it is its own too (a language server's telemetry, in a group of its own). So a finished agent with MCP or
-  language servers is closed like any other. A command whose streams go elsewhere (the terminal, a file, `/dev/null`) keeps
-  the space open, in the agent's group or not, and so does one in a group of its own. What cannot be told counts as a
-  command.
+  under it is its own too, whatever its streams: a language server's telemetry in a group of its own, or the MCP server
+  that `uv tool run` (`uvx`) starts in the agent's group with its input on `/dev/null`. So a finished agent with MCP or
+  language servers is closed like any other, and a stop keeps them. A command whose streams go elsewhere (the terminal, a
+  file, `/dev/null`) keeps the space open, in the agent's group or not, and so does one in a group of its own. What
+  cannot be told counts as a command.
 - Nor is one Herdr could not answer for, or whose Herdr session is not running: then nothing of the task is touched.
 - The clean-up is tried again by itself (about every half minute, board open or closed) and happens once the space is
   free. After a turn of the agent, only once that has been quiet for ten minutes. Work that appeared meanwhile is kept.
@@ -436,6 +542,11 @@ requests, starts queued tasks, runs the Watcher, and keeps Herdr's sidebar curre
   (`8% 16m`). The pane's title names the task the same way, so the web UI's sidebar reads the same. A running review has
   two entries, the agent's and the reviewer's: they are two agents. The sidebar shows only tasks with a live agent pane;
   the others (queued, your own) are on the board only.
+- **The agent's last words, tokens and model** while it works come from its saved conversation, looked at every five
+  seconds: its last 768 KB. The file is read again only when its size or time changed, and then only the bytes written
+  since, also when they go on a line still being written. What was read is kept in memory while the agent works and let
+  go a minute after; a file replaced, cut shorter or changed in place is read from its end again, and more than 768 KB
+  added at once is read as its last 768 KB (`crates/core/src/agents/read_kept.rs`).
 - **No notifications.** It raises no pop-up or sound: what needs you is on the board and in Herdr's sidebar.
 - **Its life.** Herdr starts it with its server. Any Herdr event, or opening the board, starts it again if it died. It
   replaces itself when the plugin is updated, and exits when Herdr is gone. It looks after this machine's tasks only.

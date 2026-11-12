@@ -37,7 +37,7 @@ fn a_schedule_in_plain_words_or_as_cron_what_it_says_when_it_is_next_due_and_wha
     assert_eq!(cron("0 0 1 jan *", at(2026, 3, 2, 0, 0)), at(2027, 1, 1, 0, 0));
     assert_eq!(cron("0 12 13 * 5", at(2026, 3, 2, 0, 0)), at(2026, 3, 6, 12, 0), "a day of the month and a weekday: either one");
     assert_eq!(cron("0 0 30 2 *", at(2026, 3, 2, 0, 0)), 0);
-    refused(parse_schedule("every 2"), r#""2" is not a time with a unit, such as 30m or 2h \(s, m or h\)\. Did you mean 2m\?"#);
+    refused(parse_schedule("every 2"), r#""2" is not a time with a unit, such as 30m or 2h \(s, m, h or d\)\. Did you mean 2m\?"#);
     refused(parse_schedule("every 10s"), "once a minute at most");
     refused(parse_schedule("sometimes"), r"is not a schedule\. A schedule is one of: every 2h");
     assert!(parse_cron("0 9 * *").err().unwrap().msg.contains("five fields"));
@@ -65,7 +65,7 @@ fn the_events_are_read_off_the_task_as_it_stands_and_the_rules_name_the_commands
     // the Coordinator's rules and the how-to every chat has name the commands, so an automation is made in plain words
     let coord = sw::coordinator::rules::rules("board");
     for told in [coord.clone(), sw::extras::skill_text::skill_text("board")] {
-        for word in ["automations add", "--schedule", "--when <added|approval|review-failed|failed|needs-you|merged>", "--every-repo", "--automation <name>", "no webhook"] { assert!(told.contains(word), "{word}"); }
+        for word in ["automations add", "--schedule", "--when <added|approval|review-failed|failed|needs-you|stalled|merged>", "--every-repo", "--automation <name>", "no webhook"] { assert!(told.contains(word), "{word}"); }
     }
     assert!(coord.contains("board automations on|off|run|firings|remove <name>"), "{coord}");
     assert!(coord.contains("Make, change, turn off or remove one only when the human asks"));

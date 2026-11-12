@@ -46,6 +46,7 @@ To a task of the automation's own repo, or of any repo with `--every-repo`:
 | `review-failed` | failed its review |
 | `failed` | went wrong |
 | `needs-you` | needs you (a question, a permission, a login, a merge that could not go through) |
+| `stalled` | stalls: its agent works but shows nothing new for `stall.after` (20 minutes), or runs well past the Watcher's estimate. Once per stall ([stalled tasks](stalled.md)) |
 | `merged` | was merged |
 
 The new task is told what happened in a fixed block under the prompt: the task's id, its title, the event.

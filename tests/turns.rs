@@ -9,6 +9,8 @@ use sw::store::tasks::{update, Change};
 
 /// A turn's end that is not a turn (Claude Code compacting an idle session), and the words of one with no summary.
 mod ended_late;
+/// A working agent's words, read again from its saved conversation only when that changed.
+mod said_kept;
 
 fn put(id: &str, f: impl FnOnce(&mut Obj)) { update(id, |t| { f(t); Ok(Change::Write) }).unwrap(); }
 fn with(t: &Obj, extra: Value) -> Obj { let mut o = t.clone(); for (k, v) in extra.as_object().cloned().unwrap_or_default() { o.insert(k, v); } o }

@@ -7,6 +7,9 @@ use std::cell::RefCell;
 use sw::json::*;
 use sw::watcher::prompt::{read_answer, watcher_prompt, Look};
 
+/// A stalled task: an agent at work whose screen shows nothing new, heard of once by automations and autopilot.
+mod stalled;
+
 fn has(text: &str, re: &str) -> bool { regex::Regex::new(re).unwrap().is_match(text) }
 fn rows() -> Vec<Obj> { sw::flow::live::board(true) }
 /// What the old tests' stand-in helper answered: one entry for every numbered agent, 42 percent with the watcher's own

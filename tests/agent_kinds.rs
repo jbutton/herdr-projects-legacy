@@ -17,8 +17,12 @@ mod skills;
 mod skills_more;
 /// Trusting a repo in Codex's config.toml, read as TOML (#314).
 mod codex_trust;
+/// A Codex reviewer never held by Codex's own hooks dialog or sign-in page (upstream #798, #745).
+mod codex_reviewer;
 /// pi's saved conversations, looked for only where pi keeps the agent's folder's (#393).
 mod pi_sessions;
+/// Codex's saved conversations, looked for only in the day folder their id names.
+mod codex_sessions;
 /// Trusting the folder pi starts in, in its trust.json (#413).
 mod pi_trust;
 /// OpenCode 2 started on its model through a conversation made first (#394).

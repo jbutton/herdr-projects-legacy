@@ -104,6 +104,8 @@ Find what its row says:
 | `Stopped without a summary` | the agent stopped and the board cannot tell if it finished | `Ctrl+R` tells it to go on; `Ctrl+L` takes the work as it is |
 | `Agent's connection dropped, trying again in 2m` | the provider cut the turn off | nothing: the board retries by itself ([a turn cut off by the provider](provider-errors.md)) |
 | `Agent stopped` | an error waiting cannot fix: a usage limit, a refusal | read the reason in the panel; reply, or `Ctrl+R` |
+| `The agent's terminal is gone` · `The agent has exited` | Herdr or the computer restarted, or the agent's program crashed | nothing: the board starts it again by itself, three tries at most ([an agent that stopped comes back](relaunch.md)) |
+| `The agent keeps stopping: started again 3 times` | it went again after each of the board's three tries | go into the task to see its terminal; reply, or `Ctrl+L` ([an agent that stopped comes back](relaunch.md#when-it-keeps-stopping)) |
 | `Agent stopped: … can't be used with your ChatGPT sign-in` | its program refused its model | choose a model, then `Ctrl+L` ([above](#cant-be-used-with-your-chatgpt-sign-in-while-the-agent-works)) |
 | `Plan ready` · `The plan's review could not run (…): yours to judge` | the reviewer of a plan (`plan.approve reviewer`) could not start or gave no verdict | read the plan; `Ctrl+L` builds it, a reply sends it back, `herdr-projects retry <id>` has the reviewer look again ([a plan first](plan.md#the-reviewers-look)) |
 | `Needs a login` | the agent's program is logged out | log in (go into the agent with `Enter`), then reply or `Ctrl+R` |
@@ -117,6 +119,10 @@ Find what its row says:
 **An agent shows a dialog** (a permission prompt, a question with choices): the chat says so. Press `Enter` to go into the
 agent and answer it there.
 
+**A review fails as `Needs a login`** before any reviewer tab opened: the reviewer's program says it is signed out on
+this machine (`codex login status`). Run what the failure names (`codex login`) in a terminal, then retry; or set a
+`reviewer.fallback` that is signed in ([the reviewer's own start-up screens](how-work-gets-done.md#the-reviewers-own-start-up-screens)).
+
 **An agent asked a question in plain words and stopped**: the board takes that as finished and reviews it. Reply to the
 agent, and it goes on ([an agent that waits for you](waiting-for-you.md)).
 
@@ -128,6 +134,9 @@ task panel ends in `Kept:` and says why:
 | It says | Why | What to do |
 |---|---|---|
 | `(uncommitted changes)` | its checkout has files that were never committed | look at them; reply to the task, or remove the worktree yourself |
+| `(uncommitted changes in its submodules)` | a submodule checked out in it, or one nested in that, has a change, maybe one a repo tells `git status` to leave out (`ignore = all`) | look at it: `git -C <worktree> submodule foreach --recursive git status --ignore-submodules=none`; reply to the task, or remove the worktree yourself (`git worktree remove --force`: git removes one with submodules only so) |
+| `(commits in its submodule <name> found nowhere else)` | that submodule has a commit no remote branch of it has: it would go with the worktree | push them from `<worktree>/<name>`, then remove the worktree yourself (`--force`, as above) |
+| `(its submodules could not be looked at)` | git failed on its submodules (a broken `.gitmodules`) | look at `git -C <worktree> submodule status`, then remove the worktree yourself |
 | `(unmerged work on <branch>)` | its branch holds commits that were not merged | merge them, or reply to the task to go on with them |
 | `(its space is in use: a turn in its agent's terminal)` | you talked to its agent in its own terminal | nothing: it is tried again about every half minute, and closes once the agent has been quiet a while |
 | `(its space is in use beside its agent: <process> (pid <n>) <why>)` | a process runs in the agent's pane that is not one of its helpers; `<why>` says what is wrong with it (below) | end it if it is yours, and the space closes on the next try |
@@ -137,7 +146,8 @@ task panel ends in `Kept:` and says why:
 | `(its herdr session cannot be reached)` | the Herdr session it ran in is not running | start that session; it is tried again |
 
 - **What `<why>` means**: a process in the agent's own process group is one of its helpers (an MCP server) only when
-  its input and output are wired to the agent and its errors go to no terminal. Otherwise it `streams to the terminal`,
+  its input and output are wired to the agent and its errors go to no terminal, or when one of its helpers runs it (the
+  MCP server `uv tool run` starts, whose input is `/dev/null`). Otherwise it `streams to the terminal`,
   `is not wired to its agent` (a file, `/dev/null`, a pipe nobody in the agent's group holds), `has its input or output
   closed`, or `cannot be looked at` (the system does not say). A process under the agent in a group of its own (a dev
   server it started) `runs in a group of its own` (one wired to the agent, or under a helper, is its own, and keeps nothing); one its
@@ -148,7 +158,9 @@ task panel ends in `Kept:` and says why:
 - **Nothing says `Kept:`, and the space still stays**: `herdr-projects show <id>` tells whether `workspace.cleanup` was
   turned off, and where. `herdr-projects set workspace.cleanup true` turns it on again.
 - **An agent with MCP servers used to stay `in use` for good**: its servers counted as a command still running. Since
-  this was fixed, the next pass closes those spaces by itself.
+  this was fixed, the next pass closes those spaces by itself. The same went for an MCP server started by `uv tool run`
+  (`uvx`), named as `… (pid <n>) is not wired to its agent`: its input is `/dev/null`. It is now known by the helper
+  that runs it.
 - **To close one at once**: archive the task (`Ctrl+A`); what is kept on disk stays, and the task says where.
 
 ## Behind main: main could not be fetched
@@ -184,7 +196,7 @@ All in the board's data folder, `~/.herdr-projects/data/` ([the home folder](hom
 
 | File | Holds |
 |---|---|
-| `tasks/<repo>/<n>/runner.log` | one task's background work: delegating, the finish line, merges. A failed start adds its account at the end: the reason, what Herdr said, the agent terminal's last lines |
+| `tasks/<repo>/<n>/runner.log` | one task's background work: delegating, the finish line, merges. A failed start adds its account at the end: the reason, what Herdr said, the agent terminal's last lines. A start that could not fetch its branch from origin says so, with the copy it started from and what git said |
 | `coordinator/<session>/start.log` | why the Coordinator could not start, with its terminal's last lines |
 | `keeper.log` | the keeper (the board's background process): starts, updates, errors |
 | `hook.log` | what Herdr's hooks and the agents' turn-end reports told the board |

@@ -26,6 +26,10 @@ pub static KINDS: &[Kind] = &[
         models: Models { list: &["debug", "models"], read: Read::Catalog, server: &["app-server"], example: "codex/gpt-6.1-sol", ..NO_MODELS },
         effort: &["-c", "model_reasoning_effort=\"{}\""], resume: &["resume", "{}"], integration: "codex",
         login: Some(Login { status: &["login", "status"], how: "codex login" }),
+        // With a hook new or changed (yours, or a repo's .codex/hooks.json) Codex 0.167.2 shows "Hooks need review"
+        // before its prompt, which herdr reads as idle. The setting, not `--disable hooks`: a Codex that does not know
+        // the feature ignores the setting, and quits on the flag.
+        no_hooks: &["-c", "features.hooks=false"],
         checked: "everything the board does, on 0.153.4 to 0.162.1", ..BASE },
     // pi never asks before running something: it has no `ask`.
     Kind { name: "pi", min_version: "1.1.0", efforts: &["off", "minimal", "low", "medium", "high", "xhigh", "max"], access_ask: None,
