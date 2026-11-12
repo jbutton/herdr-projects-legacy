@@ -23,9 +23,10 @@ pub fn access_args(k: &str, access: &str) -> Res<Vec<String>> {
     Ok(f.iter().map(|s| s.to_string()).collect())
 }
 #[derive(Default, Clone)]
-pub struct StartOpts { pub model: String, pub effort: String, pub fast: Option<bool>, pub access: String, pub resume: String, pub session: String, pub extra: Vec<String>, pub folder: std::path::PathBuf }
+pub struct StartOpts { pub model: String, pub effort: String, pub fast: Option<bool>, pub access: String, pub resume: String, pub session: String, pub extra: Vec<String>, pub folder: std::path::PathBuf, pub no_hooks: bool }
 /// The arguments a worker, a reviewer or the Coordinator of this kind is started with. `resume` reopens a known
-/// conversation; `session` names a new one; `extra` are the hook and standing-rule arguments; `folder` is where it starts.
+/// conversation; `session` names a new one; `extra` are the hook and standing-rule arguments; `folder` is where it starts;
+/// `no_hooks`: your own hooks off (kinds.rs `no_hooks`), for a role that only looks.
 pub fn start_args(k: &str, o: &StartOpts) -> Res<Vec<String>> {
     let mut out: Vec<String> = kind(k).map(|a| super::kinds::fill(a.lead, "")).unwrap_or_default(); // `hermes chat`
     if !o.resume.is_empty() { out.extend(resume_args(k, &o.resume)); } // first: Codex's `resume` is a subcommand
@@ -35,6 +36,7 @@ pub fn start_args(k: &str, o: &StartOpts) -> Res<Vec<String>> {
     let level = effort_for(k, &o.model, &o.effort);
     if !level.is_empty() { out.extend(effort_args(k, &level)); }
     if let Some(f) = o.fast { out.extend(fast_args(k, f)); }
+    if o.no_hooks { out.extend(kind(k).map(|a| super::kinds::fill(a.no_hooks, "")).unwrap_or_default()); }
     out.extend(o.extra.iter().cloned());
     let left_out = too_new(k);
     Ok(out.into_iter().filter(|a| !left_out.contains(&a.as_str())).collect())
