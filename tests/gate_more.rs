@@ -1,5 +1,6 @@
 //! The gate, more: a later round's verdict read against the earlier findings and what the reviewer is told, the
-//! review.mustFix and review.rounds settings, and the review page and the pull request showing every finding.
+//! review.mustFix and review.rounds settings, the review page and the pull request showing every finding, and
+//! review.prComment turning that pull request comment off.
 use crate::common;
 use common::*;
 use serde_json::{json, Value};
@@ -102,6 +103,70 @@ fn review_must_fix_is_major_by_default_yours_or_one_tasks_and_review_rounds_0_se
     let other = w.add("Another");
     assert_eq!(sw::cli::main(vec!["delegate".into(), other.clone(), "--review.mustFix".into(), "critical".into()]), 0);
     assert_eq!(task(&other).at("settings").s("review.mustFix"), "critical");
+}
+
+#[test]
+fn review_pr_comment_off_posts_no_comment_but_the_review_still_runs() {
+    let w = world_with(Opts { repo: true, origin: true, ..Default::default() });
+    w.script(json!({ "worker": [{ "files": { "f.txt": "1\n" }, "commit": "v1", "note": "Did v1." }], "reviewer": [{ "verdict": { "meets": true, "text": "Looked at it.", "findings": [] } }] }));
+    assert_eq!(setting("review.prComment", None), json!(true));
+    let id = w.add("Quiet pull request");
+    assert_eq!(sw::cli::main(vec!["set".into(), "review.prComment".into(), "false".into(), "--task".into(), id.clone()]), 0);
+    delegate(&id);
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "approval", "{}", t.at("failure"));
+    assert!(t.at("review").b("meets"), "{}", t.at("review"));
+    let log = gh_log(&w);
+    assert!(!log.contains("pr comment"), "{log}");
+}
+
+/// Everything the board asked of gh for one task with a pull request, the world's own folder left out, with
+/// `review.prComment` on or off (yours): `script` by role, `asked` what the task was delegated with.
+fn gh_calls(comment: bool, script: Value, asked: Value) -> Vec<String> {
+    let w = world_with(Opts { repo: true, origin: true, settings: json!({ "review.prComment": comment }), ..Default::default() });
+    w.script(script);
+    let id = w.add("Quiet pull request");
+    delegate_with(&id, asked);
+    let mut t = settle_all(&id);
+    for _ in 0..3 { if t.s("stage") != "approval" { t = settle_all(&id); } }
+    assert_eq!(t.s("stage"), "approval", "{}", t.at("failure"));
+    assert!(t.at("review").b("pass"), "{}", t.at("review"));
+    let base = w.base.display().to_string();
+    w.gh.log.borrow().iter().map(|l| l.replace(&base, "<world>")).collect()
+}
+/// The `on` calls without their review comments must be the `off` calls exactly: nothing else on the pull request changes.
+fn only_the_comments_go(on: &[String], off: &[String]) -> Vec<String> {
+    let comments: Vec<String> = on.iter().filter(|l| l.starts_with("pr comment ")).cloned().collect();
+    assert_eq!(off.to_vec(), on.iter().filter(|l| !l.starts_with("pr comment ")).cloned().collect::<Vec<_>>());
+    assert!(!off.iter().any(|l| l.contains("**Review ")), "{off:?}");
+    comments
+}
+
+#[test]
+fn review_pr_comment_off_no_comment_in_any_round_failed_or_passed_and_nothing_else_on_the_pull_request_changes() {
+    let work = |n: i64| json!({ "files": { "f.txt": format!("{n}\n") }, "commit": format!("v{n}"), "note": format!("Did v{n}.") });
+    let fails = json!({ "verdict": { "meets": false, "text": "Not yet.", "findings": [finding("major", "Crashes on empty files", json!({}))] } });
+    let passes = json!({ "verdict": { "meets": true, "text": "Fixed.", "findings": [] } });
+    let script = json!({ "worker": [work(1), work(2)], "reviewer": [fails, passes] });
+    let on = gh_calls(true, script.clone(), json!({}));
+    let off = gh_calls(false, script, json!({}));
+    let comments = only_the_comments_go(&on, &off);
+    assert_eq!(comments.len(), 2, "{on:?}");
+    assert!(comments[0].contains("--body **Review 1 · Fail · 1 major**"), "{}", comments[0]);
+    assert!(comments[1].contains("--body **Review 2 · Pass**"), "{}", comments[1]);
+    assert!(off.iter().any(|l| l.starts_with("pr create ")), "the pull request is still opened: {off:?}");
+}
+
+#[test]
+fn review_pr_comment_off_the_chosen_attempts_review_posts_no_comment_either() {
+    let picker = json!([{ "comparison": { "pick": "b", "why": "B is the smallest change.", "attempts": [{ "letter": "A", "note": "Works, but large." }, { "letter": "B", "note": "Small and right." }] } }]);
+    let script = json!({ "worker": [step(1), step(2)], "picker": picker, "reviewer": [{ "verdict": { "meets": true, "text": "Looked at it.", "findings": [] } }] });
+    let asked = json!({ "attempts.by": "codex/gpt-5.5, pi", "attempts.pick": "reviewer" });
+    let on = gh_calls(true, script.clone(), asked.clone());
+    let off = gh_calls(false, script, asked);
+    let comments = only_the_comments_go(&on, &off);
+    assert_eq!(comments.len(), 1, "{on:?}");
+    assert!(comments[0].contains("--body **Review 1 · Pass**"), "{}", comments[0]);
 }
 
 #[test]
