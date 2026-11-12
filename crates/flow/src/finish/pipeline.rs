@@ -16,7 +16,7 @@ use crate::runner::{claim, is_aborted, release, sh, Guard};
 use crate::store::failures::{bound_detail, failure_patch, is_auth_failure};
 use crate::store::fetch;
 use crate::store::keys::{repo_keys, task_ref};
-use crate::store::repos::{branch_of, cwd_of, folder_of, git_out, git_slow, TIMED_OUT};
+use crate::store::repos::{branch_of, cwd_of, folder_of, git_out};
 use crate::store::reviews::{current_review, passed_review};
 use crate::store::settings::lookup::work;
 use crate::store::settings::values::{command_of, ms};
@@ -181,13 +181,12 @@ pub fn pipeline(id: &str, g: &mut Guard, text: &str, keep_intent: bool, reason: 
             let has_commits = git_out(tp, &["rev-list", "--count", &format!("{base}..HEAD")])?.parse::<i64>().unwrap_or(0) > 0;
             if !(has_commits && flow::git::has_origin(&root)) { return Ok(None); }
             t = g.set(|t| { t.put("stage", "pushing"); t.put("msg", "Pushing the branch"); })?;
-            // The branch is the board's own and an agent may have rebuilt it: overwrite what was pushed before, but only
-            // while the remote still holds what was last seen here.
-            // As long as `merge.pushTimeout` allows: a repo's pre-push hook may run its tests.
+            // An agent may have rebuilt its branch: what origin holds is pushed over only where it is the task's own, and
+            // a head origin has already is not pushed again (push.rs). As long as `merge.pushTimeout` allows: a repo's
+            // pre-push hook may run its tests.
             let limit = ch.s("merge.pushTimeout").to_string();
             let most = match ms(&limit) { 0 => u64::MAX, l => l as u64 };
-            git_slow(tp, &["push", "-u", "--force-with-lease", "origin", t.s("branch")], most).map_err(|e| if e.msg.contains(TIMED_OUT) { crate::err::Error::new(format!("{} (merge.pushTimeout): a slow pre-push hook? Raise it with herdr-projects set merge.pushTimeout 10m --repo {}", e.msg, t.s("repo"))) } else { e })?;
-            let ph = git_out(tp, &["rev-parse", &format!("refs/remotes/origin/{}", t.s("branch"))])?;
+            let ph = super::push::push(tp, t.s("branch"), t.s("prHead"), most, t.s("repo"))?;
             g.set(|t| t.put("prHead", ph.clone()))?;
             let mut url = t.t("pr");
             if url.is_empty() {
@@ -226,6 +225,7 @@ pub fn pipeline(id: &str, g: &mut Guard, text: &str, keep_intent: bool, reason: 
             Ok(None) => {}
             Err(e) if is_aborted(&e) => return Err(e),
             Err(_) if already::archived(Path::new(&tree)) => { fail(g, already::archived_failure(t.s("branch"), &tree), FailHow::default())?; return Ok(()); }
+            Err(e) if e.msg.starts_with(super::push::NOT_OURS) => { fail(g, super::push::not_ours(t.s("branch"), &tree, &e.msg[super::push::NOT_OURS.len()..], t.s("prHead")), FailHow::default())?; return Ok(()); }
             Err(e) if e.msg.starts_with("prbase:") => { fail(g, failure("pr", "The agent's pull request merges into another branch", &format!("Branch: {}\nFolder: {tree}\n\n{}", t.s("branch"), &e.msg[7..]), &format!("Change that pull request's base to {0} (gh pr edit <number> --base {0}), or close it, then finish again. The board goes on with it once it merges into {0}.", sync::main_branch(&root, &t))), FailHow::default())?; return Ok(()); }
             // The remote cannot be reached (main could not be fetched either): it waits, and goes on by itself.
             Err(e) if offline(sync_r, &e.msg) => {
