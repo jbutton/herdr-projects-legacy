@@ -4,10 +4,9 @@
 use super::Found;
 use crate::agents::installed::{at_least, installed, late, version_of};
 use crate::agents::kinds::{kind, program};
-
-/// What its sign-in command said: no such command, signed in, signed out, or no answer (why).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub enum Sign { #[default] Unknown, In, Out, NoAnswer(String) }
+use crate::agents::sign_in::{self, status_line};
+/// How a sign-in is asked and read: the same before a reviewer starts (sign_in.rs).
+pub use crate::agents::sign_in::{signed_out, Sign};
 /// One program. `integration`: None where it does not apply.
 #[derive(Clone, Debug, Default)]
 pub struct Prog { pub kind: String, pub named_by: Vec<String>, pub found: bool, pub version: String, pub late: bool, pub sign: Sign, pub integration: Option<bool> }
@@ -25,30 +24,13 @@ pub fn named() -> Vec<(String, Vec<String>)> {
     }
     out
 }
-/// Not signed in, by what its status command said: it failed, or it says so.
-pub fn signed_out(code: i32, said: &str) -> bool {
-    static RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| regex::Regex::new(r"(?i)not (logged|signed) in|logged out").unwrap());
-    code != 0 || RE.is_match(said)
-}
-/// How long a sign-in command is given.
-pub const WAIT_MS: u64 = 5000;
-fn status_line(k: &str) -> String { kind(k).and_then(|a| a.login.as_ref()).map(|l| std::iter::once(program(k)).chain(l.status.iter().copied()).collect::<Vec<_>>().join(" ")).unwrap_or_default() }
-fn sign(k: &str) -> Sign {
-    let Some(l) = kind(k).and_then(|a| a.login.as_ref()) else { return Sign::Unknown };
-    use std::process::{Command, Stdio};
-    let child = match Command::new(program(k)).args(l.status).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() { Ok(c) => c, Err(e) => return Sign::NoAnswer(e.to_string()) };
-    match crate::herdr::cli::wait_with_timeout(child, WAIT_MS) {
-        Ok(r) => if signed_out(r.status, &format!("{}\n{}", r.stdout, r.stderr)) { Sign::Out } else { Sign::In },
-        Err(_) => Sign::NoAnswer(format!("it did not answer in {}s", WAIT_MS / 1000)),
-    }
-}
 /// Asked of the program on this machine (and of herdr, for its integration).
 pub fn ask(k: &str, named_by: Vec<String>) -> Prog {
     let found = installed(k);
     let (version, late) = if found { (version_of(k), late(k)) } else { (String::new(), false) };
     let needs = kind(k).map(|a| a.needs_integration).unwrap_or(false);
     let integration = (found && needs).then(|| crate::herdr::Herdr::new(None).integration_ready(k).is_ok());
-    Prog { kind: k.into(), named_by, found, sign: if found && !late { sign(k) } else { Sign::Unknown }, version, late, integration }
+    Prog { kind: k.into(), named_by, found, sign: if found && !late { sign_in::ask(k) } else { Sign::Unknown }, version, late, integration }
 }
 /// The settings that name it, the first few.
 fn by(p: &Prog) -> String {
@@ -84,7 +66,8 @@ pub fn check(progs: &[Prog]) -> Vec<Found> {
         if p.integration == Some(false) {
             out.push(Found::bad(format!("{k} needs herdr's own integration, or herdr cannot see when it works"), format!("Run: herdr integration install {}", a.integration)));
         }
-        if out.len() == before { out.push(Found::ok(format!("{k}{v}{} ({by})", if p.sign == Sign::In { ", signed in" } else { "" }))); }
+        let sign = match p.sign { Sign::In => ", signed in", Sign::NotNeeded => ", on a provider that needs no sign-in", _ => "" };
+        if out.len() == before { out.push(Found::ok(format!("{k}{v}{sign} ({by})"))); }
     }
     out
 }

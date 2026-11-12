@@ -131,6 +131,9 @@ fn each_program_must_be_installed_new_enough_and_signed_in() {
     assert_eq!(f.iter().map(|f| f.what.as_str()).collect::<Vec<_>>(), ["claude 2.1.301, signed in (worker.agent)", "pi 1.1.0 (worker.agent)"]);
     assert_eq!(bad(&agents::check(&[p("codex", false, "", Sign::Unknown)])), ["codex is not installed here (worker.agent) → Install codex, or choose another program: herdr-projects set worker.agent <program>"]);
     assert_eq!(bad(&agents::check(&[p("codex", true, "0.162.1", Sign::Out)])), ["codex is not signed in (worker.agent) → Run `codex login` in a terminal here."]);
+    // "Not logged in" on a provider of your own that needs no sign-in (Codex's model_provider): no problem.
+    let f = agents::check(&[p("codex", true, "0.167.2", Sign::NotNeeded)]);
+    assert_eq!(f.iter().map(|f| (f.what.as_str(), f.problem)).collect::<Vec<_>>(), [("codex 0.167.2, on a provider that needs no sign-in (worker.agent)", false)]);
     assert!(bad(&agents::check(&[p("claude", true, "2.1.100", Sign::In)]))[0].starts_with("claude 2.1.100 is older than 2.1.296"));
     let mut m = p("mastracode", true, "1.0.0", Sign::Unknown);
     m.integration = Some(false);
