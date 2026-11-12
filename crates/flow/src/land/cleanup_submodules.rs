@@ -1,7 +1,8 @@
 //! Whether removing a worktree takes `--force`: git removes one with a submodule checked out only when forced, and a
-//! forced remove looks at nothing. So what it would lose is looked at here first: a change in a submodule, also one the
-//! repo tells git status to leave out, and a commit in a submodule that no remote branch of it holds (git keeps a
-//! worktree's submodule repos in the worktree's own git folder, and they go with it). Upstream issue #857.
+//! forced remove looks at nothing. So what it would lose is looked at here first, right before each removal: a change
+//! in it or in any submodule, nested ones too and also one a repo's `ignore` leaves out of its status, and a commit in
+//! a submodule that no remote branch of it holds (git keeps a worktree's submodule repos in the worktree's own git
+//! folder, and they go with it). Upstream issue #857.
 use crate::store::repos::git_out;
 use std::path::{Path, PathBuf};
 
@@ -11,16 +12,22 @@ pub fn force(wt: &Path) -> Result<bool, String> {
     let unsure = |_| "its submodules could not be looked at".to_string();
     let modules = PathBuf::from(git_out(wt, &["rev-parse", "--absolute-git-dir"]).map_err(unsure)?).join("modules");
     if !modules.is_dir() && !wt.join(".gitmodules").exists() { return Ok(false); }
-    // Every submodule checked out, nested ones too, wherever its repo is; then the repos git keeps for the worktree.
-    let mut repos: Vec<PathBuf> = git_out(wt, &["submodule", "foreach", "--quiet", "--recursive", "git rev-parse --absolute-git-dir"]).map_err(unsure)?.lines().map(PathBuf::from).collect();
+    // Run in every submodule checked out, nested ones too.
+    let each = |cmd: &str| git_out(wt, &["submodule", "foreach", "--quiet", "--recursive", cmd]).map_err(unsure);
+    let mut repos: Vec<PathBuf> = each("git rev-parse --absolute-git-dir")?.lines().map(PathBuf::from).collect();
     if repos.is_empty() && !modules.is_dir() { return Ok(false); }
+    let status = |s: &str| format!("status --porcelain --untracked-files=normal --ignore-submodules={s}");
+    let changed = |s: &str| git_out(wt, &status(s).split(' ').collect::<Vec<_>>()).map_err(unsure).map(|o| !o.is_empty());
+    if changed("all")? { return Err("uncommitted changes".into()); }
+    // Each repo apart: a submodule's own `ignore` hides what changed in the ones under it from the repo above.
+    if changed("none")? || !each(&format!("git {}", status("none")))?.is_empty() { return Err("uncommitted changes in its submodules".into()); }
     kept_in(&modules, &mut repos);
-    if !git_out(wt, &["status", "--porcelain", "--ignore-submodules=none"]).map_err(unsure)?.is_empty() { return Err("uncommitted changes in its submodules".into()); }
     let mut seen = vec![];
     for r in repos {
         let r = std::fs::canonicalize(&r).unwrap_or(r);
         if seen.contains(&r) { continue; }
-        let only_here = git_out(wt, &["--git-dir", &r.display().to_string(), "rev-list", "-n1", "--all", "--not", "--remotes"]).map_err(unsure)?;
+        // `--work-tree`: a repo kept for a submodule no longer checked out may name a folder that is gone.
+        let only_here = git_out(wt, &["--git-dir", &r.display().to_string(), "--work-tree", &wt.display().to_string(), "rev-list", "-n1", "--all", "--not", "--remotes"]).map_err(unsure)?;
         if !only_here.is_empty() { return Err(format!("commits in its submodule {} found nowhere else", name(&r, &modules, wt))); }
         seen.push(r);
     }

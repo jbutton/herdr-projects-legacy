@@ -149,9 +149,13 @@ pub fn cleanup_with(t: &Task, o: Opts) -> Cleanup {
         if in_use() { return used(); }
         if !flow::git::dirty(Path::new(wt)).is_empty() { return keep(format!("{wt_short} (uncommitted changes)")); }
         if moved() { return keep(format!("{wt_short} (new work arrived during clean-up)")); }
-        let force = match super::cleanup_submodules::force(Path::new(wt)) { Ok(f) => f, Err(why) => return keep(format!("{wt_short} ({why})")) };
-        let rm: &[&str] = if force { &["worktree", "remove", "--force", wt] } else { &["worktree", "remove", wt] };
+        if let Err(why) = super::cleanup_submodules::force(Path::new(wt)) { return keep(format!("{wt_short} ({why})")); }
         ends = super::cleanup_ends::before_removal(t); // what it left running from its folders goes first
+        // A forced remove looks at nothing, so whether to force is looked at again right before each removal: what was
+        // just ended may have saved a file on its way out. A folder already gone has nothing left to lose.
+        let fresh = || if Path::new(wt).exists() { super::cleanup_submodules::force(Path::new(wt)) } else { Ok(false) };
+        let rm = |force: bool| if force { vec!["worktree", "remove", "--force", wt] } else { vec!["worktree", "remove", wt] };
+        let force = match fresh() { Ok(f) => f, Err(why) => return Cleanup { ends, ..keep(format!("{wt_short} ({why})")) } };
         let removed = (|| -> crate::err::Res<()> {
             match (&api, link.b("ownsWorkspace")) {
                 (Some(api), true) => {
@@ -159,11 +163,14 @@ pub fn cleanup_with(t: &Task, o: Opts) -> Cleanup {
                     let target = match &ws { Some(w) if w.at("worktree").s("checkout_path") == wt => w.t("workspace_id"), _ => flow::spaces::opening_worktree(api, &root, || api.worktree_open(&root.display().to_string(), wt, ""))?.at("workspace").t("workspace_id") };
                     api.worktree_remove(&target, force)?;
                 }
-                _ => { git_out(&root, rm)?; }
+                _ => { git_out(&root, &rm(force))?; }
             }
             Ok(())
         })();
-        if let Err(e) = removed { if git_out(&root, rm).is_err() { return Cleanup { ends, ..keep(format!("{wt_short} ({})", e.msg.lines().next().unwrap_or("could not be removed"))) }; } }
+        if let Err(e) = removed {
+            let force = match fresh() { Ok(f) => f, Err(why) => return Cleanup { ends, ..keep(format!("{wt_short} ({why})")) } };
+            if git_out(&root, &rm(force)).is_err() { return Cleanup { ends, ..keep(format!("{wt_short} ({})", e.msg.lines().next().unwrap_or("could not be removed"))) }; }
+        }
         let _ = git_out(&root, &["worktree", "prune"]);
         // git removed the checkout, herdr did not: its space is still there, or herdr does not say.
         if let (Some(api), true, true) = (&api, link.b("ownsWorkspace"), link.b("workspace")) {

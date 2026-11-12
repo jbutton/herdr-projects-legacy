@@ -128,7 +128,7 @@ task panel ends in `Kept:` and says why:
 | It says | Why | What to do |
 |---|---|---|
 | `(uncommitted changes)` | its checkout has files that were never committed | look at them; reply to the task, or remove the worktree yourself |
-| `(uncommitted changes in its submodules)` | a submodule checked out in it has a change, maybe one its repo tells `git status` to leave out (`ignore = all`) | look at it: `git -C <worktree> status --ignore-submodules=none`; reply to the task, or remove the worktree yourself (`git worktree remove --force`: git removes one with submodules only so) |
+| `(uncommitted changes in its submodules)` | a submodule checked out in it, or one nested in that, has a change, maybe one a repo tells `git status` to leave out (`ignore = all`) | look at it: `git -C <worktree> submodule foreach --recursive git status --ignore-submodules=none`; reply to the task, or remove the worktree yourself (`git worktree remove --force`: git removes one with submodules only so) |
 | `(commits in its submodule <name> found nowhere else)` | that submodule has a commit no remote branch of it has: it would go with the worktree | push them from `<worktree>/<name>`, then remove the worktree yourself (`--force`, as above) |
 | `(its submodules could not be looked at)` | git failed on its submodules (a broken `.gitmodules`) | look at `git -C <worktree> submodule status`, then remove the worktree yourself |
 | `(unmerged work on <branch>)` | its branch holds commits that were not merged | merge them, or reply to the task to go on with them |
