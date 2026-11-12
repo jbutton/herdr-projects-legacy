@@ -1,6 +1,7 @@
 //! The model names the account a program is signed in with can use, asked of its app-server (Codex's `model/list`,
 //! JSON-RPC over its stdin and stdout) with that sign-in (`account/read`): a ChatGPT sign-in takes other names than an
-//! API key, and a name another sign-in takes is refused at the first turn (docs/models.md).
+//! API key, and a name another sign-in takes is refused at the first turn (docs/models.md). `account/read` alone also
+//! says whether the provider it is set to needs that sign-in at all (agents/sign_in.rs).
 use super::listed::Names;
 use crate::json::*;
 use std::io::{BufRead, BufReader, Write};
@@ -33,6 +34,8 @@ pub fn read_page(v: &Value, n: &mut Names) {
     }
 }
 fn request(id: i64, method: &str, params: Value) -> String { format!("{}\n", json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params })) }
+/// What opens a talk with it: who asks, then that it may begin.
+fn hello() -> String { request(0, "initialize", json!({ "clientInfo": { "name": "herdr-projects", "version": env!("CARGO_PKG_VERSION") } })) + "{\"jsonrpc\":\"2.0\",\"method\":\"initialized\"}\n" }
 /// What the program's app-server says: the names, with its sign-in. None: it is not installed here. Err: why it gave
 /// no list (then the program's own list command is asked instead).
 pub fn ask(prog: &str, args: &[&str]) -> Result<Option<Names>, String> {
@@ -47,14 +50,39 @@ pub fn ask(prog: &str, args: &[&str]) -> Result<Option<Names>, String> {
     let _ = child.wait();
     got.map(Some)
 }
+/// Its input, and its answers line by line as they come.
+fn open(child: &mut std::process::Child, cmd: &str) -> Result<(std::process::ChildStdin, mpsc::Receiver<String>), String> {
+    let (Some(input), Some(out)) = (child.stdin.take(), child.stdout.take()) else { return Err(format!("`{cmd}` could not be talked to")) };
+    let (tx, rx) = mpsc::channel::<String>();
+    std::thread::spawn(move || { for l in BufReader::new(out).lines() { let Ok(l) = l else { break }; if tx.send(l).is_err() { break; } } });
+    Ok((input, rx))
+}
+/// Its sign-in as its app-server says it (`account/read`): `account`, null when there is none, and `requiresOpenaiAuth`,
+/// false on a provider of your own that needs no OpenAI sign-in (codex 0.167.2). Err: why it gave no answer.
+pub fn account(prog: &str, args: &[&str], wait_ms: u64) -> Result<Value, String> {
+    let cmd = std::iter::once(prog).chain(args.iter().copied()).collect::<Vec<_>>().join(" ");
+    let mut child = Command::new(prog).args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().map_err(|e| format!("`{cmd}` could not be run: {e}"))?;
+    let got = (|| {
+        let (mut input, rx) = open(&mut child, &cmd)?;
+        let first = hello() + &request(1, "account/read", json!({}));
+        input.write_all(first.as_bytes()).map_err(|e| format!("`{cmd}` could not be asked: {e}"))?;
+        let _ = input.flush();
+        let end = Instant::now() + Duration::from_millis(wait_ms);
+        loop {
+            let line = match rx.recv_timeout(end.saturating_duration_since(Instant::now())) { Ok(l) => l, Err(mpsc::RecvTimeoutError::Timeout) => return Err(format!("`{cmd}` did not answer within {} seconds", wait_ms / 1000)), Err(_) => return Err(format!("`{cmd}` ended before it answered")) };
+            let v: Value = serde_json::from_str(&line).unwrap_or(Value::Null);
+            if v.at("id").is_i64() && v.i("id") == 1 { return if v.at("error").is_object() { Err(format!("`{cmd}`: {}", v.at("error").s("message"))) } else { Ok(v.at("result").clone()) }; }
+        }
+    })();
+    let _ = child.kill();
+    let _ = child.wait();
+    got
+}
 /// The questions, and its answers read as they come, until both are in or the time is up. Its input stays open
 /// meanwhile: the server ends when it closes, before it has answered.
 fn talk(child: &mut std::process::Child, cmd: &str) -> Result<Names, String> {
-    let (Some(mut input), Some(out)) = (child.stdin.take(), child.stdout.take()) else { return Err(format!("`{cmd}` could not be talked to")) };
-    let (tx, rx) = mpsc::channel::<String>();
-    std::thread::spawn(move || { for l in BufReader::new(out).lines() { let Ok(l) = l else { break }; if tx.send(l).is_err() { break; } } });
-    let first = request(0, "initialize", json!({ "clientInfo": { "name": "herdr-projects", "version": env!("CARGO_PKG_VERSION") } }))
-        + "{\"jsonrpc\":\"2.0\",\"method\":\"initialized\"}\n" + &request(1, "model/list", json!({ "includeHidden": true })) + &request(2, "account/read", json!({}));
+    let (mut input, rx) = open(child, cmd)?;
+    let first = hello() + &request(1, "model/list", json!({ "includeHidden": true })) + &request(2, "account/read", json!({}));
     input.write_all(first.as_bytes()).map_err(|e| format!("`{cmd}` could not be asked: {e}"))?;
     let _ = input.flush();
     let end = Instant::now() + Duration::from_millis(WAIT_MS);

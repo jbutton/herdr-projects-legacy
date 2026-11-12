@@ -3,8 +3,10 @@
 //! start the jobs asked for from inside a sandbox or by a command (runner/outside.rs), start queued tasks when a slot is
 //! free (and the ones that wait for others, once those are done: after.rs), reconcile each linked task with herdr (a
 //! working agent that went is started again: hook/relaunch.rs), try a start whose runner was lost again (hook/lost.rs),
-//! bring waiting tasks up to date when main moved, and poll open pull requests (housekeeping/prs.rs). One pass per herdr
-//! session at a time (housekeeping/once.rs).
+//! bring waiting tasks up to date when main moved, archive tasks done for `archive.doneAfter`
+//! (housekeeping/done_after.rs), and poll open pull requests (housekeeping/prs.rs). One pass per herdr session at a time
+//! (housekeeping/once.rs).
+mod done_after;
 mod once;
 mod prs;
 pub use prs::poll_prs;
@@ -62,6 +64,8 @@ fn pass(socket: &str, force: Force) {
             if get(t.s("id")).is_none_or(|c| runner_alive(&c)) { continue; }
             if due(&format!("tidy-{}", key(t.s("id"))), 30000) { spawn_runner("cleanup", t.s("id"), if t.at("tidy").s("deleteBranch") == "merged" { &["--merged"] } else { &[] }); }
         }
+        // A task done for `archive.doneAfter` archives itself (housekeeping/done_after.rs).
+        if due(&format!("doneafter-{}", key(socket)), 60000) { done_after::archive_old(socket); }
         crate::notify::notify_pass(&list(ListOpts::default()));
         resync(&tasks, socket);
         // A chat that changed the code, and you are done with it: its one review (finish/chat.rs).
