@@ -11,6 +11,8 @@ use sw::json::*;
 use sw::store::settings::change::set_value;
 use sw::store::settings::lookup::Scope;
 
+/// Origin's main, the default start: fetched on every start too.
+mod main_fetched;
 /// With no pull request: a push to that branch at origin.
 mod push;
 
