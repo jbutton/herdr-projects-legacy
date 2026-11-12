@@ -19,5 +19,6 @@ pub mod status_words;
 pub mod store;
 pub mod temp;
 pub mod text;
+pub mod tool_env;
 pub mod util;
 pub mod voice;

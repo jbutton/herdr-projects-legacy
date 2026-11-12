@@ -141,7 +141,7 @@ fn values_a_switch_a_choice_a_time_with_its_unit_an_agent_with_its_model_and_the
     refused(set_value("merge.method", &json!("squish"), &you()), r#"merge\.method must be squash, merge, rebase, not "squish"\. Did you mean squash\?"#);
     use sw::store::settings::values::{agent_of, ms, AgentName};
     assert_eq!(set_value("check.timeout", &json!("20m"), &you()).unwrap().value, json!("20m")); assert_eq!((ms("20m"), ms("60s"), ms("2h")), (1200000, 60000, 7200000));
-    refused(set_value("check.timeout", &json!("20"), &you()), r#"check\.timeout is a time with a unit, such as 15m \(s, m or h\), not "20"\. Did you mean 20m\?"#);
+    refused(set_value("check.timeout", &json!("20"), &you()), r#"check\.timeout is a time with a unit, such as 15m \(s, m, h or d\), not "20"\. Did you mean 20m\?"#);
     refused(set_value("watcher.every", &json!("soon"), &you()), "a time with a unit, such as 60s");
     refused(set_value("mergeby", &json!("itself"), &you()), r#"Unknown setting "mergeby"\. Did you mean merge\.by\?"#);
     refused(set_value("gate", &json!("minor"), &you()), r#"Unknown setting "gate""#); refused(set_value("rounds", &json!("2"), &you()), r"Did you mean review\.rounds\?");

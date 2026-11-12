@@ -7,7 +7,9 @@ use sw::herdr::cli::{Fake, Ran};
 use sw::herdr::procs::Wiring;
 use sw::json::*;
 
-pub struct FakeHerdr { pub st: RefCell<Value>, pub dir: std::path::PathBuf, pub script: RefCell<Value>, pub env: Vec<(String, String)> }
+/// `during`: what a test said happens while herdr answers a call, by the call's first words, each once (World::during).
+pub struct FakeHerdr { pub st: RefCell<Value>, pub dir: std::path::PathBuf, pub script: RefCell<Value>, pub env: Vec<(String, String)>, pub during: During }
+pub type During = RefCell<Vec<(String, Box<dyn FnOnce()>)>>;
 pub struct Exit(pub i32, pub String, pub String);
 pub type Out = Result<Exit, Exit>;
 pub fn ok(result: Value) -> Out { Err(Exit(0, format!("{}\n", json!({ "id": "fake", "result": result })), String::new())) }
@@ -18,6 +20,9 @@ pub fn arr<'a>(v: &'a mut Value, k: &str) -> &'a mut Vec<Value> { if !v.at(k).is
 
 impl Fake for FakeHerdr {
     fn run(&self, args: &[String], _input: &str) -> Ran {
+        let call = args.join(" ");
+        let now: Vec<_> = { let mut d = self.during.borrow_mut(); let (now, later) = d.drain(..).partition(|(w, _)| call.starts_with(w.as_str())); *d = later; now };
+        for (_, f) in now { f(); }
         let r = self.answer(args);
         let Exit(status, stdout, stderr) = match r { Ok(e) | Err(e) => e };
         Ran { status, stdout, stderr }
@@ -151,6 +156,7 @@ impl FakeHerdr {
                     "focus" => { arr(&mut st, "focus").push(json!(format!("workspace {arg2}"))); return ok(json!({ "type": "workspace_info", "workspace": Self::ws_out(&st, &w) })); }
                     "rename" => { st["workspaces"][wi]["label"] = json!(argv[3..].join(" ")); let w = st["workspaces"][wi].clone(); return ok(json!({ "type": "workspace_info", "workspace": Self::ws_out(&st, &w) })); }
                     "report-metadata" => { arr(&mut st, "metadata").push(json!({ "workspace": arg2, "args": argv[3..] })); return ok(json!({ "type": "ok" })); }
+                    "close" if st.b("workspaceCloseFails") => return fail("timeout", "timed out"),
                     "close" => { arr(&mut st, "workspaces").remove(wi); arr(&mut st, "panes").retain(|p| p.s("workspace_id") != arg2); Self::drop_empty(&mut st); return ok(json!({ "type": "ok" })); }
                     _ => {}
                 }

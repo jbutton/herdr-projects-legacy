@@ -29,7 +29,7 @@ fn the_two_settings_what_a_value_may_be_the_nearest_right_one_the_lookup_and_nev
     assert_eq!((values::ms("2h"), values::ms("none"), values::tokens_of("2m"), values::tokens_of("500k"), values::tokens_of("none"), values::tokens_say(1234567.0), values::tokens_say(950.0)), (7200000, 0, 2000000, 500000, 0, "1.23m".into(), "950".into()));
     // a refused value changes nothing and names the nearest right one
     let you = Scope::you();
-    assert!(re(r#"limit\.time is a time with a unit, such as 2h \(s, m or h\), or none, not "2 hours"\. Did you mean 2h\?"#, &refused(set_value("limit.time", &json!("2 hours"), &you).map(|f| f.value))));
+    assert!(re(r#"limit\.time is a time with a unit, such as 2h \(s, m, h or d\), or none, not "2 hours"\. Did you mean 2h\?"#, &refused(set_value("limit.time", &json!("2 hours"), &you).map(|f| f.value))));
     assert!(refused(set_value("limit.time", &json!("90"), &you).map(|f| f.value)).contains("Did you mean 90m?"));
     assert!(re(r#"limit\.tokens is a count of tokens, such as 500k or 2m, or none, not "2 million"\. Did you mean 2m\?"#, &refused(set_value("limit.tokens", &json!("2 million"), &you).map(|f| f.value))));
     assert!(refused(set_value("limit.tokens", &json!("0"), &you).map(|f| f.value)).contains("Did you mean none?"));

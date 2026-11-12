@@ -1,11 +1,12 @@
 //! One review: the reviewer started in its own tab, its brief typed in once it is up, then waited for until its
-//! verdict file appears (or its turn ends without one), and what it changed put back.
+//! verdict file appears (or its turn ends without one), and what it changed put back. It starts with your own hooks off,
+//! and not at all when its program says it is signed out here (agents/sign_in.rs).
 use super::review::{close_reviewer, Reviewed};
 use super::review_brief::{parse_verdict, review_brief, Brief};
 use super::review_fallback::{reviewer_now, Cut};
 use super::review_screen::last_screen;
 use super::shared::{ms, review_until, timed_out};
-use crate::agents::{adapter, helpers::still_at_work, installed, start, start_failed};
+use crate::agents::{adapter, helpers::still_at_work, installed, sign_in, start, start_failed};
 use crate::clock::now;
 use crate::delegate::{launch_extras, rules::task_line_as};
 use crate::err::Res;
@@ -52,6 +53,13 @@ pub fn review_once(id: &str, g: &mut Guard, text: &str, change: Option<&Value>, 
     if !installed::installed(&rkind) && installed::installed(t.s("agent")) { rkind = t.t("agent"); rmodel = String::new(); reffort = String::new(); by = rkind.clone(); }
     // A stand-in for a program that is not installed is a hand-over like any other.
     if !stand_in.is_empty() { g.set(|t| { let h = log_handover(t, "reviewer", ch.s("reviewer.agent"), &now_agent, &format!("{stand_in} is not installed here")); t.put("reviewerOn", now_agent.clone()); t.put("msg", handover_line(&h)); })?; }
+    // Signed out here, it would come up at its sign-in page, which herdr reads as idle, and the brief would press its
+    // first choice: it is not started. Logged out, as for a login error in its turn: `reviewer.fallback`, or "Needs a login".
+    if let Some(out) = sign_in::out_here(&rkind) {
+        close_reviewer(id); // a tab left over from an interrupted round
+        let error = format!("{out}: run `{}` in a terminal here, then retry the review", sign_in::how(&rkind));
+        return Ok(Reviewed { cut: true, auth: true, by, error: error.clone(), cut_by: Some(Cut { passing: false, reason: String::new(), error }), ..Default::default() });
+    }
     let round = if plan.is_some() { 0 } else { t.i("reviewRound") + 1 };
     let other = by != ch.s("reviewer.agent");
     let note = if rkind != who.kind && !t.b("reviewerOn") && stand_in.is_empty() { Some(format!("reviewed by {rkind}: {} is not installed here", who.kind)) } else { None };
@@ -82,7 +90,7 @@ pub fn review_once(id: &str, g: &mut Guard, text: &str, change: Option<&Value>, 
         let x = launch_extras(&t, "reviewer", &rkind, round, "", None)?;
         t = g.set(|t| { t.obj_mut("link").put("reviewer", json!({ "pane": pane, "tab": made.tab, "terminal": made.terminal, "agent": name, "kind": rkind })); t.put("reviewSession", x.session.clone().map(Value::String).unwrap_or(Value::Null)); })?;
         flow::sidebar::tell_sidebar(&t); // the reviewer's pane has its entry in herdr's sidebar from the start
-        let opts = |hook: Vec<String>| start::StartOpts { model: rmodel.clone(), effort: reffort.clone(), fast: Some(who.fast), access: who.access.clone(), session: x.session.clone().unwrap_or_default(), extra: hook, folder: folder.clone(), ..Default::default() };
+        let opts = |hook: Vec<String>| start::StartOpts { model: rmodel.clone(), effort: reffort.clone(), fast: Some(who.fast), access: who.access.clone(), session: x.session.clone().unwrap_or_default(), extra: hook, folder: folder.clone(), no_hooks: true, ..Default::default() };
         let start_with = |hook: Vec<String>| -> Res<()> {
             let args = start::start_args(&rkind, &opts(hook))?;
             let r = if plan.is_some() { crate::plan::sandbox::start_program(&api, &get(id).unwrap_or(t.clone()), &name, &rkind, &pane, &args, "reviewer") } else { api.agent_start(&name, &rkind, &pane, &args, 60000).map(|_| ()) };

@@ -5,9 +5,10 @@
 //! An entry: `name` (everywhere: config.json, the command line, a task), `kind` (work: task -> your entry for the repo
 //! -> you -> the repo's file -> built in; board: yours only; repo: a fact about one repo; coordinator: this time ->
 //! this coordinator -> you -> built in, store/settings/coord.rs), `ty` (what a value is:
-//! settings/values.rs), `builtin`, `values` (a choice's words), `none` (an agent or a time that may be `none`), `min`
-//! (a count's smallest), `repo` (one of the facts the repo's own file may hold), `task` (one task's own only), `adds` (its values add up across the
-//! places), `label` (its plain name on the settings page), `means` (a few words beside what the row may be), `doc`.
+//! settings/values.rs), `builtin`, `values` (a choice's words), `none` (an agent or a time that may be `none`), `like`
+//! (the example a refused time names, when not its built-in one), `min` (a count's smallest), `repo` (one of the facts
+//! the repo's own file may hold), `task` (one task's own only), `adds` (its values add up across the places), `label`
+//! (its plain name on the settings page), `means` (a few words beside what the row may be), `doc`.
 use crate::json::{json, Value};
 use std::sync::LazyLock;
 
@@ -20,14 +21,15 @@ pub enum Ty { Switch, Choice, Time, Count, Tokens, Agent, Agents, Effort, Access
 #[derive(Clone, Debug)]
 pub struct Entry {
     pub name: String, pub label: String, pub kind: Kind, pub ty: Ty, pub builtin: Value,
-    pub values: Vec<String>, pub none: bool, pub min: i64, pub repo: bool, pub adds: bool, pub task: bool, pub means: String, pub doc: String,
+    pub values: Vec<String>, pub none: bool, pub like: String, pub min: i64, pub repo: bool, pub adds: bool, pub task: bool, pub means: String, pub doc: String,
 }
 fn e(name: &str, label: &str, kind: Kind, ty: Ty, builtin: Value, doc: &str) -> Entry {
-    Entry { name: name.into(), label: label.into(), kind, ty, builtin, values: vec![], none: false, min: 0, repo: false, adds: false, task: false, means: String::new(), doc: doc.into() }
+    Entry { name: name.into(), label: label.into(), kind, ty, builtin, values: vec![], none: false, like: String::new(), min: 0, repo: false, adds: false, task: false, means: String::new(), doc: doc.into() }
 }
 impl Entry {
     fn values(mut self, v: &[&str]) -> Self { self.values = v.iter().map(|s| s.to_string()).collect(); self }
     fn none(mut self) -> Self { self.none = true; self }
+    fn like(mut self, l: &str) -> Self { self.like = l.into(); self }
     fn min(mut self, n: i64) -> Self { self.min = n; self }
     fn repo(mut self) -> Self { self.repo = true; self }
     fn task(mut self) -> Self { self.task = true; self }
@@ -87,12 +89,13 @@ pub static SETTINGS: LazyLock<Vec<Entry>> = LazyLock::new(|| {
     s.push(e("research.only", "Research only", Work, Ty::Switch, json!(false), "research only: the task's agent changes nothing in the repo and its result is a report, with a private link. Nothing is committed, pushed, opened as a pull request or merged for it, and its row says `[research]`. Read when the agent starts: a change counts from the task's next start, and turning it on is refused once the agent has changed the repo or a pull request is open. `--research` and `--no-research` on `add` and `delegate` are short for it. More: [reports and research-only tasks](research.md)").repo().means("its agent changes nothing in the repo; the result is a report, and nothing is pushed, opened or merged"));
     s.push(e("chat.only", "Chat only", Work, Ty::Switch, json!(false), "chat only: the task is a conversation (a consultation, a discussion, thinking out loud) that ends only when you say. Its agent changes nothing in the repo, and every stop of its agent waits for you: no check, no review, no push, no pull request, no merge, whatever the review settings say. Yes on the board (or `herdr-projects finish <id>`) ends it as done, with the agent's last message, or its report, as the summary. Its row says `[chat]`. With `research.only` on as well, chat wins. Read when the agent starts. `--chat` and `--no-chat` on `add` and `delegate` are short for it. More: [chat-only tasks](chat.md)").repo().means("a conversation: its agent changes nothing in the repo, never finishes by itself, and nothing is reviewed, pushed or merged"));
     // where it works
-    s.push(e("workspace.from", "Worktree starts from", Work, Ty::From, json!("main"), "where a worktree starts, and where its work lands: `main` (the remote's main branch, fetched first), `here` (the commit your checkout is on) or a branch's name at the remote (`develop`). A named branch is fetched from origin on every start, and one origin does not have is refused; the task keeps up with that branch, its pull request merges into it and GitHub's checks are those of a pull request into it. With `merge.pr` off it lands there with no pull request: the reviewed commit, built by `merge.method`, is pushed to that branch at origin, touching no checkout, and a branch that moved meanwhile is caught up with and checked again, never forced. Read when the worktree is made. More: [how work gets done](how-work-gets-done.md)"));
+    s.push(e("workspace.from", "Worktree starts from", Work, Ty::From, json!("main"), "where a worktree starts, and where its work lands: `main` (the remote's main branch), `here` (the commit your checkout is on) or a branch's name at the remote (`develop`). The remote's branch is fetched on every start; with origin out of reach the task starts from the copy fetched last, and its log says so. A named branch origin does not have is refused; the task keeps up with that branch, its pull request merges into it and GitHub's checks are those of a pull request into it. With `merge.pr` off it lands there with no pull request: the reviewed commit, built by `merge.method`, is pushed to that branch at origin, touching no checkout, and a branch that moved meanwhile is caught up with and checked again, never forced. Read when the worktree is made. More: [how work gets done](how-work-gets-done.md)"));
     s.push(e("workspace.branch", "Branch name", Work, Ty::Branch, json!("work/{n}-{slug}"), "the name of a task's branch: `{n}` is the task's number (an attempt's letter included: `7b`), `{slug}` its title in small words with dashes, `{key}` its repo's key and number (`KIC-123`). It needs `{n}` or `{key}`. git must take it as a branch name (`git check-ref-format`); one it would refuse is refused with the nearest one it takes. A name already taken gets `-2`, `-3` and so on after it. Read when the worktree is made. More: [how work gets done](how-work-gets-done.md)"));
     s.push(e("workspace.setup", "Set-up command", Work, Ty::Text, json!("none"), "a command run in the fresh worktree before the agent starts").repo());
     s.push(e("workspace.include", "Files copied in", Work, Ty::List, json!("none"), "ignored files a fresh worktree lacks and gets a copy of (`.env`); `.worktreeinclude` in the repo names more").repo());
     s.push(e("workspace.teardown", "Teardown command", Work, Ty::Text, json!("none"), "a command run in the worktree before it is removed").repo());
     s.push(e("workspace.cleanup", "Clean up when done", Work, Ty::Switch, json!(true), "remove a done task's space (so it leaves herdr's sidebar), worktree and branch. More: [when a task is done](how-work-gets-done.md#when-a-task-is-done)"));
+    s.push(e("archive.doneAfter", "Archive done after", Work, Ty::Time, json!("none"), "how long a task stays done before it archives itself: a time (`3d`, `12h`) or `none`. Counted from when it was done, or from its restore. Each goes as one archive does (its space closes, its worktree stays), and only what `archive --done` would take: a pinned task, one that works, waits or is to do stays, and so does a done one whose clean-up is still to come or whose space is in use, until it is free. More: [the board](board.md#the-list-five-groups)").none().like("3d").means("how long a task stays done before it archives itself. Pinned, working, waiting and to-do tasks stay"));
     // how many try it, and who picks
     s.push(e("attempts.by", "Attempts by", Work, Ty::Attempts, json!(1), "how many attempts are made at once, and by whom: a count (`3`), or a list of agents (`claude, codex, pi`; a model after a slash; a name may repeat). A count means that many of `worker.agent`. Each attempt has its own worktree, branch and tab, runs the check, and holds one of `board.agents`' slots; one that finds no free slot waits its turn. At most 5. `1`: the task is done once, as ever. More: [several attempts](attempts.md)"));
     s.push(e("attempts.pick", "Attempt picked by", Work, Ty::Choice, json!("you"), "who chooses among the attempts that passed the check. `you`: the task waits as \"pick one\", the attempts side by side, with the reviewer's comparison when there is a reviewer. `reviewer`: the reviewer compares them, names one and says why, and that one goes on by itself. Only the chosen attempt is reviewed in full, pushed and merged. More: [several attempts](attempts.md)").values(&["you", "reviewer"]));
