@@ -92,9 +92,18 @@ fn claude_codes_notice_over_its_input_box_is_not_the_agents_words() {
         let words = command_over_box(width, indent);
         assert!(words.ends_with(&format!("\n\n{}{CURL}", " ".repeat(indent))), "width {width}, indent {indent}: {words:?}");
     }
-    // while the notice of a narrow pane is left out all the same
-    let narrow = format!("⏺ Done.\n{}new task? /clear to save 599.8k tokens\n{}\n❯\n{}\n  ⏵⏵ bypass permissions on", " ".repeat(10), "─".repeat(50), "─".repeat(50));
-    assert_eq!(sw::agents::screen_text::agent_words(&narrow), "⏺ Done.");
+    // so is a line that holds a notice's words and more, where a notice would stand (ending 2 columns from the right)
+    for line in ["echo 'Restart to update'", "Restart to update now", "see: new task? /clear to save 5k tokens", "new task? /clear to save many tokens", "Update installed"] {
+        let row = format!("{}{line}", " ".repeat(48 - line.chars().count()));
+        let words = sw::agents::screen_text::agent_words(&format!("⏺ Done.\n{row}\n{}\n❯\n{}\n  ⏵⏵ bypass permissions on", "─".repeat(50), "─".repeat(50)));
+        assert!(words.ends_with(&row), "{line:?}: {words:?}");
+    }
+    // while the notice of a narrow pane is left out all the same, one notice or several
+    for notice in ["new task? /clear to save 599.8k tokens", "✔ Update installed · Restart to update", "new task? /clear to save 2M tokens · ✔ Update installed"] {
+        let row = format!("{}{notice}", " ".repeat(58 - notice.chars().count()));
+        let words = sw::agents::screen_text::agent_words(&format!("⏺ Done.\n{row}\n{}\n❯\n{}\n  ⏵⏵ bypass permissions on", "─".repeat(60), "─".repeat(60)));
+        assert_eq!(words, "⏺ Done.", "{notice:?}");
+    }
 }
 const CURL: &str = "curl --retry 3 --connect-timeout 20 https://service.example.test/health";
 fn command_over_box(width: usize, indent: usize) -> String {
@@ -103,14 +112,17 @@ fn command_over_box(width: usize, indent: usize) -> String {
 
 #[test]
 fn an_indented_command_over_the_input_box_of_a_narrow_pane_stays_in_the_message() {
-    let screen = format!("⏺ The command failed:\n\n{}{CURL}\n{}\n❯\n{}\n  Opus · 42% left\n  ⏵⏵ bypass permissions on", " ".repeat(16), "─".repeat(40), "─".repeat(40));
     let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
-    w.script(json!({ "worker": [{ "files": { "x.txt": "x\n" }, "note": null, "screen": screen }] }));
-    let id = w.add("Narrow pane");
-    delegate(&id);
-    let t = settle(&id);
-    assert_eq!(t.s("stage"), "nosummary");
-    assert!(t.s("msg").contains(CURL), "{:?}", t.s("msg"));
+    // the second ends 2 columns from the right of the box and holds a notice's words
+    for (indent, command) in [(16, CURL), (14, "echo 'Restart to update'")] {
+        let screen = format!("⏺ The command failed:\n\n{}{command}\n{}\n❯\n{}\n  Opus · 42% left\n  ⏵⏵ bypass permissions on", " ".repeat(indent), "─".repeat(40), "─".repeat(40));
+        w.script(json!({ "worker": [{ "files": { "x.txt": "x\n" }, "note": null, "screen": screen }] }));
+        let id = w.add("Narrow pane");
+        delegate(&id);
+        let t = settle(&id);
+        assert_eq!(t.s("stage"), "nosummary");
+        assert!(t.s("msg").contains(command), "{:?}", t.s("msg"));
+    }
 }
 
 #[test]

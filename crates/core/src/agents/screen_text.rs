@@ -37,15 +37,19 @@ fn turn_line(line: &str) -> bool {
     w.next() == Some("✻") && w.next().is_some_and(|v| v.starts_with(char::is_uppercase)) && w.next() == Some("for")
         && w.next().is_some_and(|d| d.starts_with(|c: char| c.is_ascii_digit()))
 }
-/// The words of Claude Code's notices seen in the row right over its input box (`new task? /clear to save 599.8k
-/// tokens`, `✔ Update installed · Restart to update`).
-const NOTICES: &[&str] = &["/clear to save", "Update installed", "Restart to update"];
-/// Claude Code's notice in the row right over its input box: pushed to the right, it ends where the box's top rule
-/// ends, give or take a margin, and never past it. It is told by its words, not by where it stands alone: a line of the
-/// agent's own there, indented in a pane of any width, is kept, and so is a notice with other words.
+/// One of Claude Code's notices seen in the row right over its input box, whole: `new task? /clear to save 599.8k
+/// tokens`, `✔ Update installed`, `Restart to update`.
+fn notice_part(p: &str) -> bool {
+    let count = p.strip_prefix("new task? /clear to save ").and_then(|r| r.strip_suffix(" tokens"));
+    p == "✔ Update installed" || p == "Restart to update"
+        || count.is_some_and(|n| n.starts_with(|c: char| c.is_ascii_digit()) && n.chars().all(|c| c.is_ascii_digit() || ".kM".contains(c)))
+}
+/// Claude Code's notice in the row right over its input box: pushed to the right, it ends 2 columns before the box's
+/// top rule ends, and it is nothing but its notices, joined by ` · `. A line of the agent's own there is kept, though it
+/// holds a notice's words; a notice worded otherwise stays in. Only a line that is a notice, in a notice's place, is not.
 fn notice(row: &str, top: &str) -> bool {
     let (width, end) = (top.trim_end().chars().count(), row.trim_end().chars().count());
-    row.starts_with(' ') && end <= width && end + 4 >= width && NOTICES.iter().any(|n| row.contains(n))
+    row.starts_with(' ') && end + 2 == width && row.trim().split(" · ").all(notice_part)
 }
 /// The words an agent left on its screen, for a turn that ended with nothing else: what stands above its program's
 /// input box. The box is its prompt mark near the end of the screen (Claude Code's `❯`, Codex's `›`, or `>` just under
