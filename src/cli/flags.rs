@@ -49,7 +49,7 @@ fn takes(cmd: &str, sub: &str) -> Option<Takes> {
         "board" | "--skill" | "skill" => f(&["skill"]),
         "help" | "hook" | "keeper" | "keeper-work" | "open" | "open-coordinator" | "approve-current" | "serve" | "remote" => f(&[]),
         "docs" => f(&["check", "where", "guard"]),
-        "turn-ended" => f(&["id", "role", "token", "round"]),
+        "turn-ended" | "statusline" => f(&["id", "role", "token", "round"]),
         "plan-written" => f(&["id", "token"]),
         "run" => f(&["force", "merged"]),
         "add" | "new" => s(ADD),

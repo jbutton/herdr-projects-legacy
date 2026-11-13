@@ -88,6 +88,8 @@ pub struct Turn {
     pub finished: bool, pub pending: bool, pub interrupted: bool, pub usage: Option<Usage>, pub model: String,
     pub auth: bool, pub passing: bool, pub reason: String,
     #[serde(skip_serializing_if = "Option::is_none")] pub file: Option<PathBuf>,
+    /// Its program's usage window, where its lines say it (read_window.rs).
+    #[serde(skip_serializing_if = "Option::is_none")] pub window: Option<super::read_window::Reading>,
 }
 /// The provider's side of an error, decided once the turn is read.
 fn judge(mut t: Turn, code: &str, status: i64, auth_code: bool) -> Turn {
@@ -234,13 +236,13 @@ pub fn pi_turn(rows: &[Value]) -> Option<Turn> {
         _ => { let done = stop == "stop" || stop == "length"; Turn { said: text, stop: if stop == "length" { "length".into() } else if done { "stop".into() } else { String::new() }, finished: done, pending: !done, ..base } }
     })
 }
-/// The end of a conversation, by this program's reader.
-pub fn read_turn(kind: &str, file: &Path, bytes: u64) -> Option<Turn> {
-    match kind { "claude" => read_claude(file, bytes), "codex" => read_codex(file, bytes), "pi" => read_pi(file, bytes), _ => None }
-}
+/// The end of a conversation, by this program's reader, with its usage window where its lines say it.
+pub fn read_turn(kind: &str, file: &Path, bytes: u64) -> Option<Turn> { turn_in(kind, &tail_lines(file, bytes).ok()?) }
 /// The same, of its lines as read (`tail_lines`): what a reader of the file's end kept between reads judges.
 pub fn turn_in(kind: &str, rows: &[Value]) -> Option<Turn> {
-    match kind { "claude" => claude_turn(rows), "codex" => codex_turn(rows), "pi" => pi_turn(rows), _ => None }
+    let mut t = match kind { "claude" => claude_turn(rows), "codex" => codex_turn(rows), "pi" => pi_turn(rows), _ => None }?;
+    t.window = super::read_window::window_in(kind, rows);
+    Some(t)
 }
 thread_local! { static LISTED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
 /// A folder's entries, looking for a saved conversation. Each one is counted: what a search costs is how many folders

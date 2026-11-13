@@ -34,7 +34,9 @@ pub fn hook_args(kind: &str, h: &Hook) -> Res<Option<Vec<String>>> {
             let command = hook_command(h).iter().map(|s| shq(s)).collect::<Vec<_>>().join(" ");
             let file = h.dir.join(format!("hook-{}.json", h.role));
             let one = json!([{ "hooks": [{ "type": "command", "command": command, "async": true }] }]);
-            write_private(&file, &json!({ "hooks": { "Stop": one, "StopFailure": one }, "idleCompaction": false }).to_string())?;
+            // Its status line is the board's, which keeps where the agent stands in its usage window and then shows
+            // yours (statusline.rs).
+            write_private(&file, &json!({ "hooks": { "Stop": one, "StopFailure": one }, "idleCompaction": false, "statusLine": super::statusline::setting(h) }).to_string())?;
             Ok(Some(vec!["--settings".into(), file.display().to_string()]))
         }
         // Codex runs one `notify` program at each turn end. Given at launch it would replace one the user configured,

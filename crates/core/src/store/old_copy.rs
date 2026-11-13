@@ -62,7 +62,7 @@ fn short(p: &Path) -> String {
     match p.strip_prefix(&home) { Ok(rest) if home != Path::new("/") => format!("~/{}", rest.display()), _ => p.display().to_string() }
 }
 /// Commands run with nobody reading their error output (as in move_home.rs): the line waits for a human.
-const QUIET: [&str; 8] = ["board", "hook", "turn-ended", "keeper", "keeper-work", "run", "serve", "remote"];
+const QUIET: [&str; 9] = ["board", "hook", "turn-ended", "statusline", "keeper", "keeper-work", "run", "serve", "remote"];
 /// At the start of every run, after the move into the home folder: the copy, and its one line, added to the move's
 /// own line so that the board shows it too when the first run was a hook.
 pub fn copy_at_start(cmd: &str) {
