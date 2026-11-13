@@ -147,6 +147,8 @@ writes cannot switch a hand-over on or off ([settings](settings.md)).
   for itself, and a hand-over in one attempt changes nothing in the others. When an attempt that changed hands is the one
   chosen, the task keeps the agent that took it over, its model and the hand-overs. The two differ: a hand-over is one
   agent after another, only on failure, and costs nothing when all goes well; attempts are side by side, always.
+- **[Extra usage](extra-usage.md).** Under `usage.extra defer`, an agent that moves onto paid extra usage is handed
+  over to the next one on the list that is not on it.
 - **[Limits on time and tokens](limits.md).** A task stopped at its limit is **not** handed over. The limit is your cap
   on what the task may cost, a token limit counts all its agents together, and another agent would only go on spending.
   It waits for you, as that page says.

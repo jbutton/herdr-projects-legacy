@@ -6,7 +6,6 @@ mod far;
 mod move_home;
 mod review_kit;
 mod takeover_kit;
-
 mod after;
 mod after_far;
 mod after_more;
@@ -258,6 +257,7 @@ mod theme_meanings;
 mod theme_paint;
 mod titles;
 mod turns;
+mod usage;
 mod voice;
 mod voice_builtin;
 mod voice_commands;

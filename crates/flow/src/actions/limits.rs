@@ -21,6 +21,7 @@ pub fn carry_on(id: &str, raised: bool) -> Res<Said> {
     let cur = find(id)?;
     assert_unarchived(&cur)?;
     let cid = cur.t("id");
+    if crate::usage::gate::start_waits(&cur) { return crate::usage::gate::start_anyway(&cid); } // held back for extra usage
     if !stopped_at_limit(&cur) { crate::fail!("{cid} was not stopped at a limit."); }
     let ls = cur.at("limitStop").clone();
     let done = |out: &Said, msg: String| { let t = get(&cid).unwrap_or_else(|| out.task.clone()); say(t, if out.msg.starts_with("queued") { out.msg.clone() } else { msg }) };
@@ -58,7 +59,7 @@ pub fn carry_on(id: &str, raised: bool) -> Res<Said> {
         spawn_runner("pipeline", &cid, &[]);
         return Ok(say(t, format!("{cid}: carrying on, it is reviewed again")));
     }
-    let words = flow::send::with_tail(&cur, &format!("You were stopped because this task reached its limit ({}), not because of anything you did. {}: continue the task where you left off.", what(&ls), if raised { "The limit was raised" } else { "The human said to carry on" }));
+    let words = flow::send::with_tail(&cur, &if ls.s("what") == "usage" { crate::usage::words::carry_words(&ls, raised, &cur) } else { format!("You were stopped because this task reached its limit ({}), not because of anything you did. {}: continue the task where you left off.", what(&ls), if raised { "The limit was raised" } else { "The human said to carry on" }) });
     let out = own(&|| tell(&cid, &words, false))?;
     // The time the run had taken rides on when it is the limit that moved, not you.
     if raised && ls.s("what") == "time" {

@@ -38,6 +38,7 @@ pub mod submit;
 pub mod sync;
 pub mod take_over;
 pub mod turn;
+pub mod usage;
 pub mod watcher;
 
 /// What the board's screen has that the flow uses too: the keys (a message names a key) and the theme (the review

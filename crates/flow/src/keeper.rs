@@ -135,6 +135,7 @@ pub fn tick_once(socket: &str, watch: bool) -> Option<Vec<Obj>> {
         refresh_said(&every, now());
         // A run at its time limit is stopped; a raised limit carries on (limits/tick.rs).
         crate::limits::tick::limits_tick(&every, now(), Some(&|id: &str| { let _ = crate::actions::limits::carry_on(id, true); }));
+        crate::usage::tick::usage_tick(&every, now()); // each agent's usage window read; extra usage marked, and stopped where the task says (usage/)
         crate::autopilot::tick::autopilot_tick(socket, now()); // coordinators on autopilot woken (autopilot/tick.rs)
         for co in crate::coordinator::state::all(socket) { crate::coordinator::pump::tick(&co); crate::coordinator::sidebar::tell_sidebar(&co); }
         rows = Some(rs);

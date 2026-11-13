@@ -35,14 +35,18 @@ pub fn number(rows: &mut [Obj]) {
 pub fn tag(r: &Obj) -> String { if queued(r) && r.i("queuePlace") > 0 { format!("Q#{}", r.i("queuePlace")) } else { String::new() } }
 /// It waits for room on a disk (leftovers/room.rs), not for a free slot.
 pub fn waits_disk(r: &Obj) -> bool { r.s("stage") == "queued" && r.b("diskWait") && !r.b("archivedAt") }
+/// It is held back for extra usage (usage/gate.rs): its own line says what for.
+pub fn waits_usage(r: &Obj) -> bool { r.s("stage") == "queued" && r.b("usageWait") && !r.b("archivedAt") }
 /// What a task in the queue waits for, in words: "waiting for disk space", or "waiting for a free slot".
 pub fn waits_for(r: &Obj) -> &'static str { if waits_disk(r) { DISK } else { WAITING } }
 /// "waiting for a free slot, Q#2", "waiting for disk space, Q#1", or "queued after HSW-6": where a queued task stands, in words.
 pub fn words(r: &Obj) -> String {
     if waits_after(r) { return crate::after::row_line(r); }
+    if waits_usage(r) { return r.t("msg"); }
     let (w, q) = (waits_for(r), tag(r)); if q.is_empty() { w.into() } else { format!("{w}, {q}") }
 }
 /// The same in a word or two, for herdr's sidebar (its place is beside it): "queued", or "waiting for disk space".
-pub fn short(r: &Obj) -> &'static str { if waits_disk(r) { DISK } else { crate::status_words::QUEUED } }
+pub fn short(r: &Obj) -> &'static str { if waits_disk(r) { DISK } else if waits_usage(r) { USAGE } else { crate::status_words::QUEUED } }
 pub const WAITING: &str = "waiting for a free slot";
 pub const DISK: &str = "waiting for disk space";
+pub const USAGE: &str = "waiting for the usage window";
