@@ -141,6 +141,9 @@ Choose the count with that in mind (`show <id>` and the task panel say what a ta
   conversation is one more file. A run is whatever agent is at work in the task's current stage.
 - **[The fallback agent](fallback.md)**: a stop at a limit is the board's ordinary stop with a mark on it (`limitStop`).
   A task stopped at its limit is not handed over: it waits for you.
+- **[Extra usage](extra-usage.md)**: a stop for extra usage (`usage.extra ask` or `defer`) is this same stop, marked
+  `what: usage`, carried on and taken as it is the same way. A task stopped at its token limit is not stopped for extra
+  usage as well.
 
 These settings come from the research of task herdr-projects/154.
 
