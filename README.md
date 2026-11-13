@@ -1,6 +1,6 @@
 # herdr-projects 1.x, maintained copy
 
-This is Robert's standalone, maintained copy of the legacy herdr-projects 1.x work board. It starts from
+This is JButton's standalone, maintained copy of the legacy herdr-projects 1.x work board. It starts from
 [eliasstravik/herdr-projects v1.2.27](https://github.com/eliasstravik/shepherdr/releases/tag/v1.2.27), the last 1.x
 release, under the same MIT license with the original copyright kept ([LICENSE](LICENSE)). Upstream has moved on to
 [Shepherdr](https://github.com/eliasstravik/shepherdr). This copy carries the changes listed below, publishes no
