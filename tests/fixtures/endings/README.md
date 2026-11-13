@@ -22,5 +22,9 @@ the API's documented 529 and 429 texts; the two `-finished-made` files are an or
 - `claude-helper-back-mid-turn-made` (tests/finish_missed.rs): a helper whose answer comes back while the agent's turn
   is still going, in the shape recorded on HSW-218 (Claude Code 2.1.300): its `<task-notification>` is only a
   `queue-operation` and an `attachment` (a queued command taken into the running turn), never a message of its own.
+- `claude-shell-running-made`, `claude-shell-back-made` (tests/helpers/shells.rs): a turn that ends while a command it
+  started in the background still runs, and the turn the command's end starts, in the shape recorded from Claude Code
+  2.1.314 (a Bash result with `backgroundTaskId`, then its `<task-notification>` queued and taken as a message), with
+  folder names cut.
 - `claude-idle-compaction` (tests/turns/ended_late.rs): recorded on 2026-10-24 (Claude Code 2.1.312), summary and file
   names cut: what Claude Code writes when it compacts a session left idle an hour after its turn ended, with no prompt.

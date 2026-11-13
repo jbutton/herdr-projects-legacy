@@ -1,12 +1,16 @@
-//! Helpers an agent runs inside its own work (Codex's sub-agents, Claude Code's background agents): a helper's turn
-//! ending is not the review's or the task's end, a turn that ends while a helper is still at work is waited past, and
-//! a reviewer that really ended without a verdict is started once more by itself. Seen on HP-1 (2026-10-15): a Codex
-//! reviewer's helper `/root/check_plans` finished, and the board failed the review for want of a verdict.
+//! Helpers an agent runs inside its own work (Codex's sub-agents, Claude Code's background agents and commands): a
+//! helper's turn ending is not the review's or the task's end, a turn that ends while a helper is still at work is
+//! waited past, and a reviewer that really ended without a verdict is started once more by itself. Seen on HP-1
+//! (2026-10-15): a Codex reviewer's helper `/root/check_plans` finished, and the board failed the review for want of a
+//! verdict.
 use crate::common;
 use common::*;
 use serde_json::{json, Value};
 use sw::json::*;
 use sw::store::reviews::{review_history, review_round};
+
+/// A command Claude Code runs in the background, at work until it ends (upstream SHEP-148).
+mod shells;
 
 fn work() -> Value { json!({ "files": { "f.txt": "v1\n" }, "commit": "v1", "note": "Did v1." }) }
 fn verdict() -> Value { json!({ "meets": true, "findings": [], "text": "Looks right." }) }

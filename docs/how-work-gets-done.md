@@ -202,6 +202,13 @@ When the agent's turn ends, the board:
      still going. (The same holds for a working agent and its task.) A helper is back when its answer is in the
      conversation (a message of its own, or a queued one taken into a turn still going), or its own saved conversation
      ends in its finished reply.
+   - A command Claude Code runs in the background (a Bash with `run_in_background`, or one moved there when its
+     timeout ran out) counts the same way: a turn that ends while one runs is not the end. It has ended when its
+     notification is in the conversation (completed, failed or killed) or the agent stopped it (TaskStop). Its end
+     starts the agent again, and that turn's end is the one that counts. So the check, the review and the "ready"
+     alert start once, after the command, not while it runs. Meanwhile the row says `Finishing`. A command that never
+     ends (a server left running) holds it there: the agents are told to stop theirs before they finish, and `Ctrl+L`
+     takes the work as it is.
    - A reviewer whose turn its provider cut off is retried by the board ([a turn cut off by the provider](provider-errors.md)).
    - It starts with your own hooks off, and is not started at all when its program says it is signed out here
      ([the reviewer's own start-up screens](#the-reviewers-own-start-up-screens)).

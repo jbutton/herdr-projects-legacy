@@ -1,7 +1,7 @@
-//! Helpers an agent runs inside its own work (Codex's sub-agents, Claude Code's background agents). A helper's turn
-//! ending is not the agent's: Codex reports it like any turn end, with the helper's own thread, whose saved
-//! conversation names the thread that started it. And while a helper the agent started is still at work, the agent's
-//! own turn ending is not the end of its work: the helper's answer starts the agent again.
+//! Helpers an agent runs inside its own work (Codex's sub-agents, Claude Code's background agents and the commands it
+//! runs in the background). A helper's turn ending is not the agent's: Codex reports it like any turn end, with the
+//! helper's own thread, whose saved conversation names the thread that started it. And while a helper the agent started
+//! is still at work, the agent's own turn ending is not the end of its work: the helper's answer starts the agent again.
 use super::adapter::transcript;
 use super::read_turn::{head_of, read_turn, tail_lines, when, Turn, TAIL};
 use crate::json::*;
@@ -53,15 +53,24 @@ fn word_after(line: &str, key: &str) -> Vec<String> {
 /// `<task-notification>` comes back. One that comes back while the agent's turn is still going is no message of its own:
 /// it is written as a queued command (`queue-operation`, then an `attachment` taken into the running turn), as seen on
 /// HSW-218 (Claude Code 2.1.300, 2026-10-15), where the board waited for a helper back for half an hour.
+/// A command it runs in the background (a Bash with `run_in_background`, or one moved there when its timeout ran out)
+/// is at work the same way, from the result that names it (`backgroundTaskId`) until its `<task-notification>`
+/// (completed, failed or killed), or until TaskStop's result: a stopped one gets no notification (Claude Code 2.1.308 to
+/// 2.1.322). Before, a turn that ended while one ran was taken for the end, and the check and the review ran while it
+/// still did (upstream Shepherdr SHEP-148).
 fn claude_running(file: &Path, since: i64) -> usize {
     let mut live: Vec<(String, i64)> = vec![];
     let mut known: Vec<String> = vec![];
-    for (l, e) in lines_with(file, &["Async agent launched", "<task-notification>", "\"SendMessage\""]) {
+    for (l, e) in lines_with(file, &["Async agent launched", "<task-notification>", "\"SendMessage\"", "backgroundTaskId", "Successfully stopped task"]) {
         let at = when(e.at("timestamp"));
         if e.s("type") == "user" && l.contains("Async agent launched") {
             for id in word_after(&l, "agentId: ") { live.retain(|(x, _)| *x != id); live.push((id.clone(), at)); known.push(id); }
         } else if ["user", "attachment", "queue-operation"].contains(&e.s("type")) && l.contains("<task-notification>") {
             for id in word_after(&l, "<task-id>") { live.retain(|(x, _)| *x != id); }
+        } else if e.s("type") == "user" && !e.b("isSidechain") {
+            let r = e.at("toolUseResult");
+            if let Some(id) = shell_started(&e) { live.retain(|(x, _)| *x != id); live.push((id, at)); }
+            else if r.b("task_id") && r.s("message").to_lowercase().contains("stopped") { let id = r.t("task_id"); live.retain(|(x, _)| *x != id); }
         } else if e.s("type") == "assistant" {
             for c in e.at("message").arr("content") {
                 let to = c.at("input").t("to");
@@ -71,6 +80,10 @@ fn claude_running(file: &Path, since: i64) -> usize {
     }
     live.iter().filter(|(id, at)| *at >= since && !claude_back(file, id, *at)).count()
 }
+/// The id of a command Claude Code moved to the background: its result's `backgroundTaskId` (in every one recorded,
+/// 2.1.308 to 2.1.322). Never the words of the result: a foreground command's own output may begin with them, and no
+/// notification would ever end a command it never started.
+fn shell_started(e: &Value) -> Option<String> { Some(e.at("toolUseResult").t("backgroundTaskId")).filter(|id| !id.is_empty()) }
 /// A Claude Code helper's own conversation (`<conversation>/subagents/agent-<id>.jsonl`) ends in its finished reply,
 /// written since it was last started: it is back, whatever the agent's own file shows of its notification.
 fn claude_back(file: &Path, id: &str, at: i64) -> bool {
