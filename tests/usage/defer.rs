@@ -72,8 +72,11 @@ fn usage_defer_stops_a_working_agent_at_once_and_the_window_reset_carries_it_on_
     let t = settle(&id);
     assert_eq!(t.s("stage"), "working");
     assert!(told(&w, &id).last().unwrap().contains("its program moved onto paid extra usage, not because of anything you did. The usage window has reset: continue the task where you left off."), "{:?}", told(&w, &id));
-    // The window is a fresh one: the mark goes at the next look.
+    // The window is a fresh one: the mark goes at the next look, once board.notify was told of it.
     tick(&w, resets + 20_000);
+    assert!(task(&id).b("extra"), "not before it was told");
+    sw::notify::notify_pass(&sw::store::tasks::list(Default::default()));
+    tick(&w, resets + 30_000);
     assert!(!task(&id).b("extra"));
 }
 
@@ -105,7 +108,16 @@ fn usage_defer_hands_a_working_task_to_the_fallback_and_passes_over_one_on_extra
     assert_eq!((t.s("stage"), t.s("agent"), t.s("on")), ("working", "codex", "codex"), "{} {}", t.at("fallbacks"), t.s("msg"));
     let h = sw::store::handovers::last_handover(&t, "worker").unwrap();
     assert_eq!((h.s("from"), h.s("to"), h.t("why")), ("claude", "codex", format!("claude is on extra usage until {}", hm(resets, t0))));
-    assert!(!t.b("extra") && !t.b("limitStop"));
+    assert!(!t.b("limitStop"));
+    // The mark is kept through the hand-over, so board.notify is told, once, though Codex is on it now: the
+    // housekeeping after the hand-over's job told it (`extraTold`), and nothing is pending.
+    assert_eq!((t.at("extra").s("agent"), t.at("extraTold")), ("claude", t.at("extra").at("window")));
+    assert_eq!(sw::notify::event_of(&t), "");
+    let says = sw::shown::row_says::sentence(&sw::shown::states::as_row(&row(&id))).text();
+    assert!(!says.contains("On extra usage"), "the row does not say Codex is on it: {says}");
+    // Told: the mark of the agent before it goes at the next look.
+    tick(&w, t0 + 30_000);
+    assert!(!task(&id).b("extra"));
 }
 
 #[test]

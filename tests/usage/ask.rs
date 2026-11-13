@@ -64,6 +64,36 @@ fn usage_ask_changed_to_allow_carries_on_by_itself() {
 }
 
 #[test]
+fn usage_ask_changed_to_defer_waits_for_the_window_and_carries_on_at_its_reset() {
+    use sw::store::settings::{change::set_value, lookup::Scope};
+    let w = world();
+    let id = at_work(&w, "claude", json!({ "usage.extra": "ask" }));
+    let t0 = sw::clock::now();
+    let resets = (t0 + HOUR) / 1000 * 1000;
+    claude_window(&id, t0, 100.0, resets);
+    tick(&w, t0 + 10_000);
+    assert_eq!(sw::notify::event_of(&task(&id)), "needs you");
+    // Set to defer while it waits: it waits for the window, not for you, and its line says so.
+    set_value("usage.extra", &json!("defer"), &Scope::task(&task(&id))).unwrap();
+    let t = task(&id);
+    assert!(sw::usage::words::waits_window(&t));
+    assert_eq!((row(&id).s("state"), sw::notify::event_of(&t)), ("working", ""));
+    limits(&w, t0 + 20_000);
+    let t = task(&id);
+    assert_eq!((t.s("stage"), t.at("limitStop").s("how"), t.s("msg")), ("stopped", "defer", format!("waiting for the usage window: resets {}", hm(resets, t0)).as_str()));
+    // And back to ask: it waits for you again.
+    set_value("usage.extra", &json!("ask"), &Scope::task(&task(&id))).unwrap();
+    limits(&w, t0 + 30_000);
+    let t = task(&id);
+    assert!(!sw::usage::words::waits_window(&t));
+    assert!(t.s("msg").starts_with("stopped: claude moved onto extra usage"), "{}", t.s("msg"));
+    // Defer again, and its window's reset carries it on by itself.
+    set_value("usage.extra", &json!("defer"), &Scope::task(&task(&id))).unwrap();
+    limits(&w, resets + 1000);
+    assert_eq!(settle(&id).s("stage"), "working");
+}
+
+#[test]
 fn usage_ask_holds_a_start_while_its_program_is_on_extra_usage_and_retry_starts_it_anyway() {
     let w = world_with(Opts { repo: true, settings: json!({ "usage.extra": "ask" }), ..Default::default() });
     w.script(json!({ "worker": [{ "status": "working" }] }));

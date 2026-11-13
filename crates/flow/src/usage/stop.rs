@@ -37,6 +37,22 @@ pub fn lifted(t: &Obj) -> bool {
         _ => false,
     }
 }
+/// A task stopped for extra usage whose setting changed while it waits (`ask` to `defer`, or back): its stop and its line
+/// follow, so it waits for the window, or for you, as the setting says now. Seen by the limits' tick.
+pub fn follow(t: &Obj) {
+    let ls = t.at("limitStop");
+    if t.s("stage") != "stopped" || ls.s("what") != "usage" { return; }
+    let how = super::words::stop_how(t);
+    if how == ls.s("how") { return; }
+    let _ = update_wait(t.s("id"), 2000, |t| {
+        if t.s("stage") != "stopped" || t.at("limitStop").s("what") != "usage" { return Ok(Change::Keep); }
+        let mut ls = t.o("limitStop").cloned().unwrap_or_default();
+        ls.put("how", how.clone());
+        t.put("msg", super::words::stop_line(&ls, now()));
+        t.put("limitStop", ls);
+        Ok(Change::Write)
+    });
+}
 /// The first agent on `worker.fallback` that could take the task over now: not the one on it, not tried since you last
 /// stepped in, installed, able to work under its access, and its program not on extra usage.
 pub fn fallback_for(t: &Obj, now_ms: i64) -> Option<String> {
@@ -67,7 +83,8 @@ pub fn handover_job(id: &str) {
         g.expect(&t, &[]);
         let since = t.at("extra").i("since").max(n.since);
         match hand_over(id, &mut g, &why(&kind, &n), "") {
-            Ok(true) => { let _ = g.set(|t| { t.put("extra", Value::Null); }); }
+            // Its mark stays until board.notify has been told of it (tick.rs takes it off then).
+            Ok(true) => {}
             Ok(false) => { stop_now(id, &kind, &n, since, "defer"); }
             Err(_) => {}
         }

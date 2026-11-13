@@ -32,13 +32,18 @@ fn program_words(kind: &str, n: &Now, now: i64) -> String {
 pub fn header(now: i64) -> String {
     READ.iter().map(|k| program_words(k, &now_of(k, now), now)).filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" · ")
 }
+/// Its agent now is the one seen on extra usage (a mark kept through a hand-over until `board.notify` was told is not).
+pub fn on_it(t: &Obj) -> bool { t.at("extra").is_object() && t.at("extra").s("agent") == t.s("agent") }
 /// A working task whose agent is on extra usage: what its row says before what the agent does.
 pub fn row_line(t: &Obj) -> String { format!("On extra usage since {}", hm(t.at("extra").i("since"), crate::clock::now())) }
-/// A stop for extra usage (limitStop `what: usage`) that waits for its window by itself, not for you: `defer`, its
-/// reset known.
+/// How a stop for extra usage holds now: as the setting reads now while it still stops (`ask`, `defer`: changed while
+/// it waits, the stop follows), else as it stopped.
+pub fn stop_how(t: &Obj) -> String { let s = setting_of(t); if s == "ask" || s == "defer" { s } else { t.at("limitStop").t("how") } }
+/// A stop for extra usage (limitStop `what: usage`) that waits for its window by itself, not for you: `defer` as the
+/// setting reads now, its reset known.
 pub fn waits_window(t: &Obj) -> bool {
     let ls = t.at("limitStop");
-    t.s("stage") == "stopped" && ls.s("what") == "usage" && ls.s("how") == "defer" && ls.i("resets") > 0 && !t.b("archivedAt")
+    t.s("stage") == "stopped" && ls.s("what") == "usage" && ls.i("resets") > 0 && !t.b("archivedAt") && stop_how(t) == "defer"
 }
 /// A queued task held back for extra usage that waits for you (`usageWait.you`), not for its window.
 pub fn start_asks(t: &Obj) -> bool { t.s("stage") == "queued" && t.at("usageWait").b("you") && !t.b("archivedAt") }
@@ -77,7 +82,7 @@ pub fn detail(t: &Obj, now: i64) -> Value {
     let at = |ms: i64| if ms > 0 { json!(crate::clock::iso(ms)) } else { Value::Null };
     let mut out = obj(json!({ "agent": kind, "setting": setting_of(t), "known": n.known, "windows": n.windows, "onExtraUsage": n.extra, "outOfAllowance": n.hard, "resets": if n.resets > 0 { json!(hm(n.resets, now)) } else { Value::Null }, "resetsAt": at(n.resets) }));
     let x = t.at("extra");
-    if x.is_object() { out.put("extraSince", hm(x.i("since"), now)); out.put("extraSinceAt", at(x.i("since"))); out.put("words", row_line(t)); }
+    if x.is_object() { out.put("extraAgent", x.at("agent").clone()); out.put("extraSince", hm(x.i("since"), now)); out.put("extraSinceAt", at(x.i("since"))); out.put("words", row_line(t)); }
     if t.at("limitStop").s("what") == "usage" { out.put("stopped", t.at("limitStop").clone()); }
     if t.at("usageWait").is_object() { out.put("waiting", t.at("usageWait").clone()); }
     if t.at("extraOk").is_object() { out.put("allowedFor", t.at("extraOk").clone()); }

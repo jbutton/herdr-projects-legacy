@@ -28,7 +28,7 @@ pub fn limits_tick(rows: &[Obj], now: i64, carry_on: Option<&dyn Fn(&str)>) {
         if within(LOOKED.lock().unwrap().get(&id).copied(), now, LOOK) { continue; }
         LOOKED.lock().unwrap().insert(id.clone(), now);
         if !stopped && !limit_said(r) { continue; }
-        if stopped { if let Some(f) = carry_on { if lifted(r) { f(&id); } } continue; }
+        if stopped { crate::usage::stop::follow(r); if let Some(f) = carry_on { if lifted(r) { f(&id); } } continue; }
         let (time, tokens) = (keep_run_time(r), setting_text("limit.tokens", Some(r)));
         // An agent that shows a dialog waits for you: that wait is not stopped.
         let at_work = r.s("stage") == "reviewing" || (r.s("stage") == "working" && r.s("state") == "working" && live.s("status") != "blocked");

@@ -79,7 +79,8 @@ Today's behaviour: the agent works on, and the board only says so (above).
   rest of that episode: it is not stopped again until the window resets. The next time it moves onto extra usage, it
   asks again.
 - **Take it as it is** (`Ctrl+L`, `herdr-projects finish <id>`) sends its work through the check and the review.
-- Setting it to `allow` carries it on by itself; to `defer`, it waits for the window instead.
+- Setting it to `allow` carries it on by itself; to `defer`, it waits for the window instead, and its line says so
+  (and back to `ask`, it waits for you again).
 - **A task does not start** while its program is known to be on extra usage. It waits for you in the queue:
   `waits for you: claude is on extra usage until 17:00 (usage.extra ask); Ctrl+R starts it anyway`.
 
@@ -88,7 +89,7 @@ Today's behaviour: the agent works on, and the board only says so (above).
 - **`worker.fallback` first**: the next agent on the list that is not on extra usage takes the task over, in the same
   worktree, as any hand-over does ([the fallback agent](fallback.md)): `codex took over from claude: claude is on extra
   usage until 17:00`. One whose program is on extra usage too is passed over (`codex is on extra usage too, until
-  12:31`).
+  12:31`). `board.notify` is still told, once, that its agent had moved onto extra usage.
 - **Nobody to take it: the agent is stopped at once**, as under `ask`, its work kept. The task waits as `waiting for
   the usage window: resets 17:00`, with the queued tasks, not under "needs you". **At the reset it carries on by
   itself**: the agent is told it was stopped for extra usage and that the window has reset.

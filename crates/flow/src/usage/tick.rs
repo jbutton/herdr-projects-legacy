@@ -5,7 +5,7 @@
 //! machine is read once a minute, so Codex's window is known before a task runs it.
 use super::gate::extra_ok;
 use super::stop::{fallback_for, stop_now};
-use super::words::setting_of;
+use super::words::{setting_of, untold};
 use crate::agents::read_window::{codex_newest, newest, status_file, status_reading, Reading};
 use crate::flow::task::is_agent_task;
 use crate::json::*;
@@ -39,17 +39,20 @@ pub fn usage_tick(rows: &[Obj], now: i64) {
         { let mut l = LOOKED.lock().unwrap_or_else(|e| e.into_inner()); if l.get(&key).is_some_and(|&at| now >= at && now - at < LOOK) { continue; } l.insert(key, now); }
         if stage == "reviewing" { let k = r.at("link").at("reviewer").t("kind"); if let Some(x) = reading_of(r, &k, "reviewer") { fold(&k, &x, now); } continue; }
         let kind = r.t("agent");
+        // Another agent took over from the one marked: its mark goes once board.notify was told of it.
+        if r.at("extra").is_object() && r.at("extra").s("agent") != kind && !untold(r) { clear(&r.t("id")); }
         if !READ.contains(&kind.as_str()) { continue; }
         let Some(x) = reading_of(r, &kind, "agent") else { continue };
         let n = fold(&kind, &x, now);
         mark(r, &kind, &x.at_now(now), &n, now);
     }
 }
+fn clear(id: &str) { let _ = update_wait(id, 300, |t| { t.put("extra", Value::Null); Ok(Change::Write) }); }
 /// The task's mark, and what its setting says to do.
 fn mark(r: &Obj, kind: &str, x: &Reading, n: &Now, now: i64) {
     let id = r.t("id");
     if !(x.extra && n.extra) {
-        if r.at("extra").is_object() { let _ = update_wait(&id, 300, |t| { t.put("extra", Value::Null); Ok(Change::Write) }); }
+        if r.at("extra").is_object() && !untold(r) { clear(&id); } // told first, then it goes
         return;
     }
     let was = r.at("extra");

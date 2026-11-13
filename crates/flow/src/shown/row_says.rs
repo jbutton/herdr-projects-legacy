@@ -65,7 +65,7 @@ pub fn sentence(r: &Obj) -> Inked {
     // nothing (after.rs).
     if super::queue::waits_after(r) { let w = super::queue::words(r); return quiet(format!("{}{}", w[..1].to_uppercase(), &w[1..])); }
     // On extra usage (usage/): since when, before what it is doing, as a near limit is said.
-    if r.at("extra").is_object() && r.s("stage") == "working" && r.s("state") == "working" { return Inked::of(crate::usage::words::row_line(r), Ink::Peach).add(quiet(if msg.is_empty() { msg } else { format!(" · {msg}") })); }
+    if crate::usage::words::on_it(r) && r.s("stage") == "working" && r.s("state") == "working" { return Inked::of(crate::usage::words::row_line(r), Ink::Peach).add(quiet(if msg.is_empty() { msg } else { format!(" · {msg}") })); }
     // Near a limit: how much is used, before what it is doing, so it is never the part cut off.
     if r.at("limits").b("near") && r.s("state") == "working" { return Inked::of(r.at("limits").t("near"), Ink::Peach).add(quiet(if msg.is_empty() { msg } else { format!(" · {msg}") })); }
     if needs_you(r) {
