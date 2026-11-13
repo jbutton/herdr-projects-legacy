@@ -1,8 +1,10 @@
 //! A test's world binds the fake herdr's socket in a short folder of its own: however long the temporary folder is
 //! (macOS gives each user a long one, the board each task a folder in it), the socket's path stays well under what a
-//! Unix socket may have, and the world works.
+//! Unix socket may have, and the world works. Made in /tmp itself (Linux's temporary folder), its own folder stays apart
+//! from its sockets' folder.
 use crate::common;
 use common::*;
+use serde_json::json;
 
 #[test]
 fn a_worlds_socket_stays_short_however_long_its_folder_is() {
@@ -23,4 +25,19 @@ fn a_worlds_socket_stays_short_however_long_its_folder_is() {
     drop(w);
     assert!(!sockets.exists(), "{}", sockets.display());
     std::fs::remove_dir_all(&long).unwrap();
+}
+
+#[test]
+fn a_world_made_in_tmp_itself_keeps_its_home_apart_from_its_sockets() {
+    // /tmp is the temporary folder on Linux when no TMPDIR names another (GitHub's runners): the world's folder and its
+    // sockets' folder are then side by side in it, and neither may be the other.
+    let w = world_in(Opts { repo: true, repo_settings: Some(json!({ "check.command": "echo run >> \"$HOME/checks.log\"" })), ..Default::default() }, "/tmp");
+    assert!(w.base.parent() == w.sockets.parent() && w.base != w.sockets, "{} {}", w.base.display(), w.sockets.display());
+    assert!(w.base.join("home").is_dir(), "its home is there: {}", w.base.display());
+    // A check that writes in $HOME passes there.
+    to_approval(&w, "Checked in /tmp");
+    assert_eq!(read(&w.base.join("home/checks.log")), "run\n");
+    let (base, sockets) = (w.base.clone(), w.sockets.clone());
+    drop(w);
+    assert!(!base.exists() && !sockets.exists(), "{} {}", base.display(), sockets.display());
 }

@@ -47,7 +47,9 @@ jobs:
         run: npm run check -- --all
 
   macos:
-    runs-on: macos-14
+    # GitHub retired its macOS 14 images on 2026-11-02 (actions/runner-images#15226): a job asking for one is cancelled
+    # before it starts. macOS 26 is the newest image on Apple silicon.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
 
