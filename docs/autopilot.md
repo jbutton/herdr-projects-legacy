@@ -116,8 +116,10 @@ It has three kinds of reason:
 - **Its timer**, `autopilot.every`, counted from the end of its last wake (or its last look that found nothing new).
   Missed ticks are not caught up.
 - **Board events** in its area, `autopilot.when`: `done` (a task was merged or done), `stuck` (a task it may look after
-  starts to need looking after: once, not again while it stays so), `added` (a task was added by anyone but this
-  coordinator). Only what happens after it was turned on counts, and each fires once.
+  starts to need looking after: once, not again while it stays so), `stalled` (a task it may look after stalled: its
+  agent works but shows nothing new for `stall.after`, or runs well past the Watcher's estimate; once per stall:
+  [stalled tasks](stalled.md)), `added` (a task was added by anyone but this coordinator). Only what happens after it
+  was turned on counts, and each fires once.
 - **Being turned on.**
 
 **The free look.** Before a timer wake, the board looks for itself, at no cost: no model, no tokens. Only if something
@@ -138,7 +140,8 @@ stalled: no check-in for 3h, last 4 wakes added nothing`.
 
 **No wake while** it is off; it says `needs you`; it is outside `autopilot.hours`; it is within `autopilot.gap` of the end
 of its last wake's turn or of a turn of yours; `autopilot.wakesPerDay` are used today; it is mid-turn, or a message of
-yours waits for it; or it has no room and none of its tasks needs looking after. The reasons are kept and go out as one
+yours waits for it; or it has no room and none of its tasks needs looking after (one that stalls does: its slots full
+of hung work still wake it). The reasons are kept and go out as one
 wake when that ends. A reason that is only the timer is dropped if the look then finds nothing new.
 
 **You come first.** At most one wake waits in its queue. When a message of yours is queued, a wake not yet typed in is
@@ -158,6 +161,8 @@ Autopilot: HSW-84 finished, HSW-88 has a question
 | `stuck`: it failed | `HSW-84 is stuck` |
 | `stuck`: its agent asks a question | `HSW-84 has a question` |
 | `stuck`: it waits for a yes autopilot may give | `HSW-84 is ready to approve` |
+| `stalled`: nothing new on its agent's screen | `HSW-84 has shown nothing new for 21m` |
+| `stalled`: well past the Watcher's estimate | `HSW-84 ran well past its estimate` |
 | `added`: a task was added by someone else | `HSW-84 was added` |
 
 No goal, no limits and no counts: **its rules say to read its autopilot first in every wake**, as it stands now, with
@@ -269,7 +274,7 @@ your entry for that repo. While autopilot is on, `Enter` on an autopilot row oth
 | `autopilot.every` | `6h` | its timer |
 | `autopilot.gap` | `10m` | the least time between wakes |
 | `autopilot.wakesPerDay` | `24` | the most wakes a day |
-| `autopilot.when` | `done stuck added` | the events that wake it |
+| `autopilot.when` | `done stuck stalled added` | the events that wake it |
 | `autopilot.hours` | `any` | when it may wake (`mon-fri 09:00-18:00`) |
 | `autopilot.tasksPerDay` | `5` | the most tasks it adds a day |
 | `autopilot.tasksAtOnce` | `2` | the most of its tasks under way |

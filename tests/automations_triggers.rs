@@ -65,7 +65,7 @@ fn the_events_are_read_off_the_task_as_it_stands_and_the_rules_name_the_commands
     // the Coordinator's rules and the how-to every chat has name the commands, so an automation is made in plain words
     let coord = sw::coordinator::rules::rules("board");
     for told in [coord.clone(), sw::extras::skill_text::skill_text("board")] {
-        for word in ["automations add", "--schedule", "--when <added|approval|review-failed|failed|needs-you|merged>", "--every-repo", "--automation <name>", "no webhook"] { assert!(told.contains(word), "{word}"); }
+        for word in ["automations add", "--schedule", "--when <added|approval|review-failed|failed|needs-you|stalled|merged>", "--every-repo", "--automation <name>", "no webhook"] { assert!(told.contains(word), "{word}"); }
     }
     assert!(coord.contains("board automations on|off|run|firings|remove <name>"), "{coord}");
     assert!(coord.contains("Make, change, turn off or remove one only when the human asks"));

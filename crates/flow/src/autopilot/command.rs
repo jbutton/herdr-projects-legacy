@@ -39,7 +39,7 @@ fn show(co: &Co) -> (Value, String) {
     let tag = |id: &str| crate::store::keys::say_id(id, &crate::store::keys::repo_keys());
     let busy: Vec<String> = super::record::tasks(&ap).iter().filter_map(|r| board.iter().find(|t| t.s("id") == r.s("id") && super::care::under_way(t)).map(|t| format!("{} ({})", tag(t.s("id")), t.s("stage")))).collect();
     let approve = super::record::words(co, "autopilot.approve") == "yes";
-    let needs: Vec<String> = super::care::needing(&ap, &board, approve).into_iter().map(|(id, w)| format!("{} ({})", tag(&id), match w { "asks" => "has a question", "yes" => "is ready to approve", _ => "is stuck" })).collect();
+    let needs: Vec<String> = super::care::needing(&ap, &board, approve).into_iter().map(|(id, w)| format!("{} ({})", tag(&id), match w { "asks" => "has a question", "yes" => "is ready to approve", "stalled" => "has stalled", _ => "is stuck" })).collect();
     let none = |l: Vec<String>| if l.is_empty() { "none".to_string() } else { l.join(", ") };
     let mut said = vec![format!("{}: {}", co.name(), v.s("line")), format!("Now: {}", v.s("status")), format!("Goal: {}", v.s("goal")), format!("Today: {}", v.s("today")),
         format!("Under way: {}", none(busy)), format!("Needs looking after: {}", none(needs))];

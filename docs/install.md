@@ -1,10 +1,14 @@
 # Installing, the first run, and taking it out again
 
-**Install with one command, then open the board once.** The short version is [get started](get-started.md). This page
-has the details. Something not working: [troubleshooting](troubleshooting.md).
+**Build it from a checkout, link it, then open the board once.** This copy of the 1.x board publishes no releases, so
+it is built from source. The short version is [get started](get-started.md). This page has the details. Something not
+working: [troubleshooting](troubleshooting.md).
 
 ```sh
-herdr plugin install eliasstravik/herdr-projects
+git clone https://github.com/jbutton/herdr-projects-legacy && cd herdr-projects-legacy
+cargo build --release             # the program, in target/release/herdr-projects
+herdr plugin link "$PWD"          # hooks, the board's tab and the actions
+sh bin/run.sh install             # writes its launcher, says how to put it on your PATH
 ```
 
 ## What you need
@@ -12,23 +16,21 @@ herdr plugin install eliasstravik/herdr-projects
 - Linux or macOS, on x86_64 or aarch64.
 - Herdr 0.9.3 or newer. Your **running** Herdr server must be 0.9.3 or newer too: an older one refuses the plugin until
   it is restarted.
-- `git`, and `curl` or `wget` to download the program.
+- `git`, and Rust (https://rustup.rs) to build the program.
 - Optional: `gh` (pull requests) and `tailscale` (private review links).
 
 No Node, no npm: the board is one program.
 
 ## What the install does
 
-Herdr clones the repo's main branch into its own plugins folder (`herdr plugin list` shows where) and runs the plugin's
-build step there, which downloads the program. `--ref v1.2.27` takes a given release.
+`cargo build --release` builds the program in the checkout. `herdr plugin link` makes the checkout Herdr's plugin, and
+every command Herdr runs for it goes through `bin/run.sh`, which runs that build ([below](#details-which-program-runs)).
+`sh bin/run.sh install` writes the launcher agents and hooks use
+([the command on your PATH](#the-command-on-your-path)).
 
-To keep a checkout of your own instead:
-
-```sh
-git clone https://github.com/eliasstravik/herdr-projects && cd herdr-projects
-herdr plugin link "$PWD"          # hooks, the board's tab and the actions
-sh bin/run.sh install             # gets the program, writes its launcher, says how to put it on your PATH
-```
+`herdr plugin install` would instead clone the repo into Herdr's own plugins folder and run the plugin's build step
+there, which downloads upstream's prebuilt program of this version (`v1.2.27`, without this copy's changes) rather than
+building it. `herdr plugin install eliasstravik/herdr-projects` installs upstream itself, which is now Shepherdr.
 
 ## The first run
 
@@ -117,14 +119,14 @@ ssh <machine> 'exec $SHELL -lc "herdr-projects remote list"' | tail -c 200
 ## Updating
 
 ```sh
-herdr-projects update           # the newest release
-herdr-projects update 0.3.1     # a given version
+git pull && cargo build --release   # in the checkout
 ```
 
-- It puts the release in place of the downloaded program, in one step.
 - An open board and the keeper see the file change and load it by themselves ([the board's size](board-size.md)).
-- Pulling a newer plugin (`git pull`) does the same at the next command Herdr runs: `bin/run.sh` downloads that version.
-- A program you built yourself is updated with `git pull` and `cargo build --release`, never by a download.
+- Build right after each pull: while the build is older than its source, `bin/run.sh` runs upstream's downloaded
+  program of this version instead ([below](#details-which-program-runs)), which has none of this copy's changes.
+- `herdr-projects update` is no use here: it downloads upstream's releases, never this copy (which publishes none,
+  while upstream's newest are Shepherdr's), and a program built from source refuses it.
 
 **The keeper updates itself.** Once the new file has stopped changing (a build still being linked is waited for), with
 no board open and no agent running, the keeper starts its successor on the new file, and goes only once the successor
@@ -165,8 +167,9 @@ Every command Herdr runs for the plugin goes through `bin/run.sh`, which runs th
 
 1. a program built in this checkout (`target/release/herdr-projects`) that no source file is newer than;
 2. the downloaded one in `bin/`, when it is this checkout's version (`Cargo.toml`) or newer;
-3. that file, downloaded now from the project's GitHub release of this checkout's version: its checksum checked, put in
-   place in one step, one download at a time;
+3. that file, downloaded now from upstream's GitHub release of this checkout's version (this copy publishes none, so
+   that is upstream's `v1.2.27`, without this copy's changes): its checksum checked, put in place in one step, one
+   download at a time;
 4. failing all that, an older build or an older download, with a line saying so. A download that failed is tried again
    ten minutes later, not on every command (each of Herdr's hooks would wait for it).
 
@@ -175,4 +178,4 @@ With none, it says what to do and stops at once, so Herdr is never held up.
 - The plugin's build step (`sh bin/run.sh --fetch`) only gets the program, and builds it from source when it cannot
   download it.
 - `HERDR_PROJECTS_RELEASES` names another place for the releases (a fork, a mirror, a folder as `file:///…`).
-- The release files are built for every version tag by `.github/workflows/release.yml`.
+- The release files are built for every version tag by `.github/workflows/release.yml`; this copy makes no tags.
