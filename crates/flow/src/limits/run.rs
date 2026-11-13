@@ -21,6 +21,8 @@ pub fn limit_said(t: &Task) -> bool {
     says(t.o("settings")) || says(parent.as_ref().and_then(|p| p.o("settings"))) || says(t.at("carried").o("settings")) || says(Some(&mine.you)) || says(mine.repos.get(&repo))
 }
 pub fn stopped_at_limit(t: &Task) -> bool { t.s("stage") == "stopped" && t.at("limitStop").is_object() && !t.b("archivedAt") }
+/// What carrying on (`retry`, its key) takes up: a stop at a limit, or a start held back for extra usage (usage/gate.rs).
+pub fn carries_on(t: &Task) -> bool { stopped_at_limit(t) || crate::usage::gate::start_waits(t) }
 /// "1h12m", "45m", "1m21s", "30s": a time as the limits say it. Seconds only while they matter, under ten minutes.
 pub fn time_say(span: i64) -> String {
     let s = ((span.max(0) as f64) / 1000.0).round() as i64;
@@ -31,7 +33,7 @@ pub fn time_say(span: i64) -> String {
 /// The line the row and herdr's sidebar say.
 pub fn stop_line(what: &str, limit: &str) -> String { if what == "time" { format!("stopped at its {limit} limit") } else { format!("stopped at {limit} tokens") } }
 /// What was used when it stopped: "after 2h1m", "with 2.1m tokens used".
-pub fn used_say(ls: &Value) -> String { if ls.s("what") == "time" { format!("after {}", time_say(ls.i("used"))) } else { format!("with {} tokens used", tokens_say(ls.f("used"))) } }
+pub fn used_say(ls: &Value) -> String { if ls.s("what") == "usage" { crate::usage::words::used_say(ls) } else if ls.s("what") == "time" { format!("after {}", time_say(ls.i("used"))) } else { format!("with {} tokens used", tokens_say(ls.f("used"))) } }
 /// The tokens that count against `limit.tokens`. A task done several times at once is one task to its limit; a
 /// conversation counts once, whoever of them holds it.
 pub fn used_of(t: &Task) -> f64 {
@@ -58,6 +60,8 @@ pub fn ran_for(t: &Task, now: i64) -> i64 {
 pub fn granted(t: &mut Task) {
     if !t.at("limitStop").is_object() { return; }
     if t.at("limitStop").s("what") == "tokens" { let used = used_of(t); let base = t.at("spent").f("base") + used; t.obj_mut("spent").put("base", base); }
+    // Stopped for extra usage: your word is leave to run on it for the rest of this episode.
+    if t.at("limitStop").s("what") == "usage" { let ls = t.at("limitStop").clone(); t.put("extraOk", json!({ "agent": ls.at("limit"), "window": ls.at("window"), "resets": ls.at("resets"), "at": crate::clock::now() })); }
     t.put("limitStop", Value::Null);
     t.put("runCarry", Value::Null);
 }

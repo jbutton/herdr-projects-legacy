@@ -202,6 +202,7 @@ fn finish_steps(id: &str, g: &mut Guard, mut t: Task, ev: Option<Value>, force: 
         // It cannot go on: the next agent on `worker.fallback` takes the task over; with nobody left it waits for you.
         let hw = if let Some(r) = &refused { r.plain.clone() } else if !x.error.is_empty() { why_of(&why, x.auth, x.passing, &x.reason, tries + 1, now()) } else if x.stop == "length" { "it ran out of room (context or output limit)".into() } else { "its model refused to continue".into() };
         if hand_over(id, g, &hw, "")? { return Ok(()); }
+        if crate::usage::stop::out_of_allowance(id, &t, x, &hw) { return Ok(()); } // under usage.extra defer: it waits for its window
         if let Some(r) = &refused { return model_refused::fail_refused(g, &t, r, &why); }
         if x.passing {
             let gu = format!("{}. ", gave_up("agent", &x.reason, tries + 1));

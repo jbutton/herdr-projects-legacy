@@ -39,7 +39,7 @@ pub struct Data {
     pub coords: Vec<String>,
     /// This machine's coordinators' autopilot as each shows it, by level ("" the main one, "machine", "project:<repo>").
     pub pilots: Value,
-    pub keys: Keys, pub repos: Vec<String>, pub roots: BTreeMap<String, String>, pub session: String, pub notify: String,
+    pub keys: Keys, pub repos: Vec<String>, pub roots: BTreeMap<String, String>, pub session: String, pub notify: String, pub usage: String,
     /// The known repos that keep their heading by repo with no task in view (`used_lately`).
     pub lately: Vec<String>,
     /// This machine's archived projects (store/archived_repos.rs): off the board, each a heading in the archive.
@@ -107,7 +107,7 @@ pub fn load(wants: &Wants) -> Data {
     let skills = crate::board::skills::read(&wants.skills, &socket, &coord, sub.as_ref());
     Data {
         items, autos, jobs, coord, coord_screen, sub, looks, coords, can_dispatch: crate::coordinator::who::ready(&socket), keys: repo_keys(), repos: roots.keys().cloned().collect(), roots, lately, archived, pins: crate::store::pins::pins(),
-        session: session_name(&socket), notify: setting("board.notify", None).as_str().unwrap_or("").to_string(),
+        session: session_name(&socket), notify: setting("board.notify", None).as_str().unwrap_or("").to_string(), usage: crate::usage::words::header(now),
         repo: here.0, repo_root: here.1, host: crate::remote::check::hostname(),
         // herdr's approve action and a line left by the board key are for a board in a terminal, never the web board.
         approve: if wants.web { String::new() } else { crate::actions::finish_line::take_approve(&socket, &wants.own_pane) }, heard: if wants.web { None } else { crate::board::run::say::heard(&wants.own_pane, &socket) }, call: crate::voice::call::get(), call_ended: crate::voice::call::last().filter(|c| c.s("state") == "ended").map(|c| (c.t("id"), c.t("why"))),

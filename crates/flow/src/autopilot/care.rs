@@ -27,7 +27,7 @@ pub fn under_way(t: &Obj) -> bool { !over(t) && !["todo", "progress"].contains(&
 pub fn need_of(t: &Obj, approve: bool) -> Option<&'static str> {
     if t.b("archivedAt") { return None; }
     let st = t.s("stage");
-    if st == "failed" || st == "nosummary" || (st == "stopped" && t.b("limitStop")) || (st == "approval" && review_failed(t)) { return Some("failed"); }
+    if st == "failed" || st == "nosummary" || (st == "stopped" && t.b("limitStop") && !crate::usage::words::waits_window(t)) || (st == "approval" && review_failed(t)) { return Some("failed"); }
     if st == "approval" && (t.b("mergeFailed") || t.b("prFailure") || t.s("prState") == "failing") { return Some("failed"); }
     if st == "asks" && t.s("kind") == "question" { return Some("asks"); }
     // Work landed through code review on GitHub (`merge.by none`) waits for no yes: there is none to give.

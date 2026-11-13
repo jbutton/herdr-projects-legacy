@@ -12,7 +12,7 @@ use crate::finish::code_review;
 use crate::flow;
 use crate::gate;
 use crate::json::*;
-use crate::limits::run::stopped_at_limit;
+use crate::limits::run::{carries_on, stopped_at_limit};
 use crate::limits::shown::limits_detail;
 use crate::research::is_research;
 use crate::runner::{runner_alive, spawn_runner};
@@ -97,7 +97,7 @@ pub fn send_error_noted(id: &str, note: &str) -> Res<Said> {
     let cur = find(id)?;
     assert_unarchived(&cur)?;
     let cid = cur.t("id");
-    if stopped_at_limit(&cur) { return carry_on(&cid, false); }
+    if carries_on(&cur) { return carry_on(&cid, false); }
     if cur.s("stage") == "failed" && cur.at("failure").s("stage") == "send" { return retry(&cid); }
     if awaits_plan(&cur) && cur.at("plan").b("reviewFailed") { return review_again(&cid); } // a plan whose review could not run
     if cur.s("stage") == "nosummary" || (cur.s("stage") == "failed" && cur.at("failure").b("auth") && cur.at("failure").s("stage") == "agent") {
@@ -204,7 +204,7 @@ pub fn retry(id: &str) -> Res<Said> {
     let cid = cur.t("id");
     // A merge that failed: the yes was given before it. Not one GitHub's failed checks stopped: that takes `--anyway`.
     if cur.s("stage") == "approval" { return approve(&cid, None, cur.b("mergeFailed") && crate::land::checks::failed_on(&cur).is_none()); }
-    if stopped_at_limit(&cur) { return carry_on(&cid, false); }
+    if carries_on(&cur) { return carry_on(&cid, false); }
     // The agent said it needs a login: you have signed in, and it is told to carry on.
     if cur.s("stage") == "asks" && cur.s("kind") == "auth" { return go_on(&cur); }
     if awaits_plan(&cur) && cur.at("plan").b("reviewFailed") { return review_again(&cid); } // its review could not run: once more
@@ -273,6 +273,7 @@ pub fn details(id: &str) -> Res<Value> {
         "stillRunning": if t.b("stillRunning") { t.at("stillRunning").clone() } else { Value::Null }, // what its clean-up or archive left for you to end
         "inUse": if t.at("tidy").b("inUse") { t.at("tidy").at("inUse").clone() } else { Value::Null }, // what keeps its space in use, every thing
         "limits": limits_detail(&t, now()),
+        "usage": crate::usage::words::detail(&t, now()), // its program's usage window, and the task's extra usage (usage/)
         "addedBy": crate::autopilot::history::added_by(&t), // you, an automation, a coordinator's autopilot, or which coordinator you asked
     }));
     // Waiting in the queue: its place, and in words ("waiting for a free slot, Q#2", "waiting for disk space, Q#1").

@@ -72,7 +72,10 @@ pub fn show(t: &Obj, live: &Value, now: i64) -> Show {
         "plan" => return out("blocked", &|s| { s.kind = Some("permission".into()); s.plan = true; }),
         "nosummary" => return out("error", &|s| if s.msg.is_empty() { s.msg = "Stopped without a summary".into(); }),
         "reviewneeds" => return out("blocked", &|s| if s.msg.is_empty() { s.msg = "The reviewer needs you".into(); }),
+        // stopped for extra usage, its window's reset to carry it on by itself (usage/): it waits, as a queued task does
+        "stopped" if crate::usage::words::waits_window(t) => return out("working", &|_| {}),
         "stopped" => return if t.b("limitStop") { out("blocked", &|s| if s.msg.is_empty() { s.msg = "Stopped at a limit".into(); }) } else { out("idle", &|s| s.msg = "Stopped".into()) },
+        "queued" if crate::usage::words::start_asks(t) => return out("blocked", &|s| s.kind = Some("question".into())),
         "attempts" => {
             let kids: Vec<Obj> = t.arr("tries").iter().filter_map(|c| c.as_object().cloned()).collect();
             let a = attempts_shown(&kids, now);

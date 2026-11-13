@@ -111,6 +111,7 @@ pub fn hints(s: &State, r: Option<&Obj>, who: Option<&Who>) -> (Vec<Hint>, Optio
         else if st("approval") && r.b("syncBlocked") { vec![Some(reply.clone()), Some(open.clone())] }
         else if st("approval") && r.s("state") == "blocked" { vec![opt(failure.as_ref().map(|f| f.b("agentCanFix") && !f.b("sentAt")).unwrap_or(false), fix.clone()), opt(!r.b("codeReview"), hk(K::Yes, "retry the merge")), Some(reply.clone())] }
         else if st("stopped") && r.b("limitStop") { let rev = r.at("limitStop").s("role") == "reviewer"; vec![Some(hk(K::SendBack, if rev { "carry on with this task" } else { "tell this task's agent to continue" })), opt(!rev, hk(K::Yes, "use its work as it is")), Some(reply.clone())] }
+        else if crate::usage::gate::start_waits(r) { vec![Some(hk(K::SendBack, "start it now, on extra usage")), Some(reply.clone()), Some(stop.clone())] }
         else if st("nosummary") { vec![Some(hk(K::SendBack, "tell this task's agent to continue")), Some(hk(K::Yes, "use its work as it is")), Some(open.clone())] }
         else if failure.as_ref().map(|f| f.b("agentCanFix")).unwrap_or(false) { if failure.as_ref().unwrap().b("sentAt") && r.s("state") == "working" { vec![Some(open.clone()), Some(reply.clone()), Some(stop.clone())] } else { vec![Some(fix.clone()), opt(st("failed"), as_is.clone()), Some(reply.clone())] } }
         else if failure.is_some() { vec![opt(st("failed") || r.s("kind") == "auth", retry.clone()), Some(reply.clone()), Some(open.clone())] }

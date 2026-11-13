@@ -37,6 +37,7 @@ pub fn head_lines(s: &mut State, t: &Theme, w: usize, h: usize) -> Vec<Inked> {
     if s.scope.is_empty() || s.scope == "*" || s.archive_view { rest.push(where_); }
     rest.extend(tally);
     if !s.data.session.is_empty() && s.data.session != "default" { rest.push(format!("session {}", s.data.session)); }
+    if !s.data.usage.is_empty() && !s.archive_view { rest.push(s.data.usage.clone()); } // each program's usage window (usage/words.rs)
     let rest = rest.join(" · ");
     // The board's name gives way before whose tasks these are; names too long for the line go on to the next, whole.
     let name = Inked::plain(" ").add(Inked::plain("herdr-projects").bold()).add(Inked::plain("  "));

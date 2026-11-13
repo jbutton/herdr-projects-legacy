@@ -22,6 +22,8 @@ pub fn run_job(job: &str, id: &str, extra: &[String]) -> i32 {
         "sync" => crate::finish::sync_job::sync_job(&id, has("--force")),
         "compare" => crate::attempts::compare::compare_job(&id),
         "recover" => crate::finish::recover_job::recover_job(&id),
+        // usage.extra defer: the next agent on worker.fallback takes over from one on extra usage (usage/stop.rs).
+        "usage" => crate::usage::stop::handover_job(&id),
         "land" => crate::land::merge::land_job(&id),
         "cleanup" => crate::land::cleanup::cleanup_job(&id, if has("--merged") { "merged" } else { "always" }),
         "prpoll" => poll_prs(),

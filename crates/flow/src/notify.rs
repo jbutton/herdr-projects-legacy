@@ -1,6 +1,6 @@
-//! Telling you that a task needs you, is ready to approve, or failed: the `board.notify` setting. `bell` rings the
-//! terminal bell where a board is open; a command is run once per event, with the task's id, its title and what
-//! happened in its environment; `none` does neither.
+//! Telling you that a task needs you, is ready to approve, or failed, and once that its agent is on extra usage
+//! (usage/): the `board.notify` setting. `bell` rings the terminal bell where a board is open; a command is run once per
+//! event, with the task's id, its title and what happened in its environment; `none` does neither.
 use crate::clock::now;
 use crate::json::*;
 use crate::store::attempts::attempts_of;
@@ -11,10 +11,12 @@ use crate::store::tasks::{update, Change};
 pub fn event_of(t: &Obj) -> &'static str {
     if t.b("archivedAt") { return ""; }
     let st = t.s("stage");
-    if ["asks", "reviewneeds", "plan", "pick"].contains(&st) || (st == "stopped" && t.b("limitStop")) || (st == "after" && t.b("afterBlocked")) { return "needs you"; }
+    let waits_window = crate::usage::words::waits_window(t); // stopped for extra usage, and its window's reset will carry it on
+    if ["asks", "reviewneeds", "plan", "pick"].contains(&st) || (st == "stopped" && t.b("limitStop") && !waits_window) || (st == "after" && t.b("afterBlocked")) || crate::usage::words::start_asks(t) { return "needs you"; }
     if st == "attempts" { return if attempts_of(t).iter().any(|c| ["asks", "reviewneeds"].contains(&c.s("stage"))) { "needs you" } else { "" }; }
     if st == "failed" || st == "nosummary" { return "failed"; }
     if st == "approval" { return if t.b("failure") || t.b("prFailure") || t.b("syncBlocked") { "needs you" } else { "ready to approve" }; }
+    if crate::usage::words::untold(t) { return crate::usage::words::EVENT; } // once per task and episode of extra usage
     ""
 }
 fn noted(t: &Obj, event: &str) -> bool { t.at("notice").s("event") == event && (event.is_empty() || t.at("notice").s("stage") == t.s("stage")) }
@@ -28,6 +30,7 @@ pub fn notify_pass(tasks: &[Obj]) {
             let ev = event_of(t);
             if noted(t, ev) { return Ok(Change::Keep); }
             t.put("notice", if ev.is_empty() { Value::Null } else { json!({ "event": ev, "stage": t.s("stage"), "at": now() }) });
+            if ev == crate::usage::words::EVENT { let w = t.at("extra").at("window").clone(); t.put("extraTold", w); }
             fresh = !ev.is_empty();
             Ok(Change::Write)
         }) else { continue };

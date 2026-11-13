@@ -163,7 +163,7 @@ pub fn yes(s: &mut State, r: &Obj, fx: &mut Vec<Effect>) {
 pub fn send_back(s: &mut State, r: &Obj, fx: &mut Vec<Effect>) {
     if r.b("archivedAt") { return s.flash(read_only(), Ink::Yellow); }
     let id = r.t("id");
-    if r.s("stage") == "stopped" && r.b("limitStop") { return act(s, r, "retry", json!({}), Job::CarryOn { id }, fx); }
+    if crate::limits::run::carries_on(r) { return act(s, r, "retry", json!({}), Job::CarryOn { id }, fx); }
     let failure = failure_for(r);
     if let Some(f) = &failure { if !f.b("agentCanFix") && !(r.s("stage") == "failed" && r.at("failure").b("auth")) { return s.flash(format!("This needs you first. {}", f.s("next")), Ink::Yellow); } }
     let review = r.at("review");

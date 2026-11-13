@@ -38,6 +38,11 @@ fn note(s: &Entry, r: &Found, task: Option<&Task>, scope: &Scope, no_repo: bool,
         for k in [worker, reviewer] { if !k.is_empty() && !kind(&k).map(|a| a.tokens).unwrap_or(false) && !kinds.contains(&k) { kinds.push(k); } }
         if !kinds.is_empty() { return format!("does nothing for {}: its tokens cannot be counted", kinds.join(" and ")); }
     }
+    // The board reads the usage window of Claude Code and Codex only (store/usage.rs).
+    if s.name == "usage.extra" && text(&r.value) != "allow" {
+        let k = task.map(|t| t.t("agent")).filter(|a| !a.is_empty()).unwrap_or_else(|| agent_of(&get("worker.agent")).kind);
+        if !k.is_empty() && !crate::store::usage::READ.contains(&k.as_str()) { return format!("does nothing for {k}: its usage window cannot be seen"); }
+    }
     // A list of agents does nothing where its only use is to hand over to the one that is on it anyway.
     if s.ty == Ty::Agents {
         if let Some(list) = r.value.as_array() {
