@@ -1,7 +1,8 @@
 //! [real programs] A new worktree's warm start (`scripts/warm-start.sh`): the build a worktree of the main line keeps,
 //! a later worktree copies, with only what changed since built again; what was built with the other folder's path in
 //! it built again too; nothing kept off the main line, from a changed folder or older than what is kept. The builds
-//! are stand-ins (files laid out as cargo lays them out): the script is what is tested, not cargo.
+//! are stand-ins (files laid out as cargo lays them out), and so is the compiler the script asks what it is: the script
+//! is what is tested, not cargo.
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime};
@@ -15,6 +16,11 @@ impl Bench {
         std::fs::create_dir_all(base.join("repo/src")).unwrap();
         // The folder as the script's `pwd` gives it: macOS's temp folder is under /var, which is /private/var.
         let b = Bench { base: base.canonicalize().unwrap() };
+        // The compiler the script asks what it is (`rustc -vV`), the same at every step. Never the machine's: rustup's
+        // follows HOME, which a world in this same test program points at a new folder of its own, where rustup first
+        // installs a whole toolchain and tells nothing of itself (GitHub's macOS runner, no RUSTUP_HOME).
+        b.write("bin", "rustc", "#!/bin/sh\nprintf 'rustc 1.0.0 (stand-in)\\nbinary: rustc\\nhost: test\\nrelease: 1.0.0\\n'\n");
+        std::fs::set_permissions(b.dir("bin/rustc"), std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
         b.git("repo", &["init", "-q", "-b", "main"]);
         b.write("repo", "src/a.rs", "a");
         b.write("repo", "src/b.rs", "b");
@@ -54,16 +60,13 @@ impl Bench {
     fn setup(&self, wt: &str, build: bool) -> String {
         let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/warm-start.sh");
         let built = if build { format!("mkdir -p target/quick && echo 'built in {wt}' > target/quick/herdr-projects") } else { ":".into() };
-        let o = Command::new("/bin/sh").arg("-c").arg(format!("set -e; . '{}'; ws_seed; {built}; ws_keep", script.display()))
+        let path = format!("{}:{}", self.dir("bin").display(), std::env::var("PATH").unwrap_or_default());
+        let o = Command::new("/bin/sh").arg("-c").arg(format!("set -e; . '{}'; ws_seed; {built}; ws_keep", script.display())).env("PATH", path)
             .current_dir(self.dir(wt)).env("XDG_CACHE_HOME", self.base.join("cache")).env_remove("HERDR_PROJECTS_NO_WARM")
             .env_remove("CARGO_TARGET_DIR").env("GIT_CONFIG_GLOBAL", "/dev/null").env("GIT_CONFIG_NOSYSTEM", "1").output().unwrap();
         assert!(o.status.success(), "the setup's steps failed: {}", String::from_utf8_lossy(&o.stderr));
         // What it said and what is kept after it, shown only when the test fails (a failure on another machine).
         eprintln!("setup in {wt}: said {:?}, {:?}\n{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr), self.state());
-        // TEMPORARY (PRJ-23): what the compiler says to the script, and why.
-        let r = Command::new("/bin/sh").arg("-c").arg("echo \"HOME=$HOME RUSTUP_HOME=$RUSTUP_HOME RUSTUP_TOOLCHAIN=$RUSTUP_TOOLCHAIN CARGO_HOME=$CARGO_HOME\"; command -v rustc; ls -l \"$(command -v rustc)\"; rustc -vV 2>&1 | head -4; echo PATH=$PATH")
-            .current_dir(self.dir(wt)).output().unwrap();
-        eprintln!("  compiler: {}", String::from_utf8_lossy(&r.stdout));
         String::from_utf8_lossy(&o.stdout).into_owned()
     }
     /// The kept builds as they are: each repo's folder and its `current`, each build's commit, folder and compiler.
@@ -104,6 +107,7 @@ fn real_programs_a_new_worktree_starts_from_the_build_kept_and_builds_again_only
     b.worktree("two", "main");
     b.setup("two", true);
     assert_eq!(b.kept(), Some(first.clone()));
+    assert!(b.state().contains("rustc \"rustc 1.0.0 (stand-in)"), "kept with the compiler it was built by: {}", b.state());
     // the main line moves on: b.rs changes
     b.write("repo", "src/b.rs", "b2");
     b.commit("repo", "b changes");
