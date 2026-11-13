@@ -49,7 +49,9 @@ pub fn world_in(o: Opts, under: &str) -> World {
     for k in ["HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID", "HERDR_PLUGIN_ID", "HERDR_PLUGIN_CONTEXT_JSON", "HERDR_ENV", "HERDR_SESSION", "TMUX", "NO_COLOR", "XDG_DATA_HOME", "HERDR_PROJECTS_DATA_DIR", "HERDR_PROJECTS_CONFIG_DIR", "HERDR_PROJECTS_REPORTS_DIR", "HERDR_PROJECTS_WEBUI", "HERDR_PROJECTS_PROGRESS", "HERDR_PROJECTS_SANDBOX", "HERDR_PROJECTS_BOXED", "HERDR_PROJECTS_RETRY_MS", "HERDR_PROJECTS_ENDED_MS", "HERDR_PROJECTS_QUIET_MS", "HERDR_PROJECTS_READY_MS", "HERDR_PROJECTS_SUBMIT_MS", "HERDR_PROJECTS_TICK_MS", "ELEVENLABS_API_KEY", "CLAUDE_CODE_TMPDIR", "HERDR_PROJECTS_SIZE"] { unsafe { std::env::remove_var(k) } }
     // Its sockets are in a short folder of their own, never in `base`: a socket's path may not pass SOCKET_PATH_MAX,
     // and the temporary folder alone can be most of that (macOS gives each user a long one, the board each task one).
-    let sockets = Path::new("/tmp").join(&n);
+    // Named apart from `base`: where the temporary folder is /tmp itself (Linux, with no TMPDIR), the same name would
+    // make them one folder, emptied here just after `home` was made in it.
+    let sockets = Path::new("/tmp").join(format!("{n}-sock"));
     let _ = std::fs::remove_dir_all(&sockets);
     std::fs::create_dir(&sockets).unwrap_or_else(|e| panic!("{}: {e}", sockets.display()));
     let sockets = std::fs::canonicalize(&sockets).unwrap();

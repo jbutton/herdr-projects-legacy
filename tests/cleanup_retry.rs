@@ -218,8 +218,9 @@ fn real_programs_what_a_helper_runs_in_the_agents_group_with_its_input_on_dev_nu
     use sw::herdr::procs::{helpers, real_wiring, Wiring};
     let me = std::process::id() as i64; // the agent
     // wired to the agent, it runs a program of its own in the agent's group, input on /dev/null and output the agent's:
-    // as `uv tool run` runs an MCP server (upstream #554)
-    let mut uv = Command::new("sh").args(["-c", "sleep 30 </dev/null; :"]).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
+    // as `uv tool run` runs an MCP server (upstream #554). Started in the background and waited for, the shell keeps
+    // its own streams as uv does: dash (Linux's sh) points its own input at /dev/null while a command so redirected runs.
+    let mut uv = Command::new("sh").args(["-c", "sleep 30 </dev/null & wait"]).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
     let pid = uv.id() as i64;
     // its child once it is the program, not a fork of the shell before its input is put on /dev/null
     let started = || sw::herdr::cli::kids(pid).ok().and_then(|k| k.first().copied()).filter(|c| sw::herdr::procs::command(*c).is_some_and(|a| a.starts_with("sleep")));
