@@ -152,7 +152,7 @@ terminal board does, and the page then goes to the web UI's own view of its pane
 
 - **The page goes only once the web UI shows that pane.** A space opened again is a new workspace and pane, and the web
   UI's page drops an address that names a pane it does not know yet: Ovis 0.4.13 stayed on the pane it was on, and the
-  button seemed to do nothing ([#356](https://github.com/eliasstravik/herdr-projects/issues/356)). So the board asks the
+  button seemed to do nothing ([#356](https://github.com/eliasstravik/shepherdr/issues/356)). So the board asks the
   web UI which panes it has (its `/api/machines`) until the new one is there, for 8 seconds at most. That took about a
   second in the check below.
 - **When it still is not there, the page stays and says so**: *“HP-1 Make f” is open in herdr, but the web UI (Ovis) does
@@ -454,7 +454,7 @@ front of it, in Chromium at a desktop's size (1280×800) and a phone's (390×844
 Not checked: Ovis's installer moving a real install from the old id to the new one (both were linked by hand), and
 other machines under the new name (their PCs come from the same `/api/machines` as before).
 
-**Opening a task's agent whose space was closed** ([#356](https://github.com/eliasstravik/herdr-projects/issues/356)),
+**Opening a task's agent whose space was closed** ([#356](https://github.com/eliasstravik/shepherdr/issues/356)),
 checked on 2026-10-23 with Herdr 0.9.3: a scratch Herdr with Ovis 0.4.13 (its release, `devswha.herdr-web-ui`), the front
 door in front of it, a real task's agent (Claude Code) whose task was ready to approve, in Chromium at a desktop's size
 (1280×860):
