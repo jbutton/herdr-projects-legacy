@@ -49,6 +49,9 @@ nothing to `npm install`; `package.json` is only there so that every agent finds
   pick lines.
 - **A task's words go in the `docs/` page of its own topic, and only there.** A new topic is a new page. A page that
   grows a second topic is split.
+- **A change a person would notice gets one entry in `CHANGELOG.md`**, in the same pull request: what is different
+  for them, in a sentence or two, with the pull request's link. A fix to a test, a refactor or a docs-only change gets
+  none.
 - **Do not touch `README.md` for feature work.** It is only what this is and how to install and start it. It has no
   list of pages: a new page is found in `docs/`.
 - **A report, a review or a research result is never committed to the repo**, in no folder. It is kept in the task's

@@ -22,8 +22,6 @@ Everything that runs tests uses the same command: you, an agent at work, the rev
 in [`.herdr-projects.json`](../.herdr-projects.json)).
 
 - `npm test` is the same command. Both run `scripts/check.sh`; nothing of Node is used but the name.
-- `.herdr-superwork.json` says the same, for the board that works on this repo until its machines run herdr-projects (this
-  program's name before): it reads only that name.
 
 **Picking tests by name.** A name is first an area: `board-panel` (or `board_panel`) runs `tests/board_panel.rs` and every
 `tests/board_panel_*.rs`, exactly those (not `web_board_panel.rs`). A name that is no area is matched against each test's
