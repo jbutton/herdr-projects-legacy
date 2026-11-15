@@ -83,14 +83,14 @@ Every command Herdr runs for the plugin goes through `bin/run.sh`, which runs `t
 source file is newer than it. Then open the board ([get started](docs/get-started.md)).
 
 **Updating** is `git pull`, then `cargo build --release` again; an open board and the keeper load the new program by
-themselves. Build right after each pull: while the build is older than its source, `bin/run.sh` falls back to
-upstream's v1.2.27 program, downloaded, which has none of the changes above. `herdr-projects update` is no use here:
-it downloads upstream's releases, not this copy (this repo publishes none, and upstream's newest are Shepherdr's), and
-a program built from source refuses it anyway.
+themselves. Build right after each pull: while the build is older than its source, `bin/run.sh` says so on every
+command and runs the older build. It never downloads upstream's program: the only releases it looks at are this
+repo's, and there are none yet. For the same reason `herdr-projects update` finds nothing here, and a program built
+from source refuses it anyway.
 
 `herdr plugin install eliasstravik/herdr-projects` installs upstream, now Shepherdr. A `herdr plugin install` of this
-repo would get upstream's prebuilt 1.2.27 program in its build step instead of building this copy: use a checkout as
-above. [Installing](docs/install.md) has the details.
+repo builds this copy from source in its build step, so it needs Rust there too. [Installing](docs/install.md) has
+the details.
 
 ---
 
@@ -169,7 +169,7 @@ An agent that asks you something, wants a permission or a sign-in says so to the
 git pull && cargo build --release   # in your checkout of this repo
 ```
 
-An open board and the keeper see the new program and load it by themselves, once nothing is half typed and no agent is held up. This copy publishes no releases, so `herdr-projects update` is no use here ([install and update this copy](#install-and-update-this-copy)). [Installing](docs/install.md) has the details.
+An open board and the keeper see the new program and load it by themselves, once nothing is half typed and no agent is held up. This copy publishes no releases, so `herdr-projects update` finds nothing here ([install and update this copy](#install-and-update-this-copy)). [Installing](docs/install.md) has the details.
 
 ## Get your questions answered
 

@@ -28,9 +28,9 @@ every command Herdr runs for it goes through `bin/run.sh`, which runs that build
 `sh bin/run.sh install` writes the launcher agents and hooks use
 ([the command on your PATH](#the-command-on-your-path)).
 
-`herdr plugin install` would instead clone the repo into Herdr's own plugins folder and run the plugin's build step
-there, which downloads upstream's prebuilt program of this version (`v1.2.27`, without this copy's changes) rather than
-building it. `herdr plugin install eliasstravik/herdr-projects` installs upstream itself, which is now Shepherdr.
+`herdr plugin install jbutton/herdr-projects-legacy` would instead clone the repo into Herdr's own plugins folder and
+run the plugin's build step there, which builds this copy from source (there is no release of it to download).
+`herdr plugin install eliasstravik/herdr-projects` installs upstream itself, which is now Shepherdr.
 
 ## The first run
 
@@ -123,10 +123,11 @@ git pull && cargo build --release   # in the checkout
 ```
 
 - An open board and the keeper see the file change and load it by themselves ([the board's size](board-size.md)).
-- Build right after each pull: while the build is older than its source, `bin/run.sh` runs upstream's downloaded
-  program of this version instead ([below](#details-which-program-runs)), which has none of this copy's changes.
-- `herdr-projects update` is no use here: it downloads upstream's releases, never this copy (which publishes none,
-  while upstream's newest are Shepherdr's), and a program built from source refuses it.
+- Build right after each pull: while the build is older than its source, `bin/run.sh` runs the older build and says
+  so on every command ([below](#details-which-program-runs)).
+- `herdr-projects update` finds nothing here: it downloads this repo's releases, and there are none yet. A program
+  built from source refuses it anyway. Upstream's releases are never downloaded: its newest are Shepherdr's, and its
+  1.2.27 program has none of this copy's changes.
 
 **The keeper updates itself.** Once the new file has stopped changing (a build still being linked is waited for), with
 no board open and no agent running, the keeper starts its successor on the new file, and goes only once the successor
@@ -167,9 +168,9 @@ Every command Herdr runs for the plugin goes through `bin/run.sh`, which runs th
 
 1. a program built in this checkout (`target/release/herdr-projects`) that no source file is newer than;
 2. the downloaded one in `bin/`, when it is this checkout's version (`Cargo.toml`) or newer;
-3. that file, downloaded now from upstream's GitHub release of this checkout's version (this copy publishes none, so
-   that is upstream's `v1.2.27`, without this copy's changes): its checksum checked, put in place in one step, one
-   download at a time;
+3. that file, downloaded now from this repo's GitHub release of this checkout's version (this copy has none yet, so
+   today this step finds nothing; never upstream's): its checksum checked, put in place in one step, one download at
+   a time;
 4. failing all that, an older build or an older download, with a line saying so. A download that failed is tried again
    ten minutes later, not on every command (each of Herdr's hooks would wait for it).
 
@@ -179,3 +180,5 @@ With none, it says what to do and stops at once, so Herdr is never held up.
   download it.
 - `HERDR_PROJECTS_RELEASES` names another place for the releases (a fork, a mirror, a folder as `file:///…`).
 - The release files are built for every version tag by `.github/workflows/release.yml`; this copy makes no tags.
+- A `bin/run.sh` from before this change downloaded upstream's 1.2.27 program into `bin/`. Where one is still there,
+  step 2 runs it while the build is stale: remove it once (`rm bin/herdr-projects-*`).

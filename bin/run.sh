@@ -11,6 +11,9 @@
 #      download is tried again ten minutes later, not on every command.
 # When there is none it says on stderr what to do and exits 1: it never waits long, so it never holds herdr up.
 # `run.sh --fetch` only gets the program (the plugin's build step), building it from source when it cannot download.
+# The releases are this repo's own (jbutton/herdr-projects-legacy), never upstream's: upstream is Shepherdr now, and its
+# 1.2.27 program has none of this copy's changes. This copy has no release yet, so today the download finds nothing and
+# step 4, or the build, is what runs.
 # HERDR_PROJECTS_RELEASES names another place for the releases (a fork, a mirror, a folder as file:///…).
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(dirname -- "$here")
@@ -28,7 +31,7 @@ case "$(uname -s)" in Linux) os=linux ;; Darwin) os=macos ;; *) os="" ;; esac
 case "$(uname -m)" in x86_64 | amd64) arch=x86_64 ;; aarch64 | arm64) arch=aarch64 ;; *) arch="" ;; esac
 name="herdr-projects-$os-$arch"
 prog="$here/$name"
-base="${HERDR_PROJECTS_RELEASES:-https://github.com/eliasstravik/herdr-projects/releases}"; base="${base%/}"
+base="${HERDR_PROJECTS_RELEASES:-https://github.com/jbutton/herdr-projects-legacy/releases}"; base="${base%/}"
 
 # at_least A B: A is B or newer, part by part as numbers (0.10.0 is newer than 0.9.1).
 at_least() {
@@ -45,7 +48,7 @@ at_least() {
 have() { [ -x "$prog" ] && v=$(cat "$prog.version" 2>/dev/null) && [ -n "$v" ] && at_least "$v" "$want"; }
 [ -n "$os" ] && [ -n "$arch" ] && have && run "$prog" "$@"
 
-gh_repo="https://github.com/eliasstravik/herdr-projects/releases/download/"
+gh_repo="https://github.com/jbutton/herdr-projects-legacy/releases/download/"
 fetch() {
   if command -v curl >/dev/null 2>&1; then curl -fsSL --connect-timeout 10 --max-time 300 -o "$2" "$1" 2>/dev/null && return 0
   elif command -v wget >/dev/null 2>&1; then wget -q --tries=1 -T 30 -O "$2" "$1" && return 0
@@ -54,7 +57,7 @@ fetch() {
   case "$1" in "$gh_repo"*/*) ;; *) return 1 ;; esac
   command -v gh >/dev/null 2>&1 || return 1
   rest=${1#"$gh_repo"}
-  gh release download "${rest%%/*}" -R eliasstravik/herdr-projects -p "${rest#*/}" -O "$2" --clobber </dev/null >/dev/null 2>&1
+  gh release download "${rest%%/*}" -R jbutton/herdr-projects-legacy -p "${rest#*/}" -O "$2" --clobber </dev/null >/dev/null 2>&1
 }
 sha256() { { sha256sum "$1" || shasum -a 256 "$1" || openssl dgst -sha256 -r "$1"; } 2>/dev/null | cut -d ' ' -f 1; }
 build_hint="or build it here: cd '$root' && cargo build --release (Rust: https://rustup.rs)"

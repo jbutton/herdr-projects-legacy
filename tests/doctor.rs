@@ -110,7 +110,7 @@ fn herdr_must_run_the_plugin_enabled_from_a_folder_that_is_there() {
     std::fs::write(s.root.join("herdr-plugin.toml"), "id = \"herdr-projects\"\n").unwrap();
     let h = |v: Option<&str>, list: Vec<serde_json::Value>| plugin::Herdr { version: v.map(String::from), plugins: Ok(list) };
     assert!(bad(&plugin::check(&h(None, vec![])))[0].starts_with("herdr does not run here"));
-    assert!(bad(&plugin::check(&h(Some("0.9.3"), vec![])))[0].ends_with("→ Run: herdr plugin install eliasstravik/herdr-projects"));
+    assert!(bad(&plugin::check(&h(Some("0.9.3"), vec![])))[0].ends_with("→ Run: herdr plugin install jbutton/herdr-projects-legacy"));
     assert!(bad(&plugin::check(&h(Some("0.9.3"), vec![ours(false, &s.root, true)])))[0].ends_with("but turned off → Run: herdr plugin enable herdr-projects"));
     assert!(bad(&plugin::check(&h(Some("0.9.3"), vec![ours(true, &w.base.join("gone"), true)])))[0].contains("which is gone"));
     assert!(bad(&plugin::check(&h(Some("0.9.1"), vec![ours(true, &s.root, true)])))[0].starts_with("herdr 0.9.1 is older than 0.9.3"));
