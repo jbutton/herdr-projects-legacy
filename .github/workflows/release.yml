@@ -35,8 +35,8 @@ jobs:
         include:
           - { target: x86_64-unknown-linux-musl, runner: ubuntu-24.04, file: herdr-projects-linux-x86_64, runs: true }
           - { target: aarch64-unknown-linux-musl, runner: ubuntu-24.04, file: herdr-projects-linux-aarch64, zig: true }
-          - { target: x86_64-apple-darwin, runner: macos-14, file: herdr-projects-macos-x86_64 }
-          - { target: aarch64-apple-darwin, runner: macos-14, file: herdr-projects-macos-aarch64, runs: true }
+          - { target: x86_64-apple-darwin, runner: macos-26, file: herdr-projects-macos-x86_64 }
+          - { target: aarch64-apple-darwin, runner: macos-26, file: herdr-projects-macos-aarch64, runs: true }
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
