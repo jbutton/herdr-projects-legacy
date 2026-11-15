@@ -1,0 +1,21 @@
+# Dependabot opens a pull request when a crate in Cargo.lock or an action in .github/workflows has a newer version:
+# once a week, the crates in one pull request and the actions in another, so the list stays short. A security fix
+# does not wait for the week: its alert (on for this repo) says so the day the advisory is out.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      crates:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns: ["*"]
