@@ -30,6 +30,9 @@ fn a_long_message_wraps_inside_the_box_and_takes_the_rows_it_needs_never_the_tex
     let w = coord_world();
     for i in 1..=40 { w.add(&format!("Task number {i}")); }
     let mut s = open(&w.root, 30); s.s.side = false;
+    // A name of its own, not the machine's: the box's edge names it only where it fits, and at 44 columns a name past
+    // 14 letters (a CI runner's `ip-10-0-138-101`) does not.
+    s.s.data.host = "box".into();
     let said: Vec<String> = (1..=20).map(|i| format!("Line {i} of **what** it said, long enough to wrap in a narrow window.")).collect();
     coordinator_says(&mut s, &said.join("\n"));
     let me = sw::board::update::heads::label(&s.s, "");
@@ -52,7 +55,7 @@ fn a_long_message_wraps_inside_the_box_and_takes_the_rows_it_needs_never_the_tex
     let c = crate::board_chat::chat(&mut s, 80);
     // folded: the box's edge names who (its ladder), and the line you type on stays
     assert_eq!(c.lines.len(), 10); assert_eq!(c.boxed, vec!["❯ Send message to the machine coordinator".to_string()], "{:?}", c.lines);
-    assert!(c.lines.iter().any(|l| l.starts_with("╭─") && l.contains(&sw::shown::words::clean(&sw::remote::check::hostname()))), "{:?}", c.lines);
+    assert!(c.lines.iter().any(|l| l.starts_with("╭─") && l.contains(&format!(" {me} "))), "{:?}", c.lines);
     // The colours: an agent's message is in the brighter of the two greys (it has to be read), your own in the text colour.
     use sw::board::view::chat::{chat_message, Who};
     use sw::board::view::talk::Part;
