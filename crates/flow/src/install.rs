@@ -5,7 +5,9 @@ use crate::err::Res;
 use crate::store::files::{bin, write_atomic, VERSION};
 use std::path::{Path, PathBuf};
 
-pub const REPO: &str = "eliasstravik/herdr-projects";
+/// This copy's own repo: its releases are the only ones downloaded, never upstream's (upstream is Shepherdr now, and
+/// its 1.2.27 program has none of this copy's changes).
+pub const REPO: &str = "jbutton/herdr-projects-legacy";
 
 /// The release files' name for a platform, from `uname -s`/`uname -m` or Rust's own names. None: no release is made.
 pub fn platform_of(os: &str, arch: &str) -> Option<(&'static str, &'static str)> {
