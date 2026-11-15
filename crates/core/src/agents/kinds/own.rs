@@ -10,8 +10,9 @@ pub static KINDS: &[Kind] = &[
         access_auto: Some((&["--permission-mode", "auto"], "2.1.111")),
         tokens: true, rules_file: Some("CLAUDE.md"), reads_turn: true, model: &["--model", "{}"],
         // Claude Code has no command that lists its models: its short names (each the newest of its kind) and the
-        // full names Claude Code 2.1.301 knows. `[1m]` after one asks for the long context. On a cloud or a gateway
-        // of its own (models/listed.rs `own_provider`) its names are that provider's, and not checked.
+        // full names Claude Code 2.1.301 knows, and claude-fable-5-2, which came after it. `[1m]` after one asks for
+        // the long context. On a cloud or a gateway of its own (models/listed.rs `own_provider`) its names are that
+        // provider's, and not checked.
         models: Models { aliases: &["default", "fable", "opus", "sonnet", "haiku", "opusplan"], known: CLAUDE_MODELS, suffix: &["[1m]"], example: "claude/claude-opus-5-5", ..NO_MODELS },
         effort: &["--effort", "{}"], resume: &["--resume", "{}"], session: &["--session-id", "{}"], standing: &["--append-system-prompt-file", "{}"], integration: "claude",
         login: Some(Login { status: &["auth", "status"], how: "claude auth login" }),
@@ -41,7 +42,7 @@ pub static KINDS: &[Kind] = &[
 ];
 /// Claude Code's full model names, newest first; a new one is one more entry.
 const CLAUDE_MODELS: &[&str] = &[
-    "claude-fable-5-1", "claude-fable-5", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5", "claude-sonnet-5",
+    "claude-fable-5-2", "claude-fable-5-1", "claude-fable-5", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5", "claude-sonnet-5",
     "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-opus-4-5", "claude-opus-4-5-20251101",
     "claude-sonnet-4-5", "claude-sonnet-4-5-20250929", "claude-haiku-4-5", "claude-haiku-4-5-20251001", "claude-opus-4-1", "claude-opus-4-1-20250805",
     "claude-opus-4-0", "claude-opus-4-20250514", "claude-sonnet-4-0", "claude-sonnet-4-20250514",

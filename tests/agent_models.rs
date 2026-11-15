@@ -78,7 +78,7 @@ fn a_model_the_program_does_not_take_is_refused_with_the_ones_it_does() {
 #[test]
 fn claude_s_names_follow_its_own_rule_and_a_program_without_a_list_is_not_checked() {
     let _w = world();
-    for m in ["opus", "sonnet", "haiku", "fable", "opusplan", "default", "opus[1m]", "claude-opus-5-5", "claude-opus-5-5[1m]", "claude-sonnet-4-5-20250929"] { taken("worker.agent", &format!("claude/{m}")); }
+    for m in ["opus", "sonnet", "haiku", "fable", "opusplan", "default", "opus[1m]", "claude-fable-5-2", "claude-opus-5-5", "claude-opus-5-5[1m]", "claude-sonnet-4-5-20250929"] { taken("worker.agent", &format!("claude/{m}")); }
     refused("worker.agent", "claude/gpt-5", r#"^worker\.agent: claude has no model "gpt-5"\. It takes .*opus.*claude-opus-5-5.*, and \d+ more: `herdr-projects models claude` lists them all \(its short names, each the newest of its kind, and its full names\)\."#);
     // Invented and mistyped names (the review of HP-16): refused, with the nearest real one.
     refused("worker.agent", "claude/claude-opus-this-model-does-not-exist", r#"claude has no model "claude-opus-this-model-does-not-exist"\. It takes claude-opus-5-5, claude-opus-5, .*Write it after the program: claude/claude-opus-5-5\.$"#);
