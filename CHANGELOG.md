@@ -75,3 +75,7 @@ each. This copy makes no version tags yet, so the list is one section.
 - `bin/run.sh` and `herdr-projects update` look for releases in this repo only: upstream's program is never downloaded,
   and a build older than its source runs with a line saying so.
   ([#21](https://github.com/jbutton/herdr-projects-legacy/pull/21))
+- The board never types into a pane whose agent's program has ended: a task's text no longer goes into the shell left
+  behind (where it ran as commands). Under `usage.extra defer`, a start whose usage window ends it waits for that window
+  and carries on by itself at the reset, instead of "Not started", and a window known to be used up holds the start back.
+  ([#30](https://github.com/jbutton/herdr-projects-legacy/pull/30))

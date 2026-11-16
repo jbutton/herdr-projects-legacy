@@ -58,6 +58,12 @@ pub fn agent(f: &F, verb: &str, arg2: &str, argv: &[String], flag: &dyn Fn(&str)
             let d = st.at("dialogs").i(&kind);
             if d > 0 { st["dialogs"][&kind] = json!(d - 1); st["panes"][pi]["agent"]["status"] = json!("blocked"); return fail("agent_not_ready", &format!("agent {arg2} is blocked during startup and is not ready for prompts")); }
             if let Some(held) = held_screen(&st, &kind, &rest) { let a = &mut st["panes"][pi]["agent"]; a["held"] = json!(true); a["screen"] = json!(held); }
+            // `exitsAtStart`: the kinds whose program ends right after it came up (out of its usage window), its pane
+            // back at the shell while herdr still names the agent; `codexAtStart`, a line it wrote first (Codex's window).
+            if st.at("exitsAtStart").as_array().is_some_and(|l| l.iter().any(|k| text(k) == kind)) {
+                st["panes"][pi]["ended"] = json!(true);
+                if st.at("codexAtStart").is_object() { super::endings::codex_today(st.at("codexAtStart")); }
+            }
             let p = st["panes"][pi].clone();
             return ok(json!({ "type": "agent_started", "agent": F::agent_out(&p) }));
         }
@@ -77,6 +83,8 @@ pub fn agent(f: &F, verb: &str, arg2: &str, argv: &[String], flag: &dyn Fn(&str)
         "prompt" => {
             if st["panes"][pi]["agent"].s("status") == "blocked" { return fail("agent_blocked", "agent is blocked"); }
             let typed = read_named(&argv.get(3).cloned().unwrap_or_default());
+            // Its program has ended: herdr types the text into the pane's shell, which runs it.
+            if st["panes"][pi].b("ended") { arr(&mut st["panes"][pi], "shellTyped").push(json!(typed)); let p = st["panes"][pi].clone(); return ok(json!({ "type": "agent_prompted", "agent": F::agent_out(&p) })); }
             // Its own start-up screen (held_screen): the text is lost, its enter picks the first choice, the counters move.
             if st["panes"][pi]["agent"].b("held") { arr(&mut st["panes"][pi]["agent"], "lost").push(json!(typed)); F::bump(&mut st, pi, "done", true); let p = st["panes"][pi].clone(); return ok(json!({ "type": "agent_prompted", "agent": F::agent_out(&p) })); }
             let box_ = st["panes"][pi]["agent"].at("box").clone();
@@ -96,6 +104,7 @@ pub fn agent(f: &F, verb: &str, arg2: &str, argv: &[String], flag: &dyn Fn(&str)
         }
         "send-keys" => {
             let keys: Vec<String> = argv[3..].to_vec();
+            if st["panes"][pi].b("ended") { arr(&mut st["panes"][pi], "shellTyped").extend(keys.iter().map(|k| json!(k))); return ok(json!({ "type": "ok" })); }
             let a = &mut st["panes"][pi]["agent"];
             arr(a, "keys").extend(keys.iter().map(|k| json!(k)));
             let enter = keys.iter().any(|k| k == "enter");

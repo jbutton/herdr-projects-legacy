@@ -88,3 +88,12 @@ fn report(first: &str, says: Value) {
     let token = if role == "reviewer" { tokens.at("reviewer").t(&round.to_string()) } else { tokens.t("agent") };
     sw::turn::turn_ended(&task, role, &token, round, &[says.to_string()]);
 }
+/// A line in today's Codex conversation folder, as Codex writes its window there (read by the board's `codex_newest`).
+pub fn codex_today(line: &Value) {
+    use chrono::TimeZone;
+    let day = chrono::Local.timestamp_millis_opt(sw::clock::now()).single().unwrap().date_naive();
+    let file = env_path("CODEX_HOME").join("sessions").join(day.format("%Y/%m/%d").to_string()).join("rollout-at-start.jsonl");
+    if let Some(d) = file.parent() { let _ = std::fs::create_dir_all(d); }
+    use std::io::Write;
+    let _ = std::fs::OpenOptions::new().create(true).append(true).open(&file).and_then(|mut f| f.write_all(format!("{line}\n").as_bytes()));
+}

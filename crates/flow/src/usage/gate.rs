@@ -1,7 +1,8 @@
 //! Before a start (actions/start.rs: start_queued): a queued task whose agent's program is known to be on extra usage
 //! does not start under `ask` or `defer`. Under `defer` the first agent on `worker.fallback` that is not on extra usage
 //! starts instead (a hand-over before it began); else it stays in the queue, holding no slot, as "waiting for the usage
-//! window: resets 17:00", and starts by itself once that has passed. Under `ask`, or with its reset not known, it waits
+//! window: resets 17:00", and starts by itself once that has passed. Under `defer` a window used up (`hard`) holds it
+//! back the same way. Under `ask`, or with its reset not known, it waits
 //! for you (`usageWait.you`), and a retry starts it anyway, with leave for this episode (`extraOk`).
 use super::stop::{fallback_for, why};
 use super::words::{setting_of, start_line};
@@ -30,8 +31,13 @@ pub fn held(w: &Obj) -> bool {
     let (id, at) = (w.t("id"), now());
     let kind = kind_of(w);
     let s = setting_of(w);
+    // Codex's window read afresh before a start, not only once a minute (usage/tick.rs): a start must not be the first to find it used up.
+    if kind == "codex" && s == "defer" && crate::store::marks::due("usage-codex-start", 5_000) { if let Some(r) = crate::agents::read_window::codex_newest() { crate::store::usage::fold("codex", &r, at); } }
     let n = now_of(&kind, at);
-    let hold = s != "allow" && READ.contains(&kind.as_str()) && n.extra && !extra_ok(w, &kind, &n, at) && !crate::chat_only::is_chat(w);
+    // Under `defer` a window used up with nothing to pay on (`hard`) holds it back as extra usage does: started, its
+    // program would end at once.
+    let over = (n.extra && !extra_ok(w, &kind, &n, at)) || (s == "defer" && n.hard && n.resets > at);
+    let hold = s != "allow" && READ.contains(&kind.as_str()) && over && !crate::chat_only::is_chat(w);
     if !hold {
         if w.b("usageWait") { let _ = update(&id, |t| { t.del("usageWait"); t.put("msg", ""); Ok(Change::Write) }); }
         return false;

@@ -4,6 +4,7 @@
 //! foreground process, which on a loaded machine is seconds before it has drawn anything; `agent prompt` pastes the
 //! text and presses enter 300 ms later, and a program still starting keeps the text and drops the enter.
 pub mod give_up;
+pub mod gone;
 pub mod unconfirmed;
 use crate::agents::hand_limits::hand_over;
 use crate::agents::installed::said_to;
@@ -42,6 +43,7 @@ pub fn settle(api: &Herdr, pane: &str, launch: &str) -> bool {
     let until = now() + max;
     let (mut prev, mut since) = (None::<String>, 0);
     loop {
+        if api.shell_in_front(pane) { return false; } // its program has ended: nothing is to be typed into a shell
         let Ok(screen) = api.pane_read(pane, "visible", None) else { return false };
         if drawn(&screen, launch) { if since == 0 { since = now(); } if prev.as_deref() == Some(screen.as_str()) || now() - since >= QUIET_MAX { return true; } } else { since = 0; }
         prev = Some(screen);
@@ -87,9 +89,13 @@ pub fn pending_sent(t: &Task, a: Option<&Value>) -> bool {
 /// Type a prompt into an agent. Returns the mark to look again with (None when herdr said nothing of the agent before).
 /// Fails with what herdr answers when nothing was typed (agent_blocked, agent_not_ready, anything unexpected).
 /// A text too long to hand over in one go is written to a file, and a line naming it is typed instead (hand_limits.rs).
+/// Fails with `agent_gone` and types nothing when the agent's program is not running in the pane: herdr names no agent
+/// there, or the pane's shell is back in front. Text typed into a shell is run as commands.
 pub fn hand(api: &Herdr, pane: &str, text: &str) -> Result<Option<Value>, HerdrError> {
+    let got = api.agent_get(pane);
+    if matches!(got, Ok(None)) || api.shell_in_front(pane) { return Err(gone::error()); }
     let typed = hand_over(text).map_err(|e| HerdrError { code: "failed".into(), message: e.msg })?;
-    let a = api.agent_get(pane).ok().flatten();
+    let a = got.ok().flatten();
     if let Err(e) = api.agent_prompt(pane, &typed) { if !["agent_prompt_stalled", "timeout"].contains(&e.code.as_str()) { return Err(e); } } // these do not prove nothing was sent; never send twice
     Ok(mark_of(a.as_ref()))
 }
@@ -112,6 +118,7 @@ pub fn look(api: &Herdr, pane: &str, mark: &mut Value, said: Option<&dyn Fn() ->
     let proof = said.and_then(|f| f());
     if took(mark, a.as_ref(), proof) == Some(true) { return "took"; }
     if mark.i("tries") >= TRIES { return "lost"; }
+    if api.shell_in_front(pane) { return "lost"; } // its program has ended: no enter into a shell
     if let Some(m) = mark.as_object_mut() { let n = m.i("tries") + 1; m.put("tries", n); m.put("pressedAt", now()); }
     let _ = api.agent_keys(pane, &["enter"]);
     "pressed"
@@ -165,8 +172,11 @@ pub fn check_sent(id: &str, a: Option<&Value>, api: &Herdr) {
     let lost = |detail: String, next: String| give_up::fail(id, "sent", &m, &detail, &next, &give_up::screen(api, t.at("link").s("pane"), a.map(|a| a.s("agent_status"))));
     let secs = (((now() - m.i("at")) as f64 / 1000.0).round() as i64).max(1);
     if a.is_none() && marker_alive(t.at("runner")) { return; } // a job of the board's own is starting its program again
+    // herdr may name the agent for a moment after its program exited: the pane's shell in front says it is gone.
+    let a = a.filter(|_| !api.shell_in_front(t.at("link").s("pane")));
     let Some(a) = a else {
         if said() == Some(true) { return clear(); }
+        if let Some(x) = gone::window_used(id) { gone::keep_typed(id, &m); if gone::wait(id, x) { return; } } // under `defer`: it waits for the reset
         return lost(format!("The board typed the text into the agent's box {secs} seconds ago. The agent's program ended before it started on it: nothing was submitted."), format!("Retry ({}) starts the agent's program again and hands it the text once more.", key_name("yes")));
     };
     if m.b("busy") { // typed into a running turn: looked at from the moment the agent is at rest

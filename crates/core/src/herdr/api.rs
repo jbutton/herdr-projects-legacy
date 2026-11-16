@@ -90,6 +90,14 @@ impl Herdr {
     /// command is at work, in the program's group (on the terminal, a file or `/dev/null`) or in a group of its own
     /// (what, in words: busy.rs).
     pub fn pane_childless(&self, id: &str, agent: &str) -> bool { super::busy::beside_agent(self, id, agent, false).is_empty() }
+    /// Is the pane's shell back in its foreground, with nothing else there: the program that ran in it has ended? herdr
+    /// may still name the agent for a moment after its program exited. Unknown (herdr does not say): no.
+    pub fn shell_in_front(&self, id: &str) -> bool {
+        let Some(i) = self.process_info(id) else { return false };
+        if !crate::gate::is_int(i.at("shell_pid")) { return false; }
+        let sp = i.i("shell_pid");
+        i.i("foreground_process_group_id") == sp && i.arr("foreground_processes").iter().all(|p| p.i("pid") == sp)
+    }
     /// A pane, with whatever runs in it, into a new tab of another space. Never focused.
     pub fn pane_move(&self, id: &str, workspace: &str, label: &str) -> HRes<Value> {
         let mut a = args(&["pane", "move", id, "--new-tab", "--workspace", workspace]);
