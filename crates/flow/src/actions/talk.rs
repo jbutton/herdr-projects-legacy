@@ -83,7 +83,7 @@ pub fn tell_as(id: &str, text: &str, keep_intent: bool, chat: bool) -> Res<Said>
     flow::sidebar::tell_sidebar(&t);
     let how = flow::send::deliver(&t, &words, None, false)?;
     let goes_on = flow::chat::during(&t) && ["reviewing", "reviewneeds"].contains(&t.s("stage"));
-    let msg = if how == "queued" { "queued: open the agent and answer its dialog first" } else if back { "The plan went back to its writer with your words" } else if goes_on { "Sent to the agent: the review goes on unless the code changes" } else { "Sent to the agent" };
+    let msg = if how == "gone" { "Not sent: the agent's program had ended. Retry starts it again with your words" } else if how == "queued" { "queued: open the agent and answer its dialog first" } else if back { "The plan went back to its writer with your words" } else if goes_on { "Sent to the agent: the review goes on unless the code changes" } else { "Sent to the agent" };
     Ok(say(get(&cid).unwrap_or(t), msg))
 }
 /// A task that just ended is being cleaned up: a reply waits for that, or its work would go with the worktree.

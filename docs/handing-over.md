@@ -13,6 +13,7 @@ after a cut-off turn, the reviewer's brief, and what you say to the Coordinator.
 | `Starting` (or `About to continue`) | the board is waiting for the program to come up, or checking the text went in |
 | `Has not started yet: pressing enter again` | the text sits in the box; the board presses enter again |
 | **Not started: its instructions sit unsent in its box** | still sitting there 40 seconds after the last enter, or the text never reached the agent at all (3 minutes, below) |
+| **Not started: its program ended before it was given its instructions** | the program ended as it started; nothing was typed |
 
 While it waits, the row never says `working` or `finishing`.
 
@@ -36,6 +37,16 @@ While it waits, the row never says `working` or `finishing`.
 **The reviewer and the Coordinator** are held to the same. A reviewer that never starts on its brief fails that review
 ("the reviewer did not start"); retry runs it again. Words the Coordinator did not take are named in its chat ("your
 message sits unsent in its box"). They are not typed again.
+
+## Never into a shell
+
+**Nothing is typed into a pane whose program has ended.** Before every text, and before every enter pressed again, the
+board asks herdr what runs in the pane. With the pane's shell back in front, it types nothing, even when herdr still
+names the agent (it may for a moment after the program exited). A shell runs what is typed into it: a task's text once
+went into one, line by line, as commands.
+
+The text is kept for the next start. A task whose program ended for its usage window under `usage.extra defer` waits
+for that window ([extra usage](extra-usage.md)); any other says **Not started**, and retry starts the program again.
 
 ## Why this exists
 

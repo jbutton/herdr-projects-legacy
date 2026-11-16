@@ -23,13 +23,15 @@ pub fn pane(st: &mut Value, verb: &str, arg2: &str, argv: &[String], flag: &dyn 
             // input is `/dev/null`); `child`, a command that is not; `wrapped`, the agent's own program under an npm
             // wrapper. `shell`: the pane's shell is that real process; `infoFails`: herdr does not answer for this pane
             let under = ["tool", "helper", "child", "wrapped"].iter().any(|k| p.b(k));
-            let fg = if st.b("pids") && p.at("agent").is_object() { p.at("agent").i("pid") } else if under { 1 } else if p.b("busy") { shell + 1 } else { shell };
-            let mut front = vec![json!({ "pid": fg, "name": if p.b("wrapped") { "node" } else if under { "agent" } else if p.b("busy") { "sleep" } else { "bash" } })];
+            // An agent with nothing else in its pane is the pane's foreground, as on real herdr (its pid, its kind's name).
+            let alone = p.at("agent").is_object() && !under && !p.b("busy") && !p.b("ended");
+            let fg = if (st.b("pids") || alone) && p.at("agent").is_object() { p.at("agent").i("pid") } else if under { 1 } else if p.b("busy") { shell + 1 } else { shell };
+            let mut front = vec![json!({ "pid": fg, "name": if p.b("wrapped") { "node".into() } else if under { "agent".into() } else if alone { p.at("agent").t("kind") } else if p.b("busy") { "sleep".into() } else { "bash".to_string() } })];
             if p.b("helper") { front.push(json!({ "pid": 2, "name": if p.s("helper") == "uv" { "uv" } else { "mcp-server" } })); }
             if p.s("helper") == "uv" { front.push(json!({ "pid": 6, "name": "python3" })); }
             if p.b("child") { front.push(json!({ "pid": 3, "name": "sleep" })); }
             if p.b("wrapped") { front.push(json!({ "pid": 3, "name": p.at("agent").at("kind") })); }
-            let group = if p.b("busy") { shell + 1 } else if under { fg } else { shell };
+            let group = if p.b("busy") { shell + 1 } else if under || alone { fg } else { shell };
             return ok(json!({ "type": "pane_process_info", "process_info": { "pane_id": p.at("pane_id"), "shell_pid": if p.b("job") { 1 } else if p.b("shell") { p.i("shell") } else { shell }, "foreground_process_group_id": group, "foreground_processes": front } }));
         }
         "layout" => {

@@ -17,7 +17,8 @@ use crate::submit::{hand, note_sent};
 use crate::util::shq;
 use std::path::PathBuf;
 
-/// "sent": typed, with enter pressed (whether the agent then started on it is looked at again: submit.rs); "queued".
+/// "sent": typed, with enter pressed (whether the agent then started on it is looked at again: submit.rs); "queued";
+/// "gone": its program had ended, nothing was typed, and the task waits for its usage window or failed (submit/gone.rs).
 /// `first`: the text is all a freshly started program is given.
 pub fn deliver(t: &Task, text: &str, wake: Option<Value>, first: bool) -> Res<&'static str> {
     match hand(&h(t), t.at("link").s("pane"), text) {
@@ -27,6 +28,7 @@ pub fn deliver(t: &Task, text: &str, wake: Option<Value>, first: bool) -> Res<&'
             queue_text(t.s("id"), text, extra)?;
             Ok("queued")
         }
+        Err(e) if e.code == crate::submit::gone::GONE => { crate::submit::gone::before_typed(t, text, first, &h(t)); Ok("gone") }
         Err(e) => Err(e.into()),
     }
 }

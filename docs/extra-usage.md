@@ -93,9 +93,12 @@ Today's behaviour: the agent works on, and the board only says so (above).
 - **Nobody to take it: the agent is stopped at once**, as under `ask`, its work kept. The task waits as `waiting for
   the usage window: resets 17:00`, with the queued tasks, not under "needs you". **At the reset it carries on by
   itself**: the agent is told it was stopped for extra usage and that the window has reset.
-- **A task does not start** while its program is on extra usage: started with an agent on the list that is not, else it
-  stays in the queue as `waiting for the usage window: resets 17:00`, holding no slot, and starts by itself once the
-  window has reset.
+- **A task does not start** while its program is on extra usage, or its window is used up with nothing to pay on:
+  started with an agent on the list that is not, else it stays in the queue as `waiting for the usage window: resets
+  17:00`, holding no slot, and starts by itself once the window has reset. Codex's window is read afresh before a start.
+- **A start its window ends** (the program comes up, finds its window used up and ends, before the board knew): it waits
+  for that window as a task stopped at work does, `waiting for the usage window: resets 17:00`, and carries on by
+  itself at the reset with its own text. Nothing is typed into the pane ([never into a shell](handing-over.md#never-into-a-shell)).
 - **A turn that ends out of allowance** (extra usage off or used up), with nobody on the list to take it: it waits for
   that window too, instead of "Agent stopped: out of allowance until 17:00", and carries on by itself at the reset.
 - **When the reset is not known**, it waits for you instead, under "needs you", with the reason.
