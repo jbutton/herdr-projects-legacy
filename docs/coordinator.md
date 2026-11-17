@@ -73,6 +73,11 @@ When it acted on the board, its message ends with one short line naming the ids 
 title, a description, settings), removed, started an agent, approved, archived, restored. For example: "Added proj/12
 and started an agent on it". The commands answer in the same words ([roles and commands](roles-and-commands.md)).
 
+## When it asks you
+
+A decision it needs from you comes first in its message, on its own bold line starting with ❓, before any drafts or
+details, and the same line ends the message. A long answer no longer hides the question at the bottom.
+
 ## Going into it
 
 On the board you see only what it said and what you said, never its program's screen ([the board](board.md)). For the
