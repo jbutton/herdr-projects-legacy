@@ -25,8 +25,11 @@ pub fn limits_tick(rows: &[Obj], now: i64, carry_on: Option<&dyn Fn(&str)>) {
         let (stopped, role) = (stopped_at_limit(r), run_role(r));
         if !stopped && role.is_empty() { continue; }
         let id = r.s("id").to_string();
-        if within(LOOKED.lock().unwrap().get(&id).copied(), now, LOOK) { continue; }
-        LOOKED.lock().unwrap().insert(id.clone(), now);
+        // One look per board's task: keyed by its herdr session too, as the usage pass is (another board's task of the
+        // same number is not this one).
+        let key = format!("{}|{id}", r.at("link").s("socket"));
+        if within(LOOKED.lock().unwrap().get(&key).copied(), now, LOOK) { continue; }
+        LOOKED.lock().unwrap().insert(key, now);
         if !stopped && !limit_said(r) { continue; }
         if stopped { crate::usage::stop::follow(r); if let Some(f) = carry_on { if lifted(r) { f(&id); } } continue; }
         let (time, tokens) = (keep_run_time(r), setting_text("limit.tokens", Some(r)));
