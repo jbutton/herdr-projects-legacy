@@ -41,9 +41,10 @@ pub fn held(w: &Obj) -> bool {
     // Under `defer` a window used up with nothing to pay on (`hard`) holds it back as extra usage does: started, its
     // program would end at once. One that waits for its window already goes before that reset only on a reading with
     // room in both windows (a reset bought early), never on one that leaves a window out.
-    let wait = w.at("usageWait");
-    let early = wait.is_object() && !wait.b("you") && wait.s("agent") == kind && wait.i("resets") > at && !n.room();
-    let over = (n.extra && !extra_ok(w, &kind, &n, at)) || (s == "defer" && ((n.hard && n.resets > at) || early));
+    let was = w.at("usageWait");
+    let early = was.is_object() && !was.b("you") && was.s("agent") == kind && was.i("resets") > at && !n.room();
+    let own = (n.extra && !extra_ok(w, &kind, &n, at)) || (s == "defer" && n.hard && n.resets > at);
+    let over = own || (s == "defer" && early);
     let hold = s != "allow" && READ.contains(&kind.as_str()) && over && !crate::chat_only::is_chat(w);
     if !hold {
         if w.b("usageWait") { let _ = update(&id, |t| { t.del("usageWait"); t.put("msg", ""); Ok(Change::Write) }); }
@@ -64,10 +65,13 @@ pub fn held(w: &Obj) -> bool {
             return false;
         }
     }
-    let you = s == "ask" || n.resets == 0;
-    let line = start_line(&kind, n.resets, you, &s, at);
-    let since = if w.at("usageWait").s("agent") == kind { w.at("usageWait").i("at") } else { at };
-    let wait = json!({ "agent": kind, "resets": n.resets, "you": you, "window": n.since, "at": since });
+    // Held only because a reading before its reset leaves a window out: it goes on waiting for the reset it was told,
+    // at every pass (that reading knows no reset, and would turn the wait into one for you, let go at the next pass).
+    let (resets, window) = if own { (n.resets, n.since) } else { (was.i("resets"), was.i("window")) };
+    let you = s == "ask" || resets == 0;
+    let line = start_line(&kind, resets, you, &s, at);
+    let since = if was.s("agent") == kind { was.i("at") } else { at };
+    let wait = json!({ "agent": kind, "resets": resets, "you": you, "window": window, "at": since });
     if tidy(wait.clone()) != *w.at("usageWait") || w.s("msg") != line {
         let _ = update(&id, |t| { t.put("usageWait", wait.clone()); t.put("msg", line.clone()); Ok(Change::Write) });
     }
