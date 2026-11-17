@@ -55,7 +55,7 @@ fn usage_defer_carries_on_an_agent_as_soon_as_a_fresh_reading_shows_room_before_
 fn usage_defer_reviews_as_soon_as_codex_is_read_with_room_again_before_the_reset_it_was_told() {
     let w = world_with(Opts { repo: true, settings: json!({ "usage.extra": "defer" }), ..Default::default() });
     let t0 = sw::clock::now();
-    sw::clock::set(Some(t0));
+    at(t0);
     let resets = (t0 + 18 * HOUR) / 1000 * 1000;
     codex_yours(&w, t0 - 60_000, 100.0, resets);
     tick(&w, t0); // the once-a-minute read: Codex is on extra usage
@@ -66,7 +66,7 @@ fn usage_defer_reviews_as_soon_as_codex_is_read_with_room_again_before_the_reset
     assert_eq!(settle(&id).s("stage"), "stopped");
     // You bought a reset and used Codex: its conversation says so. Within the minute: the pass reads Codex afresh
     // because the review waits for it, not once a minute.
-    sw::clock::set(Some(t0 + 20_000));
+    at(t0 + 20_000);
     codex_yours(&w, t0 + 20_000, 2.0, t0 + 5 * HOUR);
     tick(&w, t0 + 30_000);
     assert!(sw::store::usage::now_of("codex", t0 + 30_000).room());
@@ -81,7 +81,7 @@ fn usage_defer_starts_a_held_task_as_soon_as_codex_is_read_with_room_again() {
     let w = world_with(Opts { repo: true, settings: json!({ "usage.extra": "defer", "worker.agent": "codex" }), ..Default::default() });
     w.script(json!({ "worker": [{ "status": "working" }] }));
     let t0 = sw::clock::now();
-    sw::clock::set(Some(t0));
+    at(t0);
     let resets = (t0 + 18 * HOUR) / 1000 * 1000;
     codex_yours(&w, t0 - 60_000, 100.0, resets);
     let id = w.add("Held");
@@ -91,17 +91,17 @@ fn usage_defer_starts_a_held_task_as_soon_as_codex_is_read_with_room_again() {
     // A newer reading with the 5-hour window only, not the week: it stays, pass after pass, waiting for the reset it was
     // told, not for you.
     let wait = task(&id).at("usageWait").clone();
-    sw::clock::set(Some(t0 + HOUR));
+    at(t0 + HOUR);
     let five = Window { name: "5h".into(), pct: 2.0, resets: t0 + 6 * HOUR };
     sw::store::usage::fold("codex", &Reading { at: t0 + HOUR, windows: vec![five], ..Default::default() }, t0 + HOUR);
     for pass in 0..3 {
-        sw::clock::set(Some(t0 + HOUR + pass * 10_000));
+        at(t0 + HOUR + pass * 10_000);
         housekeep(&w);
         let t = settle(&id);
         assert_eq!((t.s("stage"), t.at("usageWait"), t.s("msg")), ("queued", &wait, format!("waiting for the usage window: resets {}", hm(resets, t0)).as_str()), "pass {pass}: a reading without the week is no room");
     }
     // Room in both: it starts.
-    sw::clock::set(Some(t0 + 2 * HOUR));
+    at(t0 + 2 * HOUR);
     codex_yours(&w, t0 + 2 * HOUR, 2.0, t0 + 7 * HOUR);
     housekeep(&w);
     let t = settle(&id);

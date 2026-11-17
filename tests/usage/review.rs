@@ -21,7 +21,7 @@ pub fn reviewers(w: &World) -> Vec<String> { calls(w).into_iter().filter(|c| reg
 /// A task whose agent did its work: its review comes next. The clock stands still at `t0` from here.
 pub fn finished(w: &World, t0: i64) -> Obj {
     w.script(json!({ "worker": [step(1)], "reviewer": [pass(), pass()] }));
-    sw::clock::set(Some(t0));
+    at(t0);
     let id = w.add("Reviewed");
     delegate(&id);
     settle(&id)
@@ -77,7 +77,7 @@ fn usage_defer_hands_a_review_to_the_next_on_reviewer_fallback_with_room() {
 fn usage_defer_passes_over_a_fallback_reviewer_on_extra_usage_too_and_the_first_with_room_reviews() {
     let w = defer_world(json!({ "reviewer.fallback": "claude" }));
     let t0 = sw::clock::now();
-    sw::clock::set(Some(t0));
+    at(t0);
     // Its agent (Claude) started before Claude moved onto extra usage, and ends its work after.
     w.script(json!({ "worker": [{ "status": "working", "after": 0, "then": step(1) }], "reviewer": [pass()] }));
     let id = w.add("Reviewed");
@@ -102,7 +102,7 @@ fn usage_defer_passes_over_a_fallback_reviewer_on_extra_usage_too_and_the_first_
 fn usage_defer_reads_a_codex_fallback_reviewers_window_afresh_before_it_reviews() {
     let w = defer_world(json!({ "reviewer.agent": "claude", "reviewer.fallback": "codex" }));
     let t0 = sw::clock::now();
-    sw::clock::set(Some(t0));
+    at(t0);
     w.script(json!({ "worker": [{ "status": "working", "after": 0, "then": step(1) }], "reviewer": [pass()] }));
     let id = w.add("Reviewed");
     delegate(&id);
@@ -116,7 +116,7 @@ fn usage_defer_reads_a_codex_fallback_reviewers_window_afresh_before_it_reviews(
     assert_eq!((t.s("stage"), t.at("limitStop").s("role"), t.at("limitStop").s("limit")), ("stopped", "reviewer", "claude"), "{} {}", t.s("msg"), t.at("failure"));
     assert!(reviewers(&w).is_empty() && sw::store::handovers::handovers(&t).is_empty(), "Codex did not start on credits: {:?}", reviewers(&w));
     // Codex's conversation says it has room again: the fallback reviews, before Claude's reset.
-    sw::clock::set(Some(t0 + 20_000));
+    at(t0 + 20_000);
     codex_yours(&w, t0 + 20_000, 5.0, t0 + 5 * HOUR);
     limits(&w, t0 + 40_000);
     let t = settle(&id);
@@ -184,7 +184,7 @@ fn usage_defer_holds_a_plans_review_too_and_the_window_reset_reviews_it() {
     w.patch(|s| s["pids"] = json!(true));
     w.script(json!({ "worker": [{ "plan": "# Plan\n\n1. Add f.txt.\n", "note": "Written." }, { "status": "working" }], "reviewer": [pass()] }));
     let t0 = sw::clock::now();
-    sw::clock::set(Some(t0));
+    at(t0);
     let resets = t0 + HOUR;
     window("claude", t0 - 60_000, 100.0, resets);
     let id = w.add("Planned");

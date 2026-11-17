@@ -64,11 +64,21 @@ pub fn at_work(w: &World, agent: &str, settings: Value) -> String {
     sw::clock::set(Some(sw::clock::now()));
     id
 }
+/// The clock moved to `now`, and the world's programs still installed then: its record of their versions made as new
+/// as the clock, which the board trusts for ten minutes. Past them it would run the real programs of this machine for
+/// their versions, and count one this machine lacks (CI) as not installed.
+pub fn at(now: i64) {
+    sw::clock::set(Some(now));
+    let f = sw::store::files::data_dir().join("versions.json");
+    let mut v = sw::store::files::read_json(&f).unwrap_or(json!({}));
+    if let Some(all) = v.as_object_mut() { for e in all.values_mut() { e["at"] = json!(now); } }
+    sw::store::files::write_json(&f, &v).unwrap();
+}
 /// Each reading of extra usage's own pass, the clock moved to `now` first (a look waits a few seconds after the last).
-pub fn tick(w: &World, now: i64) { sw::clock::set(Some(now)); sw::usage::tick::usage_tick(&sw::flow::live::board_for(&w.socket), now); }
+pub fn tick(w: &World, now: i64) { at(now); sw::usage::tick::usage_tick(&sw::flow::live::board_for(&w.socket), now); }
 /// The limits' own pass, which carries on a task whose stop no longer holds.
 pub fn limits(w: &World, now: i64) {
-    sw::clock::set(Some(now));
+    at(now);
     let c = |id: &str| { let _ = sw::actions::limits::carry_on(id, true); };
     sw::limits::tick::limits_tick(&sw::flow::live::board_for(&w.socket), now, Some(&c));
 }
