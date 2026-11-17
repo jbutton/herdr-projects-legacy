@@ -49,12 +49,13 @@ pub fn waits_window(t: &Obj) -> bool {
 pub fn start_asks(t: &Obj) -> bool { t.s("stage") == "queued" && t.at("usageWait").b("you") && !t.b("archivedAt") }
 /// Its agent was seen on extra usage in this episode, and `board.notify` has not been told yet.
 pub fn untold(t: &Obj) -> bool { t.at("extra").is_object() && t.at("extra").at("window") != t.at("extraTold") && !t.b("archivedAt") }
-/// The line of a task stopped for extra usage.
+/// The line of a task stopped for extra usage; a review's says so first ("Reviewing: waiting for the usage window").
 pub fn stop_line(ls: &Obj, now: i64) -> String {
     let (kind, resets) = (ls.t("limit"), ls.i("resets"));
-    if ls.s("how") == "defer" && resets > 0 { return format!("waiting for the usage window: resets {}", hm(resets, now)); }
-    if ls.s("how") == "defer" { return format!("stopped: {kind} is on extra usage, and when its window resets is not known"); }
-    format!("stopped: {kind} moved onto extra usage at {}{}", hm(ls.i("used"), now), if resets > 0 { format!(" (resets {})", hm(resets, now)) } else { String::new() })
+    let line = if ls.s("how") == "defer" && resets > 0 { format!("waiting for the usage window: resets {}", hm(resets, now)) }
+        else if ls.s("how") == "defer" { format!("stopped: {kind} is on extra usage, and when its window resets is not known") }
+        else { format!("stopped: {kind} moved onto extra usage at {}{}", hm(ls.i("used"), now), if resets > 0 { format!(" (resets {})", hm(resets, now)) } else { String::new() }) };
+    if ls.s("role") == "reviewer" { format!("Reviewing: {line}") } else { line }
 }
 /// What it had come to when it stopped, for the task panel: "claude on extra usage since 14:10, its window resets 17:00".
 pub fn used_say(ls: &Value) -> String {
@@ -74,9 +75,11 @@ pub fn start_line(kind: &str, resets: i64, you: bool, setting: &str, now: i64) -
     let why = if setting == "defer" { format!("{kind} is on extra usage, and when its window resets is not known") } else { format!("{kind} is on extra usage{}", until(resets, now)) };
     format!("waits for you: {why} ({SETTING} {setting}); {} starts it anyway", key_name("sendBack"))
 }
-/// `details`: for a task whose program's window the board can read, where it stands.
+/// `details`: for a task whose program's window the board can read, where it stands: the program of its stop for extra
+/// usage (its reviewer's, for a review), else its agent's.
 pub fn detail(t: &Obj, now: i64) -> Value {
-    let kind = if t.b("on") { crate::store::settings::values::agent_of(t.s("on")).kind } else { t.t("agent") };
+    let ls = t.at("limitStop");
+    let kind = if ls.s("what") == "usage" && ls.b("limit") { ls.t("limit") } else if t.b("on") { crate::store::settings::values::agent_of(t.s("on")).kind } else { t.t("agent") };
     if !READ.contains(&kind.as_str()) { return Value::Null; }
     let n = now_of(&kind, now);
     let at = |ms: i64| if ms > 0 { json!(crate::clock::iso(ms)) } else { Value::Null };

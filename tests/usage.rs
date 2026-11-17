@@ -1,7 +1,8 @@
 //! Extra usage (`usage.extra`, docs/extra-usage.md): what Claude Code and Codex say of their usage window and how the
 //! board reads it (read.rs), and what a task does under each value: `allow` warns (allow.rs), `ask` stops and waits for
-//! you (ask.rs), `defer` hands over, holds back, stops and carries on at the window's reset (defer.rs). What they share
-//! is here: the files the programs write, a task at work, one pass of the ticks.
+//! you (ask.rs), `defer` hands over, holds back, stops and carries on at the window's reset (defer.rs), or sooner, at a
+//! reset bought early (early.rs); and a review held back for its reviewer's program (review.rs). What they share is
+//! here: the files the programs write, a task at work, one pass of the ticks.
 use crate::common;
 use common::*;
 use serde_json::{json, Value};
@@ -11,7 +12,9 @@ use sw::json::*;
 mod allow;
 mod ask;
 mod defer;
+mod early;
 mod read;
+mod review;
 
 pub const HOUR: i64 = 3_600_000;
 /// A line added to a saved conversation.

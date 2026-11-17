@@ -26,14 +26,18 @@ pub fn stop_now(id: &str, kind: &str, n: &Now, since: i64, how: &str) -> Option<
     update_wait(id, 10000, |t| { t.put("extraTold", w); Ok(Change::Write) }).ok()
 }
 /// Is a task stopped for extra usage free to carry on by itself, as the settings and the window stand now? `allow`
-/// now: yes. `defer`: once its window has reset (not known when: once a newer reading says it is off extra usage).
-/// `ask`: only you say so.
+/// now: yes. `defer`: once its window has reset, or as soon as a reading newer than the stop shows room in its windows
+/// (a reset bought early: tick.rs reads the program afresh while the task waits); a review also once the next on
+/// `reviewer.fallback` has room (review.rs). `ask`: only you say so.
 pub fn lifted(t: &Obj) -> bool {
     let ls = t.at("limitStop");
     match setting_of(t).as_str() {
         "allow" => true,
-        "defer" if ls.i("resets") > 0 => now() >= ls.i("resets"),
-        "defer" => { let n = now_of(ls.s("limit"), now()); n.known && !n.extra && !n.hard && n.at > ls.i("at") }
+        "defer" => {
+            let at = now();
+            let n = now_of(ls.s("limit"), at);
+            (ls.i("resets") > 0 && at >= ls.i("resets")) || (n.room() && n.at > ls.i("at")) || (ls.s("role") == "reviewer" && super::review::taker(t, at).is_some())
+        }
         _ => false,
     }
 }
@@ -70,8 +74,12 @@ pub fn passed_over(agent: &str, now_ms: i64) -> String {
     if !n.extra { return String::new(); }
     format!("{agent} is on extra usage too{}", if n.resets > 0 { format!(", until {}", super::words::hm(n.resets, now_ms)) } else { String::new() })
 }
-/// Why the agent on it cannot go on, as a hand-over says it: "claude is on extra usage until 17:00".
-pub fn why(kind: &str, n: &Now) -> String { format!("{kind} is on extra usage{}", if n.resets > 0 { format!(" until {}", super::words::hm(n.resets, now())) } else { String::new() }) }
+/// Why the agent on it cannot go on, as a hand-over says it: "claude is on extra usage until 17:00", or, its window used
+/// up with nothing to pay on, "claude is out of allowance until 17:00".
+pub fn why(kind: &str, n: &Now) -> String {
+    let until = if n.resets > 0 { format!(" until {}", super::words::hm(n.resets, now())) } else { String::new() };
+    if !n.extra && n.hard { format!("{kind} is out of allowance{until}") } else { format!("{kind} is on extra usage{until}") }
+}
 /// `defer` with a fallback: the next agent on the list takes the task over in its worktree (finish/hand_over.rs); with
 /// nobody to take it, it is stopped to wait for its window.
 pub fn handover_job(id: &str) {

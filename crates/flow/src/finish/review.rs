@@ -2,7 +2,8 @@
 //! again. A reviewer whose turn ended in a provider error did not review anything: that is not a round. When the error
 //! is one that passes by itself, the board waits and starts the review again, a few times with growing waits; then, or at
 //! once for an error that waiting cannot fix, it fails with the provider's own words. A reviewer that ended without a
-//! verdict is started once more by itself before the review counts as failed.
+//! verdict is started once more by itself before the review counts as failed. Before each try, `usage.extra` may hold it
+//! back while its reviewer's program is on extra usage (usage/review.rs).
 use super::review_fallback::{next_reviewer, Cut};
 use super::review_once::{review_once, Plan};
 use crate::err::Res;
@@ -41,6 +42,14 @@ pub fn run_review_with(id: &str, g: &mut Guard, text: &str, change: Option<&Valu
     let mut tries: i64 = 0;
     let mut again = true;
     loop {
+        // Its reviewer's program on extra usage, under `ask` or `defer`: the next on `reviewer.fallback` with room
+        // reviews, else the task stops to wait for the window, or for you (usage/review.rs).
+        match crate::usage::review::may_review(id, g, ch) {
+            Ok(true) => {}
+            Ok(false) => return Ok(Reviewed { aborted: true, ..Default::default() }),
+            Err(e) if is_aborted(&e) => return Ok(Reviewed { aborted: true, ..Default::default() }),
+            Err(e) => return Err(e),
+        }
         let r = review_once(id, g, text, change, to_land, ch, check, plan)?;
         // It ended without a verdict: once more, as the same review, before that counts as a failed one.
         if r.ended && again {
