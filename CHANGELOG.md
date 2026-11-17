@@ -79,6 +79,6 @@ each. This copy makes no version tags yet, so the list is one section.
   behind (where it ran as commands). Under `usage.extra defer`, a start whose usage window ends it waits for that window
   and carries on by itself at the reset, instead of "Not started", and a window known to be used up holds the start back.
   ([#30](https://github.com/jbutton/herdr-projects-legacy/pull/30))
-- A question the coordinator needs you to answer comes first in its message, on its own bold line starting with ❓,
-  and ends the message as well, so a long answer no longer hides it.
+- A question the coordinator needs you to answer is the first line of its message, a `decision` tag and the question in
+  bold, so a long answer no longer hides it.
   ([#31](https://github.com/jbutton/herdr-projects-legacy/pull/31))

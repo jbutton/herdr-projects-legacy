@@ -75,8 +75,8 @@ and started an agent on it". The commands answer in the same words ([roles and c
 
 ## When it asks you
 
-A decision it needs from you comes first in its message, on its own bold line starting with ❓, before any drafts or
-details, and the same line ends the message. A long answer no longer hides the question at the bottom.
+A decision it needs from you is the first line of its message: `decision` as a coloured tag, then the question in
+bold, before any drafts or details. A long answer no longer hides the question at the bottom.
 
 ## Going into it
 
