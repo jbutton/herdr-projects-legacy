@@ -95,6 +95,9 @@ login" or failed review, plus a `Note` in the task panel that says who was passe
 - **Its program is not installed on this machine**: the first one on the list that is installed reviews. That is a
   hand-over like the others (`claude took over the review from codex: codex is not installed here`). Without a list, the
   working agent's program reviews, as before.
+- **Its program is on extra usage, under `usage.extra defer`**: before the review starts, the first one on the list
+  whose program has room reviews (`claude took over the review from codex: codex is on extra usage until 17:00`). With
+  nobody who has room, the review waits for the window ([extra usage](extra-usage.md)).
 
 A reviewer that took over reviews the later rounds of that task too, until you step in. With the list used up, the
 review fails as it does without one.
