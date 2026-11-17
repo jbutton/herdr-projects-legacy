@@ -1,21 +1,21 @@
 //! A reset bought early (`defer`): a task waiting for its program's window does not wait for the reset it was told. Its
 //! program is read afresh at each pass, and a fresh reading with room in both the 5-hour and the weekly window carries
 //! it on at once: an agent stopped at work, a review held back, a start held in the queue. A fresh reading with one of
-//! them still full changes nothing.
+//! them still full, or that leaves one of them out, changes nothing.
 use super::review::{finished, reviewers};
 use super::*;
+use sw::agents::read_window::{Reading, Window};
 use sw::usage::words::hm;
 
+/// Claude Code's status line input kept beside the task at `at` with only its 5-hour window, at `five`.
+fn claude_five_only(id: &str, at: i64, five: f64, resets: i64) {
+    let input = json!({ "rate_limits": { "five_hour": { "used_percentage": five, "resets_at": resets / 1000 } } });
+    assert!(sw::agents::statusline::keep(id, "agent", &input, at), "kept");
+}
 /// Claude Code's status line input kept beside the task at `at`: its 5-hour window at `five`, its week at `week`.
 fn claude_both(id: &str, at: i64, five: f64, week: f64, resets: i64) {
     let input = json!({ "rate_limits": { "five_hour": { "used_percentage": five, "resets_at": resets / 1000 }, "seven_day": { "used_percentage": week, "resets_at": (resets + 100 * HOUR) / 1000 } } });
     assert!(sw::agents::statusline::keep(id, "agent", &input, at), "kept");
-}
-/// A Codex turn of yours today, its 5-hour window at `pct` (read by the board's `codex_newest`).
-fn codex_yours(w: &World, at: i64, pct: f64, resets: i64) {
-    use chrono::TimeZone;
-    let day = chrono::Local.timestamp_millis_opt(sw::clock::now()).single().unwrap().format("%Y/%m/%d").to_string();
-    codex_turn(&w.base.join("codex/sessions").join(day).join("rollout-yours.jsonl"), at, pct, resets, pct >= 100.0);
 }
 fn housekeep(w: &World) { sw::housekeeping::housekeeping(&w.socket, sw::housekeeping::Force::Yes); }
 
@@ -37,6 +37,11 @@ fn usage_defer_carries_on_an_agent_as_soon_as_a_fresh_reading_shows_room_before_
     tick(&w, t0 + 2 * HOUR + 10_000);
     limits(&w, t0 + 2 * HOUR + 20_000);
     assert_eq!(task(&id).s("stage"), "stopped", "both windows must have room");
+    // A fresh reading that names only the 5-hour window says nothing of the week: still no room.
+    claude_five_only(&id, t0 + 2 * HOUR + 30_000, 1.0, t0 + 7 * HOUR);
+    tick(&w, t0 + 2 * HOUR + 40_000);
+    limits(&w, t0 + 2 * HOUR + 50_000);
+    assert_eq!(task(&id).s("stage"), "stopped", "a reading without the week is no room");
     // The reset bought: a fresh reading with room in both. It carries on at once, a day before the reset it was told.
     claude_both(&id, t0 + 3 * HOUR, 1.0, 5.0, t0 + 8 * HOUR);
     tick(&w, t0 + 3 * HOUR + 10_000);
@@ -83,6 +88,13 @@ fn usage_defer_starts_a_held_task_as_soon_as_codex_is_read_with_room_again() {
     delegate(&id);
     let t = settle(&id);
     assert_eq!((t.s("stage"), t.s("msg")), ("queued", format!("waiting for the usage window: resets {}", hm(resets, t0)).as_str()));
+    // A newer reading with the 5-hour window only, not the week: it stays.
+    sw::clock::set(Some(t0 + HOUR));
+    let five = Window { name: "5h".into(), pct: 2.0, resets: t0 + 6 * HOUR };
+    sw::store::usage::fold("codex", &Reading { at: t0 + HOUR, windows: vec![five], ..Default::default() }, t0 + HOUR);
+    housekeep(&w);
+    assert_eq!(settle(&id).s("stage"), "queued", "a reading without the week is no room");
+    // Room in both: it starts.
     sw::clock::set(Some(t0 + 2 * HOUR));
     codex_yours(&w, t0 + 2 * HOUR, 2.0, t0 + 7 * HOUR);
     housekeep(&w);

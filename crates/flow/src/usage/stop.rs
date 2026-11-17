@@ -67,10 +67,10 @@ pub fn fallback_for(t: &Obj, now_ms: i64) -> Option<String> {
     let next = next_fallback(&list, &from, &strings(t.at("tried")), |a| { let u = usable(a, &access); if u.is_empty() { passed_over(a, now_ms) } else { u } }).0;
     (!next.is_empty()).then_some(next)
 }
-/// Why a fallback agent is passed over for extra usage: its program is on it too ("" when it is not).
+/// Why a fallback agent is passed over for extra usage: its program is on it too, as read afresh ("" when it is not).
 pub fn passed_over(agent: &str, now_ms: i64) -> String {
     let k = agent_of(agent).kind;
-    let n = now_of(&k, now_ms);
+    let n = super::gate::fresh_now(&k, now_ms);
     if !n.extra { return String::new(); }
     format!("{agent} is on extra usage too{}", if n.resets > 0 { format!(", until {}", super::words::hm(n.resets, now_ms)) } else { String::new() })
 }

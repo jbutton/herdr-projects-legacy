@@ -104,8 +104,9 @@ Today's behaviour: the agent works on, and the board only says so (above).
   itself**: the agent is told it was stopped for extra usage and that the window has reset.
 - **A reset bought early** (such as Codex's "Full reset") is not waited out: a task waiting for the window carries on
   (or starts) as soon as a reading newer than its stop shows room in both the 5-hour and the weekly window, not only at
-  the reset it was told. A reading with one of them still full changes nothing. The board sees such a reading when an
-  agent of that program answers: one of the board's, or you in Codex (see "What the board can see").
+  the reset it was told. A reading with one of them still full, or that leaves one of them out, changes nothing. The
+  board sees such a reading when an agent of that program answers: one of the board's, or you in Codex (see "What the
+  board can see").
 - **A task does not start** while its program is on extra usage, or its window is used up with nothing to pay on:
   started with an agent on the list that is not, else it stays in the queue as `waiting for the usage window: resets
   17:00`, holding no slot, and starts by itself once the window has reset. Codex's window is read afresh before a start.
@@ -115,7 +116,8 @@ Today's behaviour: the agent works on, and the board only says so (above).
 - **A turn that ends out of allowance** (extra usage off or used up), with nobody on the list to take it: it waits for
   that window too, instead of "Agent stopped: out of allowance until 17:00", and carries on by itself at the reset.
 - **A review does not start** while its reviewer's program is on extra usage, or its window is used up with nothing to
-  pay on. The first on `reviewer.fallback` whose program has room reviews instead, a hand-over like any other
+  pay on. The first on `reviewer.fallback` whose program has room reviews instead (Codex's window read afresh first,
+  whether it is the reviewer or the fallback), a hand-over like any other
   ([the fallback agent](fallback.md)): `claude took over the review from codex: codex is on extra usage until 17:00`.
   With nobody on the list who has room, the task waits as an agent does, its row `Reviewing: waiting for the usage
   window: resets 17:00`, not under "needs you", and is reviewed by itself at the reset (or a reset bought early), or as

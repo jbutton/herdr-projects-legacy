@@ -37,6 +37,12 @@ pub fn codex_turn(file: &Path, at: i64, pct: f64, resets: i64, credits: bool) {
     line(file, json!({ "timestamp": sw::clock::iso(at - 1000), "type": "event_msg", "payload": { "type": "task_started", "turn_id": format!("t{at}") } }));
     line(file, codex_count(at, pct, resets, credits));
 }
+/// A Codex turn of yours today, its 5-hour window at `pct` (on credits at 100%), as the board's `codex_newest` reads it.
+pub fn codex_yours(w: &World, at: i64, pct: f64, resets: i64) {
+    use chrono::TimeZone;
+    let day = chrono::Local.timestamp_millis_opt(sw::clock::now()).single().unwrap().format("%Y/%m/%d").to_string();
+    codex_turn(&w.base.join("codex/sessions").join(day).join("rollout-yours.jsonl"), at, pct, resets, pct >= 100.0);
+}
 /// Claude Code's status line input (its `rate_limits`, as 2.1.323 gives it), kept beside the task by the board's own
 /// status line at `at`. `resets` 0: the window does not say.
 pub fn claude_window(id: &str, at: i64, five: f64, resets: i64) {

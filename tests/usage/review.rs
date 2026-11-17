@@ -99,6 +99,31 @@ fn usage_defer_passes_over_a_fallback_reviewer_on_extra_usage_too_and_the_first_
 }
 
 #[test]
+fn usage_defer_reads_a_codex_fallback_reviewers_window_afresh_before_it_reviews() {
+    let w = defer_world(json!({ "reviewer.agent": "claude", "reviewer.fallback": "codex" }));
+    let t0 = sw::clock::now();
+    sw::clock::set(Some(t0));
+    w.script(json!({ "worker": [{ "status": "working", "after": 0, "then": step(1) }], "reviewer": [pass()] }));
+    let id = w.add("Reviewed");
+    delegate(&id);
+    assert_eq!(settle(&id).s("stage"), "working");
+    // Claude is on extra usage; Codex was last kept with room, but its newer conversation says 100% on credits.
+    window("claude", t0 - 60_000, 100.0, t0 + HOUR);
+    window("codex", t0 - 120_000, 10.0, t0 + 5 * HOUR);
+    codex_yours(&w, t0 - 30_000, 100.0, t0 + 2 * HOUR);
+    w.go_on(&task(&id));
+    let t = settle(&id);
+    assert_eq!((t.s("stage"), t.at("limitStop").s("role"), t.at("limitStop").s("limit")), ("stopped", "reviewer", "claude"), "{} {}", t.s("msg"), t.at("failure"));
+    assert!(reviewers(&w).is_empty() && sw::store::handovers::handovers(&t).is_empty(), "Codex did not start on credits: {:?}", reviewers(&w));
+    // Codex's conversation says it has room again: the fallback reviews, before Claude's reset.
+    sw::clock::set(Some(t0 + 20_000));
+    codex_yours(&w, t0 + 20_000, 5.0, t0 + 5 * HOUR);
+    limits(&w, t0 + 40_000);
+    let t = settle(&id);
+    assert_eq!((t.s("stage"), reviewers(&w), t.s("reviewerOn")), ("approval", vec!["codex".to_string()], "codex"), "{} {}", t.s("msg"), t.at("failure"));
+}
+
+#[test]
 fn usage_ask_holds_a_review_for_you_and_your_carrying_on_reviews_it_on_extra_usage() {
     let w = world_with(Opts { repo: true, settings: json!({ "usage.extra": "ask", "reviewer.fallback": "claude" }), ..Default::default() });
     let t0 = sw::clock::now();

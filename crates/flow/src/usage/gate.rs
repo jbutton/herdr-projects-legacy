@@ -23,6 +23,12 @@ pub fn extra_ok(t: &Obj, kind: &str, n: &Now, now_ms: i64) -> bool {
     let ok = t.at("extraOk");
     ok.s("agent") == kind && ((n.since > 0 && ok.i("window") == n.since) || ok.i("resets") > now_ms)
 }
+/// A program's window now, Codex's read afresh first from its newest conversation (at most every few seconds, not only
+/// once a minute: usage/tick.rs): a start, a review or a fallback must not be the first to find it used up or on credits.
+pub fn fresh_now(kind: &str, at: i64) -> Now {
+    if kind == "codex" && crate::store::marks::due("usage-codex-fresh", 5_000) && let Some(r) = crate::agents::read_window::codex_newest() { crate::store::usage::fold("codex", &r, at); }
+    now_of(kind, at)
+}
 /// A queued task held back for extra usage (its line says why).
 pub fn start_waits(t: &Obj) -> bool { t.s("stage") == "queued" && t.b("usageWait") && !t.b("archivedAt") }
 /// Is this queued task held back now? Called by the queue for each task in its turn, under the slots' lock: it brings
@@ -31,12 +37,13 @@ pub fn held(w: &Obj) -> bool {
     let (id, at) = (w.t("id"), now());
     let kind = kind_of(w);
     let s = setting_of(w);
-    // Codex's window read afresh before a start, not only once a minute (usage/tick.rs): a start must not be the first to find it used up.
-    if kind == "codex" && s == "defer" && crate::store::marks::due("usage-codex-start", 5_000) { if let Some(r) = crate::agents::read_window::codex_newest() { crate::store::usage::fold("codex", &r, at); } }
-    let n = now_of(&kind, at);
+    let n = if s == "defer" { fresh_now(&kind, at) } else { now_of(&kind, at) };
     // Under `defer` a window used up with nothing to pay on (`hard`) holds it back as extra usage does: started, its
-    // program would end at once.
-    let over = (n.extra && !extra_ok(w, &kind, &n, at)) || (s == "defer" && n.hard && n.resets > at);
+    // program would end at once. One that waits for its window already goes before that reset only on a reading with
+    // room in both windows (a reset bought early), never on one that leaves a window out.
+    let wait = w.at("usageWait");
+    let early = wait.is_object() && !wait.b("you") && wait.s("agent") == kind && wait.i("resets") > at && !n.room();
+    let over = (n.extra && !extra_ok(w, &kind, &n, at)) || (s == "defer" && ((n.hard && n.resets > at) || early));
     let hold = s != "allow" && READ.contains(&kind.as_str()) && over && !crate::chat_only::is_chat(w);
     if !hold {
         if w.b("usageWait") { let _ = update(&id, |t| { t.del("usageWait"); t.put("msg", ""); Ok(Change::Write) }); }

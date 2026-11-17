@@ -5,7 +5,7 @@
 //! usage window: resets 17:00", and is reviewed again by itself once the window has room (stop.rs: `lifted`). Under
 //! `ask` it waits for you, and your carrying on is leave for that episode. A review under way is stopped the same way
 //! the moment its program is seen on extra usage (tick.rs).
-use super::gate::extra_ok;
+use super::gate::{extra_ok, fresh_now};
 use super::stop::{passed_over, why};
 use super::words::{hm, setting_of};
 use crate::agents::installed::installed;
@@ -19,7 +19,7 @@ use crate::runner::Guard;
 use crate::store::handovers::{handover_line, log_handover, next_fallback};
 use crate::store::settings::lookup::work;
 use crate::store::settings::values::{agent_of, list_of};
-use crate::store::usage::{fold, now_of, Now, READ};
+use crate::store::usage::{now_of, Now, READ};
 
 /// Who would review now and its program: the reviewer on the task (finish/review_fallback.rs), on the working agent's
 /// program where its own is not installed here, as finish/review_once.rs starts it.
@@ -34,7 +34,8 @@ pub fn program_of(t: &Obj, ch: &Obj) -> (String, String) {
 pub fn held_now(t: &Obj, setting: &str, kind: &str, n: &Now, at: i64) -> bool {
     setting != "allow" && READ.contains(&kind) && !crate::chat_only::is_chat(t) && !extra_ok(t, kind, n, at) && (n.extra || (setting == "defer" && n.hard && n.resets > at))
 }
-/// Why a fallback reviewer has no room: its program is on extra usage too, or out of allowance ("" when it has room).
+/// Why a fallback reviewer has no room: its program, read afresh (passed_over), is on extra usage too, or out of
+/// allowance ("" when it has room).
 pub fn no_room(agent: &str, at: i64) -> String {
     let over = passed_over(agent, at);
     if !over.is_empty() { return over; }
@@ -70,9 +71,8 @@ pub fn may_review(id: &str, g: &mut Guard, ch: &Obj) -> Res<bool> {
     let (agent, kind) = program_of(&t, ch);
     if s == "allow" || !READ.contains(&kind.as_str()) { return Ok(true); }
     let at = now();
-    // Codex's window read afresh before a review, as before a start (gate.rs).
-    if kind == "codex" && crate::store::marks::due("usage-codex-review", 5_000) && let Some(r) = crate::agents::read_window::codex_newest() { fold("codex", &r, at); }
-    let n = now_of(&kind, at);
+    // Codex's window read afresh before a review, as before a start; a fallback's too, before it is chosen (no_room).
+    let n = fresh_now(&kind, at);
     if !held_now(&t, &s, &kind, &n, at) { return Ok(true); }
     if s == "defer" && let Some(next) = fallback_for(ch, &agent, at) {
         let because = why(&kind, &n);
