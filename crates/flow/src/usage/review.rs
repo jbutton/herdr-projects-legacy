@@ -6,7 +6,7 @@
 //! `ask` it waits for you, and your carrying on is leave for that episode. A review under way is stopped the same way
 //! the moment its program is seen on extra usage (tick.rs).
 use super::gate::{extra_ok, fresh_now};
-use super::stop::{passed_over, why};
+use super::stop::{not_stopped, passed_over, why};
 use super::words::{hm, setting_of};
 use crate::agents::installed::installed;
 use crate::clock::now;
@@ -56,8 +56,10 @@ pub fn taker(t: &Obj, at: i64) -> Option<String> {
     if list_of(ch.at("reviewer.fallback")).is_empty() { return None; }
     fallback_for(&ch, &program_of(t, &ch).0, at)
 }
-/// Stop the task's review for extra usage, `how` the setting says (`ask`, `defer`), its program's window `n`.
+/// Stop the task's review for extra usage, `how` the setting says (`ask`, `defer`), its program's window `n`. Nothing
+/// when the task was stopped already, at its time limit say (stop.rs: `not_stopped`): that stop stays.
 pub fn stop_review(id: &str, kind: &str, n: &Now, how: &str, at: i64) -> bool {
+    if !not_stopped(id) { return false; }
     let mut extra = obj(json!({ "how": how, "resets": n.resets, "window": n.since }));
     if !n.extra { extra.put("hard", true); }
     let since = if n.extra && n.since > 0 { n.since } else { at };

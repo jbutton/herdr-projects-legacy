@@ -137,7 +137,8 @@ A chat-only task gets the warnings only: you are in that conversation.
 - **`limit.tokens`**: a cap per task, in tokens, whoever pays; `usage.extra` is about who pays, per window. Tokens spent
   on extra usage count as any others. A task stopped at its token limit stays stopped at it, and is not stopped for
   extra usage as well. Carrying on from either stop meets the other again where it applies.
-- **`limit.time`**: a run that waits for the window is not running: its time does not count.
+- **`limit.time`**: a run that waits for the window is not running: its time does not count. An agent or a review
+  stopped at its time limit stays stopped at it, and is not stopped for extra usage as well, even in the same pass.
 - **`--after`**: a task waiting for others is not started anyway. Once they are done it is queued, and the start's rule
   above applies to it. A task that waits for the window is not done, so the tasks after it go on waiting.
 - **Attempts and the plan step**: each attempt's agent and a plan's writer are agents at work like any other.

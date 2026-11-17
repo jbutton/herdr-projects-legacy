@@ -82,5 +82,13 @@ pub fn limits(w: &World, now: i64) {
     let c = |id: &str| { let _ = sw::actions::limits::carry_on(id, true); };
     sw::limits::tick::limits_tick(&sw::flow::live::board_for(&w.socket), now, Some(&c));
 }
+/// One keeper pass as the keeper makes it: the limits' pass, then extra usage's, on the same rows read once before.
+pub fn keeper_pass(w: &World, now: i64) {
+    at(now);
+    let rows = sw::flow::live::board_for(&w.socket);
+    let c = |id: &str| { let _ = sw::actions::limits::carry_on(id, true); };
+    sw::limits::tick::limits_tick(&rows, now, Some(&c));
+    sw::usage::tick::usage_tick(&rows, now);
+}
 /// What the task's agent was told.
 pub fn told(w: &World, id: &str) -> Vec<String> { prompts(w, task(id).at("link").s("pane")) }

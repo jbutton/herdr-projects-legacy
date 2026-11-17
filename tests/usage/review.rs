@@ -178,6 +178,25 @@ fn usage_defer_stops_a_review_under_way_the_moment_its_program_moves_onto_extra_
 }
 
 #[test]
+fn usage_defer_leaves_a_review_its_time_limit_stopped_in_the_same_pass_as_it_is() {
+    let w = defer_world(json!({ "reviewer.agent": "claude", "limit.time": "1m" }));
+    let t0 = sw::clock::now();
+    let id = finished(&w, t0).t("id");
+    // A review under way for two minutes, past its 1m limit, and its program on extra usage: one pass sees both.
+    sw::store::tasks::patch(&id, |t| { t.put("stage", "reviewing"); t.put("reviewAt", t0 - 2 * 60_000); t.obj_mut("link").put("reviewer", json!({ "kind": "claude", "agent": "r" })); }).unwrap();
+    let resets = (t0 + HOUR) / 1000 * 1000;
+    let input = json!({ "rate_limits": { "five_hour": { "used_percentage": 100, "resets_at": resets / 1000 }, "seven_day": { "used_percentage": 63, "resets_at": (t0 + 90 * HOUR) / 1000 } } });
+    assert!(sw::agents::statusline::keep(&id, "reviewer", &input, t0 + 5000));
+    keeper_pass(&w, t0 + 10_000);
+    let t = task(&id);
+    let ls = t.at("limitStop");
+    assert_eq!((t.s("stage"), ls.s("what"), ls.s("role"), t.s("msg")), ("stopped", "time", "reviewer", "stopped at its 1m limit"), "the time limit's stop stays");
+    // The window's reset does not carry it on: its time limit stopped it, and that waits for you.
+    limits(&w, resets + 1000);
+    assert_eq!((settle(&id).s("stage"), task(&id).at("limitStop").s("what")), ("stopped", "time"));
+}
+
+#[test]
 fn usage_defer_holds_a_plans_review_too_and_the_window_reset_reviews_it() {
     let w = defer_world(json!({ "plan.approve": "reviewer", "worker.agent": "codex", "reviewer.agent": "claude", "review.when": "never" }));
     unsafe { std::env::set_var("HERDR_PROJECTS_SANDBOX", "bwrap") };

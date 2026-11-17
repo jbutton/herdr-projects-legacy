@@ -16,9 +16,15 @@ use crate::store::settings::values::{agent_of, list_of};
 use crate::store::tasks::{update_wait, Change, Task};
 use crate::store::usage::{fold, now_of, Now};
 
+/// Is the task, as it stands now, not stopped already? A pass works from the rows it was given: the limits' pass before
+/// it may have stopped the task since (at its time limit), and a stop for extra usage must not take that stop's place
+/// (the board's stop clears the one before), or it would carry on by itself at the window's reset.
+pub fn not_stopped(id: &str) -> bool { crate::store::tasks::get(id).is_some_and(|t| t.s("stage") != "stopped" && !t.b("archivedAt")) }
 /// Stop the task's agent for extra usage, `how` the setting said (`ask`, `defer`). `since`: when its agent was seen on
-/// it. Under `ask` the stop is what tells you: `board.notify` hears "needs you", not "extra usage" as well.
+/// it. Under `ask` the stop is what tells you: `board.notify` hears "needs you", not "extra usage" as well. Nothing
+/// when the task was stopped already (`not_stopped`).
 pub fn stop_now(id: &str, kind: &str, n: &Now, since: i64, how: &str) -> Option<Task> {
+    if !not_stopped(id) { return None; }
     let extra = obj(json!({ "how": how, "resets": n.resets, "window": n.since }));
     let t = stop_at(id, "usage", kind, since as f64, StopHow { role: "agent".into(), extra, ..Default::default() })?;
     if how != "ask" { return Some(t); }
