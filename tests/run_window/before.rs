@@ -61,6 +61,20 @@ fn run_window_now_starts_it_anyway_with_leave_until_the_window_opens() {
 }
 
 #[test]
+fn run_window_a_retry_of_a_start_that_failed_keeps_the_leave_you_gave_it() {
+    let w = afternoon(json!({}));
+    let a = w.add("Now");
+    run(&["delegate", &a, "--run.window", "nights", "--now"]).unwrap();
+    assert_eq!(settle(&a).s("stage"), "working");
+    // Its start failed; retried before the window opens, it starts again at once, not at 22:00.
+    sw::store::tasks::set(&a, json!({ "stage": "failed", "failure": { "stage": "start", "error": "no" } })).unwrap();
+    sw::actions::finish_line::retry(&a).unwrap();
+    let t = settle(&a);
+    assert_eq!(t.s("stage"), "working", "{}", t.s("msg"));
+    assert_eq!(t.at("windowOk").i("until"), local(0, 22, 0));
+}
+
+#[test]
 fn run_window_is_kept_in_one_spelling_and_a_value_it_cannot_read_names_the_nearest_right_one() {
     let _w = afternoon(json!({}));
     run(&["set", "run.window", "Mon-Fri 22:00-06:00 ,Weekends"]).unwrap();

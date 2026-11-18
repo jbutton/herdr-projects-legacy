@@ -57,6 +57,15 @@ fn run_window_finish_the_built_in_value_runs_on_past_the_window() {
 }
 
 #[test]
+fn run_window_pause_never_holds_a_run_delegated_before_run_windows_were_there() {
+    let w = passing_world();
+    let id = night_work(&w, "pause");
+    // A task saved by an older board has no mark of a run that `pause` may hold: it runs on, as it always did.
+    sw::store::tasks::set(&id, json!({ "windowRun": null })).unwrap();
+    assert_eq!(end_turn(&w, &id, local(0, 6, 10)).s("stage"), "approval");
+}
+
+#[test]
 fn run_window_a_paused_task_goes_on_when_run_window_end_is_set_to_finish() {
     let w = passing_world();
     let id = night_work(&w, "pause");

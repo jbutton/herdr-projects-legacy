@@ -2,7 +2,6 @@
 use super::limits::{carry_on, take_as_is};
 use super::plan::{approvable, approve_plan, awaits_plan, review_again};
 use super::shared::{say, Said};
-use super::start::delegate;
 use super::talk::tell;
 use crate::attempts::words::standing_of;
 use crate::board::keys::key_name;
@@ -210,7 +209,7 @@ pub fn retry(id: &str) -> Res<Said> {
     if awaits_plan(&cur) && cur.at("plan").b("reviewFailed") { return review_again(&cid); } // its review could not run: once more
     if cur.s("stage") != "failed" { crate::fail!("{cid} has nothing to retry."); }
     // None of its attempts passed: trying again is starting over, with fresh attempts.
-    if cur.at("failure").s("stage") == "attempts" { let t = delegate(&cid, vec![])?; return Ok(say(t, format!("{cid}: starting over with fresh attempts"))); }
+    if cur.at("failure").s("stage") == "attempts" { let t = crate::run_window::gate::redelegate(&cur)?; return Ok(say(t, format!("{cid}: starting over with fresh attempts"))); }
     let f = cur.at("failure").clone();
     // The agent never started on what was typed into its box: its program is started again and handed the same text.
     if f.s("stage") == "send" && cur.b("unsent") {
@@ -226,7 +225,7 @@ pub fn retry(id: &str) -> Res<Said> {
         return Ok(say(t, format!("{cid}: starting the agent again with the same text")));
     }
     // It never got going: put an agent on it again.
-    if !flow::task::is_agent_task(&cur) || ["start", "setup"].contains(&f.s("stage")) { let t = delegate(&cid, vec![])?; return Ok(say(t, format!("{cid}: starting again"))); }
+    if !flow::task::is_agent_task(&cur) || ["start", "setup"].contains(&f.s("stage")) { let t = crate::run_window::gate::redelegate(&cur)?; return Ok(say(t, format!("{cid}: starting again"))); }
     // The agent itself stopped (an error, a login you have fixed since): it is told to carry on.
     if f.s("stage") == "agent" { return go_on(&cur); }
     // A step of the finish line (the check, the push, the pull request, the review, the merge): run it again.

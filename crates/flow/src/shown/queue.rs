@@ -39,7 +39,7 @@ pub fn waits_disk(r: &Obj) -> bool { r.s("stage") == "queued" && r.b("diskWait")
 /// It is held back for extra usage (usage/gate.rs): its own line says what for.
 pub fn waits_usage(r: &Obj) -> bool { r.s("stage") == "queued" && r.b("usageWait") && !r.b("archivedAt") }
 /// It is held for its run window (run_window/gate.rs): its own line says until when.
-pub fn waits_window(r: &Obj) -> bool { r.s("stage") == "queued" && r.b("windowWait") && !r.b("archivedAt") }
+pub fn waits_window(r: &Obj) -> bool { crate::run_window::gate::start_waits(r) }
 /// What a task in the queue waits for, in words: "waiting for disk space", or "waiting for a free slot".
 pub fn waits_for(r: &Obj) -> &'static str { if waits_disk(r) { DISK } else { WAITING } }
 /// "waiting for a free slot, Q#2", "waiting for disk space, Q#1", or "queued after HSW-6": where a queued task stands, in words.

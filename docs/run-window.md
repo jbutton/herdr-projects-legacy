@@ -131,9 +131,10 @@ waits for with `--after`.
 - **`limit.time`** ([limits](limits.md)): a task that waits for its window, held or paused, is not running: its time
   does not count. Under `finish`, a run past the window's end counts as any run.
 - **`board.agents`**: the held tasks go when their window opens, in their queue order (the first delegated first), and
-  those beyond `board.agents` wait for a free slot as usual (`waiting for a free slot, Q#1`). A paused task carries on
-  at once when its window opens, as a stop for extra usage does at its reset: it was under way already. While it works
-  it counts against `board.agents`, so new starts wait for the slots it frees.
+  those beyond `board.agents` wait for a free slot as usual (`waiting for a free slot, Q#1`). A paused task held no
+  slot while it waited, and goes on first when its window opens: it keeps a slot for itself, so a held task does not
+  start before it, and it carries on only into a free one (until then it says `waiting for a free slot`). A window's
+  opening never runs more than `board.agents` at once.
 - **Automations and autopilot** ([automations](automations.md), [autopilot](autopilot.md)): the tasks they start meet
   their window like any other, and an automation's or a coordinator's own settings may say `run.window`.
 - **When the settings are read**: `run.window` at every look at the queue, and both at every point where `pause` can

@@ -34,12 +34,18 @@ fn stretches(ws: &[Window], at: i64) -> Vec<(i64, i64)> {
     }
     out
 }
-/// Is the window open at `at`? `any` always is.
-pub fn open(value: &str, at: i64) -> bool { stretch(value, at).is_some() || windows_of(value).is_empty() }
-/// The open stretch around `at`: when it opened and when it closes. None while it is closed, and for `any`.
-pub fn stretch(value: &str, at: i64) -> Option<(i64, i64)> { stretches(&windows_of(value), at).into_iter().find(|(a, b)| *a <= at && at < *b) }
-/// When it next opens after `at` (while it is closed); 0 for `any`, which never closes.
-pub fn next_open(value: &str, at: i64) -> i64 { stretches(&windows_of(value), at).into_iter().map(|(a, _)| a).find(|a| *a > at).unwrap_or(0) }
+/// A stretch open a whole week runs into its own next week: the value is open around the clock (`weekdays, weekends`),
+/// as `any` is, and never closes.
+const WEEK: i64 = 7 * 24 * 3_600_000;
+fn around(value: &str, at: i64) -> Option<(i64, i64)> { stretches(&windows_of(value), at).into_iter().find(|(a, b)| *a <= at && at < *b) }
+fn always(value: &str, at: i64) -> bool { windows_of(value).is_empty() || around(value, at).is_some_and(|(a, b)| b - a >= WEEK) }
+/// Is the window open at `at`? `any`, and a value open around the clock, always is.
+pub fn open(value: &str, at: i64) -> bool { around(value, at).is_some() || windows_of(value).is_empty() }
+/// The open stretch around `at`: when it opened and when it closes. None while it is closed, for `any`, and for a value
+/// open around the clock.
+pub fn stretch(value: &str, at: i64) -> Option<(i64, i64)> { around(value, at).filter(|(a, b)| b - a < WEEK) }
+/// When it next opens after `at` (while it is closed); 0 for `any`, and for a value open around the clock.
+pub fn next_open(value: &str, at: i64) -> i64 { if always(value, at) { return 0; } stretches(&windows_of(value), at).into_iter().map(|(a, _)| a).find(|a| *a > at).unwrap_or(0) }
 
 #[cfg(test)]
 mod tests {
@@ -67,6 +73,12 @@ mod tests {
         assert_eq!(stretch("thu-sun", at(6, 12, 0)), Some((at(3, 0, 0), at(7, 0, 0))));
         assert!(open("any", at(0, 3, 0)) && next_open("any", at(0, 3, 0)) == 0 && stretch("any", at(0, 3, 0)).is_none());
         assert!(open("nights", at(3, 23, 30)) && !open("nights", at(3, 12, 0)));
+    }
+    #[test]
+    fn a_value_open_around_the_clock_never_closes() {
+        for v in ["weekdays, weekends", "mon-sun", "nights, 06:00-22:00"] {
+            assert!(open(v, at(2, 9, 0)) && stretch(v, at(2, 9, 0)).is_none() && next_open(v, at(2, 9, 0)) == 0, "{v}");
+        }
     }
     #[test]
     fn a_time_the_clock_skips_is_the_first_moment_after_the_gap() {

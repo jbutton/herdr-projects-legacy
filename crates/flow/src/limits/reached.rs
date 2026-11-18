@@ -55,7 +55,8 @@ pub fn lifted(t: &Task) -> bool {
     let ls = t.at("limitStop");
     // A stop for extra usage under `run.windowEnd pause` waits for its run window too, once its usage window reset.
     if ls.s("what") == "usage" { return crate::usage::stop::lifted(t) && !crate::run_window::pause::holds(t, crate::clock::now()); }
-    if ls.s("what") == "window" { return crate::run_window::pause::lifted(t); }
+    // Paused at its window's end: it held no slot while it waited, so it carries on only into a free one (actions/start.rs).
+    if ls.s("what") == "window" { return crate::run_window::pause::lifted(t) && crate::actions::start::slot_free(); }
     let limit = setting_text(&format!("limit.{}", ls.s("what")), Some(t));
     if limit == NONE { return true; }
     if ls.s("what") == "time" { ms(&limit) as f64 > ls.f("used") } else { tokens_of(&limit) as f64 > used_of(t) }

@@ -51,17 +51,29 @@ pub fn held(w: &Obj) -> bool {
     let line = start_line(opens, at);
     let since = if w.at("windowWait").is_object() { w.at("windowWait").i("at") } else { at };
     let wait = json!({ "window": win, "opens": opens, "at": since });
-    if tidy(wait.clone()) != *w.at("windowWait") || w.s("msg") != line {
-        let _ = update(&id, |t| { if t.s("stage") != "queued" { return Ok(Change::Keep); } t.put("windowWait", wait.clone()); t.put("msg", line.clone()); Ok(Change::Write) });
+    // A hold for extra usage goes: the window holds it now, and the usage gate looks again once the window opens. One
+    // carrying on then is the window's start anyway, not a second one for extra usage.
+    if tidy(wait.clone()) != *w.at("windowWait") || w.s("msg") != line || w.b("usageWait") {
+        let _ = update(&id, |t| { if t.s("stage") != "queued" { return Ok(Change::Keep); } t.put("windowWait", wait.clone()); t.put("msg", line.clone()); t.del("usageWait"); Ok(Change::Write) });
     }
     true
 }
 /// As a task is delegated (actions/start.rs, with its settings for this start already on it): what an earlier round
-/// left of its window goes, and `--now` outside its window is leave until the window next opens.
+/// left of its window goes, and `--now` outside its window is leave until the window next opens. `windowRun` marks a
+/// run `pause` may hold (pause.rs: `holds`): a task delegated before run windows were there has none.
 pub fn on_delegate(t: &mut Task, now_said: bool) {
     for k in ["windowWait", "windowLate", "windowOk", "windowDone"] { t.del(k); }
+    t.put("windowRun", true);
     let at = now();
     if now_said && outside(t, at) { let ok = leave_now(t, at); t.put("windowOk", ok); }
+}
+/// `retry` of a start that failed (actions/finish_line.rs): delegated again, it keeps the leave you gave it (`--now`,
+/// carrying on), so it starts now instead of waiting for its window.
+pub fn redelegate(cur: &Task) -> Res<Task> {
+    let had = leave(cur, now());
+    let t = crate::actions::start::delegate(cur.s("id"), vec![])?;
+    if had && start_waits(&t) { return Ok(start_anyway(t.s("id"))?.task); }
+    Ok(t)
 }
 /// Start a task held for its window now, as you said (`delegate --now`, carrying on): leave until its window opens.
 pub fn start_anyway(id: &str) -> Res<Said> {

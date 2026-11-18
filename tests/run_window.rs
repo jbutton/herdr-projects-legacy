@@ -2,7 +2,8 @@
 //! queue and starts by itself when it opens, `--now` starts it anyway (before.rs); a start after the machine slept says
 //! it is late, or waits for the next window (late.rs); a task queued after others meets its window once they are done
 //! (after.rs); under `pause` a task stops when its window has closed and carries on by itself in the next (pause.rs);
-//! a task done several times at once meets its window whole (attempts.rs).
+//! a paused task goes on first when its window opens, never past `board.agents` (slots.rs); a task done several times
+//! at once meets its window whole (attempts.rs).
 //! What they share is here: a time of this machine's day, the passes that start and carry on, a command as typed.
 use crate::common;
 use common::*;
@@ -14,6 +15,7 @@ mod attempts;
 mod before;
 mod late;
 mod pause;
+mod slots;
 
 /// `days` after today (the real one: the test's clock moves), at h:m on this machine's clock, in ms.
 pub fn local(days: i64, h: u32, m: u32) -> i64 {

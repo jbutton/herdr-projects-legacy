@@ -24,8 +24,14 @@ use crate::window_times::{next_open, stretch};
 /// conflict with main, GitHub's checks) and a turn a provider cut off (`retry`) go on.
 pub const HELD: [&str; 4] = ["check", "review", "research", "plan"];
 
-/// Does `pause` hold this task's next step now? Not once its run is over (`windowDone`).
-pub fn holds(t: &Obj, at: i64) -> bool { setting_text(END, Some(t)) == "pause" && !t.b("mergeIntent") && !t.b("windowDone") && outside(t, at) }
+/// Does `pause` hold this task's next step now? Only in a run delegated since run windows were there (`windowRun`, an
+/// attempt's on its task: gate.rs `on_delegate`), and not once that run is over (`windowDone`).
+pub fn holds(t: &Obj, at: i64) -> bool {
+    let run = t.b("windowRun") || (t.b("attemptOf") && get(t.s("attemptOf")).is_some_and(|p| p.b("windowRun")));
+    run && !t.b("windowDone") && !t.b("mergeIntent") && setting_text(END, Some(t)) == "pause" && outside(t, at)
+}
+/// Paused at its window's end, and its window open again: it carries on as soon as a slot is free (limits/reached.rs).
+pub fn to_go_on(t: &Obj) -> bool { super::words::paused(t) && lifted(t) }
 /// This round's run is over: its work was reviewed and stands up for your approval, or merges (finish/pipeline_end.rs,
 /// where `reviewedHead` is kept). What the board does to it from here (a repair of a conflict with main, of GitHub's
 /// checks, of pull-request feedback, a sync, a review again and what that sends back) is never held, until the task
@@ -51,13 +57,20 @@ pub fn hold_send(id: &str, text: &str, reason: &str, keep_intent: bool, patch: &
 /// Is a task stopped at its window's end free to carry on by itself: its window open, or the settings no longer pause it?
 pub fn lifted(t: &Obj) -> bool { !holds(t, now()) }
 /// A task stopped to wait for its window (its own stop, or a stop for extra usage whose reset came while its window is
-/// closed): its line says until when, as the window stands now. Seen by the limits' tick.
+/// closed): its line says until when, as the window stands now; its window open again and no slot free yet, that it
+/// waits for a slot. Seen by the limits' tick.
 pub fn follow(t: &Obj) {
     let (ls, at) = (t.at("limitStop"), now());
     if t.s("stage") != "stopped" || t.b("archivedAt") { return; }
-    let waits = match ls.s("what") { "window" => !lifted(t), "usage" => crate::usage::stop::lifted(t) && holds(t, at), _ => false };
+    if ls.s("what") == "window" && lifted(t) {
+        let line = crate::shown::queue::WAITING;
+        if t.s("msg") != line && !crate::actions::start::slot_free() { let _ = update_wait(t.s("id"), 2000, |t| { if !stopped_at_limit(t) { return Ok(Change::Keep); } t.put("msg", line); Ok(Change::Write) }); }
+        return;
+    }
+    let waits = match ls.s("what") { "window" => true, "usage" => crate::usage::stop::lifted(t) && holds(t, at), _ => false };
+    if !waits { return; }
     let opens = next_open(&window_of(t), at);
-    if !waits || opens == 0 || t.s("msg") == stop_line(opens, at) { return; }
+    if opens == 0 || t.s("msg") == stop_line(opens, at) { return; }
     let _ = update_wait(t.s("id"), 2000, |t| {
         if !stopped_at_limit(t) { return Ok(Change::Keep); }
         if t.at("limitStop").s("what") == "window" { t.obj_mut("limitStop").put("opens", opens); }
