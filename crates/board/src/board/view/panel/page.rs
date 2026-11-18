@@ -34,6 +34,7 @@ pub fn value_words(row: &Obj) -> String {
         Ty::From => "main, here, or the name of a branch at the remote, such as develop".into(),
         Ty::List => "names, with commas between them; none for none".into(),
         Ty::Issues => "issue numbers of the task's own repo, with commas between them, such as 2203, 2204; none for none".into(),
+        Ty::Window => "any, or windows such as nights, weekends or mon-fri 22:00-06:00, with commas between them".into(),
         Ty::Attempts => format!("a count from 1 to 5, or programs with commas between them ({PROGRAMS}), each with a model after a slash if you like"),
         _ => "typed".into(),
     };

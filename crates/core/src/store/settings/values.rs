@@ -239,17 +239,10 @@ fn check_ty(e: &Entry, v: &Value) -> Res<Value> {
             if list.len() > MAX_ATTEMPTS { return refuse(format!("{name} takes {TOO_MANY}. Not {}: did you mean {MAX_ATTEMPTS}?", list.len())); }
             Ok(json!(list.join(", ")))
         }
-        Ty::Key => {
-            let w = word(v);
-            if w.to_lowercase() == NONE { return Ok(json!(NONE)); }
-            let k = w.to_uppercase();
-            let ok = v.is_string() && (2..=5).contains(&k.len()) && k.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false) && k.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
-            if !ok { return refuse(format!("{name} is a short key: 2 to 5 letters or digits, the first a letter (HSW), or none; not \"{w}\".")); }
-            if k == "PR" { return refuse(format!("{name} cannot be PR: on a row that already means a pull request. Choose another.")); }
-            Ok(json!(k))
-        }
+        Ty::Key => crate::store::keys::check(name, v),
         Ty::Keys => super::key_map::check(e, v),
         Ty::Pilot => super::pilot_values::check(e, v),
+        Ty::Window => super::run_window::check(name, v),
         Ty::Notify => {
             let Value::String(s) = v else { return refuse(format!("{name} must be none, bell, or a command.")) };
             let w = s.trim();
