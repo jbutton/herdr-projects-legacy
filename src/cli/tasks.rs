@@ -109,7 +109,10 @@ pub fn command(cmd: &str, a: &Args) -> Res<(Value, String)> {
             if let Some(r) = research { settings.push(("research.only".into(), json!(r))); }
             let wait = crate::after::Wait { after: flag("after").map(|r| crate::after::refs_of(&r)), now: flags.b("now") };
             let t = start::delegate_with(&need(1, "an id")?, settings, wait)?;
+            let anyway = flags.b("now") && t.at("windowOk").is_object(); // started outside its run window, as you said
             let how = if let Some(w) = crate::after::waiting_words(&t) { format!("delegated, it {w}") }
+                else if crate::run_window::gate::start_waits(&t) { format!("delegated, {}", t.s("msg")) }
+                else if anyway && !["queued", "attempts"].contains(&t.s("stage")) { format!("started, outside its window ({}), as you said", crate::run_window::words::named(&t)) }
                 else if t.s("stage") == "attempts" { format!("started, {} attempts at once ({})", t.arr("attempts").len(), t.arr("attempts").iter().map(|x| format!("{} {}", x.s("letter"), x.s("agent"))).collect::<Vec<_>>().join(", ")) }
                 else if t.s("stage") == "queued" { format!("started, {}", queue_words(&crate::flow::live::saved(&t))) } else { "started, an agent is on it".into() };
             (shown_of(t.s("id")), format!("{}: {how}", t.s("id")))

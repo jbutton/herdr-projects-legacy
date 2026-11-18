@@ -78,6 +78,8 @@ pub fn delegate(id: &str, asked: Vec<(String, Value)>) -> Res<Task> { delegate_w
 /// and one that waits already is only started early with `now`.
 pub fn delegate_with(id: &str, asked: Vec<(String, Value)>, w: Wait) -> Res<Task> {
     let cur = find(id)?;
+    // Held for its window already: `--now` starts it, outside its window, as you said (run_window/gate.rs).
+    if w.now && crate::run_window::gate::start_waits(&cur) { return crate::run_window::gate::start_anyway(cur.s("id")).map(|s| s.task); }
     if cur.s("stage") == after::STAGE && !w.now && w.after.is_none() && asked.is_empty() { crate::fail!("{}", after::still_waits(&cur)); }
     let deps = match &w.after { Some(r) => Some(after::checked(Some(cur.s("id")), r)?), None => None };
     let asked: Vec<(String, Value)> = asked.into_iter().filter(|(_, v)| !(v.is_null() || *v == json!(""))).collect();
@@ -123,6 +125,7 @@ pub fn delegate_with(id: &str, asked: Vec<(String, Value)>, w: Wait) -> Res<Task
         for k in ["checkFails", "reviewRounds", "prRounds", "syncRepairs", "retried"] { t.put(k, 0); }
         if let Some(d) = &deps { t.put("after", d.clone()); }
         after::on_delegate(t, w.now);
+        crate::run_window::gate::on_delegate(t, w.now);
         Ok(Change::Write)
     })?;
     for c in &stale { let _ = crate::attempts::adopt::discard(&t, c); }
@@ -134,8 +137,9 @@ pub fn delegate_with(id: &str, asked: Vec<(String, Value)>, w: Wait) -> Res<Task
 /// Start queued tasks while slots are free. Counting and claiming happen under one lock, so two passes cannot both
 /// take the last slot. A turn the human started in an agent's terminal counts toward the total.
 pub fn start_queued(socket: &str) -> Vec<String> {
-    // A task done several times at once is split into its attempts first: each then waits for a slot of its own.
-    for w in list(ListOpts::default()) { if w.s("stage") == "queued" && same_socket(w.at("link").s("socket"), socket) { let _ = crate::attempts::fan_out::fan_out(w.s("id")); } }
+    // A task done several times at once is split into its attempts first: each then waits for a slot of its own. One
+    // held for its window waits whole, and is split when its window opens.
+    for w in list(ListOpts::default()) { if w.s("stage") == "queued" && same_socket(w.at("link").s("socket"), socket) && !crate::run_window::gate::held(&w) { let _ = crate::attempts::fan_out::fan_out(w.s("id")); } }
     let mut started = vec![];
     let _ = with_lock_wait("slots", 5000, || {
         let all = list(ListOpts { attempts: true, ..Default::default() });
@@ -144,6 +148,7 @@ pub fn start_queued(socket: &str) -> Vec<String> {
         let waiting = crate::shown::queue::order(all.iter(), socket); // the order the board says (Q#1, Q#2 …)
         let max = setting("board.agents", None).as_i64().unwrap_or(4);
         for w in waiting {
+            if crate::run_window::gate::held(w) { continue; } // outside its run.window: no slot until it opens (run_window/gate.rs)
             if busy >= max { break; }
             if crate::leftovers::room::still_waiting(w) { continue; } // no room on the disk yet: no runner for it
             if crate::usage::gate::held(w) { continue; } // held back for extra usage (usage/gate.rs), or handed to a fallback first

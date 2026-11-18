@@ -274,6 +274,7 @@ pub fn details(id: &str) -> Res<Value> {
         "inUse": if t.at("tidy").b("inUse") { t.at("tidy").at("inUse").clone() } else { Value::Null }, // what keeps its space in use, every thing
         "limits": limits_detail(&t, now()),
         "usage": crate::usage::words::detail(&t, now()), // its program's usage window, and the task's extra usage (usage/)
+        "window": crate::run_window::words::detail(&t, now()), // its run window: open or when it opens, a wait, a pause, a late start (run_window/)
         "addedBy": crate::autopilot::history::added_by(&t), // you, an automation, a coordinator's autopilot, or which coordinator you asked
     }));
     // Waiting in the queue: its place, and in words ("waiting for a free slot, Q#2", "waiting for disk space, Q#1").

@@ -22,6 +22,7 @@ pub fn carry_on(id: &str, raised: bool) -> Res<Said> {
     assert_unarchived(&cur)?;
     let cid = cur.t("id");
     if crate::usage::gate::start_waits(&cur) { return crate::usage::gate::start_anyway(&cid); } // held back for extra usage
+    if crate::run_window::gate::start_waits(&cur) { return crate::run_window::gate::start_anyway(&cid); } // held for its run window
     if !stopped_at_limit(&cur) { crate::fail!("{cid} was not stopped at a limit."); }
     let ls = cur.at("limitStop").clone();
     let done = |out: &Said, msg: String| { let t = get(&cid).unwrap_or_else(|| out.task.clone()); say(t, if out.msg.starts_with("queued") { out.msg.clone() } else { msg }) };
