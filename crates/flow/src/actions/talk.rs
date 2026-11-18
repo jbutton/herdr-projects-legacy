@@ -149,6 +149,7 @@ pub(crate) fn stop_as(id: &str, yours: bool) -> Res<(Task, Ended)> {
             let agent = flow::task::is_agent_task(t);
             t.put("stage", if agent { "stopped" } else { "todo" }); if !agent { t.put("app", Value::Null); } t.put("msg", "");
             if was_waiting { t.put("stoppedWaiting", true); } // a task that waits for this one is told it was stopped (after.rs)
+            t.del("windowWait"); // held for its run window: no longer (run_window/gate.rs)
             Ok(Change::Write)
         }).map(none);
     }

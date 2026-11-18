@@ -78,8 +78,6 @@ pub fn delegate(id: &str, asked: Vec<(String, Value)>) -> Res<Task> { delegate_w
 /// and one that waits already is only started early with `now`.
 pub fn delegate_with(id: &str, asked: Vec<(String, Value)>, w: Wait) -> Res<Task> {
     let cur = find(id)?;
-    // Held for its window already: `--now` alone starts it, outside its window, as you said (run_window/gate.rs).
-    if w.now && w.after.is_none() && asked.is_empty() && crate::run_window::gate::start_waits(&cur) { return crate::run_window::gate::start_anyway(cur.s("id")).map(|s| s.task); }
     if cur.s("stage") == after::STAGE && !w.now && w.after.is_none() && asked.is_empty() { crate::fail!("{}", after::still_waits(&cur)); }
     let deps = match &w.after { Some(r) => Some(after::checked(Some(cur.s("id")), r)?), None => None };
     let asked: Vec<(String, Value)> = asked.into_iter().filter(|(_, v)| !(v.is_null() || *v == json!(""))).collect();
@@ -92,7 +90,8 @@ pub fn delegate_with(id: &str, asked: Vec<(String, Value)>, w: Wait) -> Res<Task
         let id = t.t("id");
         if t.s("stage") == "attempts" { crate::fail!("{id} already has its attempts working on it."); }
         if t.s("stage") == "pick" { crate::fail!("{id} waits for you to pick one of its attempts: herdr-projects pick {id} <letter>."); }
-        if is_agent_stage(t.s("stage")) || runner_alive(t) { crate::fail!("{id} already has an agent working on it."); }
+        // One held for its run window has no agent yet: delegated again (`--now`, new settings), it is queued afresh.
+        if (is_agent_stage(t.s("stage")) && !crate::run_window::gate::start_waits(t)) || runner_alive(t) { crate::fail!("{id} already has an agent working on it."); }
         if t.b("autoMerge") { crate::fail!("{id} is waiting for an automatic merge. Reply to its agent to cancel that first."); }
         if t.at("link").b("socket") && !same_socket(t.at("link").s("socket"), &socket) { crate::fail!("{id} lives in another herdr session. Open the board there."); }
         if !values.is_empty() { let s = t.obj_mut("settings"); for (k, v) in &values { s.insert(k.clone(), v.clone()); } }

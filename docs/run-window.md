@@ -50,7 +50,8 @@ several windows in one value.
 - **A comma** separates windows, and the days of one list, as in `autopilot.hours`: days on their own before a window
   that starts with days are that window's days too, so `sat,sun 10:00-16:00` is one window. Saturday all day beside a
   weekday window is written after it: `mon-fri 22:00-06:00, sat`.
-- **Kept in one spelling**: lower case, day lists without spaces, windows joined by `, `. `show` says how it was read.
+- **Kept in one spelling**: lower case, day lists without spaces, windows joined by `, `; spaces around a range's dash
+  are dropped (`mon - fri 22:00 - 06:00` is `mon-fri 22:00-06:00`). `show` says how it was read.
 - **The night summer time starts**, a time the clock skips is taken as the first moment after it; where the clock goes
   back, a time it repeats is taken the first time.
 
@@ -69,7 +70,10 @@ alone.
 - **It starts by itself** at the first look inside its window: the keeper, an open board or any command looks every few
   seconds. From there it queues for a slot like any other task.
 - **A task done several times at once** ([attempts](attempts.md)) waits whole, and is split into its attempts when its
-  window opens.
+  window opens. Under `pause` each attempt waits for the window as a task does, and the task waits with them (its row
+  says `A claude waiting for its window: continues 22:00`); none of them counts as out.
+- **It has no agent yet**: delegated again, with new settings or `--now`, it is queued afresh. Stopped, it is no longer
+  held.
 
 ## At the window's end
 
@@ -107,7 +111,8 @@ alone.
 | it to run to its end tonight | `herdr-projects set run.windowEnd finish --task <id>`: a paused one goes on at once |
 
 Starting or carrying on outside the window is leave until the window next opens: under `pause` the task is not paused
-again before that. `--now` also skips what a task waits for with `--after`.
+again before that. A task done several times at once gives its attempts the same leave. `--now` also skips what a task
+waits for with `--after`.
 
 ## Beside the other settings
 

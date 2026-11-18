@@ -33,16 +33,17 @@ pub fn late_line(t: &Obj) -> String {
 /// `details`: the task's window as it stands, and what it waits for. Nothing for a task with no window and no mark.
 pub fn detail(t: &Obj, now: i64) -> Value {
     let win = setting_text(SETTING, Some(t));
-    let marked = ["windowWait", "windowLate", "windowOk"].iter().any(|k| t.at(k).is_object()) || paused(t);
+    let held = super::gate::start_waits(t);
+    let marked = held || ["windowLate", "windowOk"].iter().any(|k| t.at(k).is_object()) || paused(t);
     if win == "any" && !marked { return Value::Null; }
     let at = |ms: i64| if ms > 0 { json!(crate::clock::iso(ms)) } else { Value::Null };
     let say = |ms: i64| if ms > 0 { json!(hm(ms, now)) } else { Value::Null };
     let around = stretch(&win, now);
     let opens = if around.is_some() { 0 } else { next_open(&win, now) };
     let closes = around.map(|s| s.1).unwrap_or(0);
-    let words = if paused(t) || t.at("windowWait").is_object() { t.t("msg") } else if late(t) { late_line(t) } else if closes > 0 { format!("its window is open until {}", hm(closes, now)) } else if opens > 0 { format!("its window opens {}", hm(opens, now)) } else { String::new() };
+    let words = if paused(t) || held { t.t("msg") } else if late(t) { late_line(t) } else if closes > 0 { format!("its window is open until {}", hm(closes, now)) } else if opens > 0 { format!("its window opens {}", hm(opens, now)) } else { String::new() };
     let mut out = obj(json!({ "setting": win, "end": setting_text(END, Some(t)), "open": open(&win, now), "opens": say(opens), "opensAt": at(opens), "closes": say(closes), "closesAt": at(closes), "words": words }));
-    if t.at("windowWait").is_object() { out.put("waiting", t.at("windowWait").clone()); }
+    if held { out.put("waiting", t.at("windowWait").clone()); }
     if paused(t) { out.put("paused", t.at("limitStop").clone()); }
     if t.at("windowLate").is_object() { let mut l = t.o("windowLate").cloned().unwrap_or_default(); l.put("words", late_line(t)); out.put("late", l); }
     if t.at("windowOk").is_object() { out.put("leave", t.at("windowOk").clone()); }

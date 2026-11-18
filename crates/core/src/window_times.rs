@@ -5,9 +5,9 @@
 use crate::store::settings::run_window::{windows_of, Window};
 use chrono::{Datelike, Duration, Local, NaiveDate, TimeZone};
 
-/// Days laid out before and after the moment: a window begun two days back may still be open (`fri-sun`), and every
-/// window opens again within a week.
-const BACK: i64 = 2;
+/// Days laid out before and after the moment: a window open for days in a row may have begun a week back (`thu-sun`, or
+/// every day but one), and every window opens again within a week.
+const BACK: i64 = 8;
 const AHEAD: i64 = 8;
 
 /// A day's minute as a moment here, in ms: 1440 is the next day's midnight.
@@ -63,6 +63,8 @@ mod tests {
         assert_eq!(stretch(v, at(5, 12, 0)), Some((at(4, 22, 0), at(7, 0, 0))));
         assert_eq!(next_open("weekends", at(2, 9, 0)), at(5, 0, 0));
         assert_eq!(stretch("sat 00:00-24:00", at(5, 10, 0)), Some((at(5, 0, 0), at(6, 0, 0))));
+        // Open four whole days: let go on Sunday, it opened on Thursday.
+        assert_eq!(stretch("thu-sun", at(6, 12, 0)), Some((at(3, 0, 0), at(7, 0, 0))));
         assert!(open("any", at(0, 3, 0)) && next_open("any", at(0, 3, 0)) == 0 && stretch("any", at(0, 3, 0)).is_none());
         assert!(open("nights", at(3, 23, 30)) && !open("nights", at(3, 12, 0)));
     }

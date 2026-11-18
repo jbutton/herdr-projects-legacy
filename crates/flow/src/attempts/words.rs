@@ -12,6 +12,8 @@ const GONE_MS: i64 = 15000;
 pub fn standing_of(c: &Obj, now: i64) -> &'static str {
     match c.s("stage") {
         "tried" => "passed",
+        // Stopped to wait by itself, for its run window or its usage window: it carries on then (limits/run.rs).
+        "stopped" if crate::limits::run::waits_by_itself(c) => "waits",
         "nosummary" | "stopped" | "todo" | "done" => "out",
         "failed" => if waiting_of(c).is_some() { "works" } else if c.at("failure").b("auth") { "needs" } else { "out" },
         "asks" | "reviewneeds" => "needs",
@@ -42,6 +44,7 @@ pub fn mark_of(c: &Obj, now: i64) -> String {
         "passed" => format!("{who} ✓"),
         "out" => format!("{who} ✗ {}", out_why(c)),
         "needs" => format!("{who} ? {}", if c.s("stage") == "failed" { "needs a login" } else { "asks you" }),
+        "waits" if c.s("stage") == "stopped" || c.b("windowWait") || c.b("usageWait") => format!("{who} {}", c.s("msg")),
         "waits" => format!("{who} waits for a slot"),
         _ => {
             let step = match c.s("stage") { "starting" => "starting", "setup" => "setting up", "checking" => "checking", "failed" => "cut off, trying again", _ => "" };

@@ -1,7 +1,8 @@
 //! Run windows (`run.window`, `run.windowEnd`, docs/run-window.md): a task delegated outside its window waits in the
 //! queue and starts by itself when it opens, `--now` starts it anyway (before.rs); a start after the machine slept says
 //! it is late, or waits for the next window (late.rs); a task queued after others meets its window once they are done
-//! (after.rs); under `pause` a task stops when its window has closed and carries on by itself in the next (pause.rs).
+//! (after.rs); under `pause` a task stops when its window has closed and carries on by itself in the next (pause.rs);
+//! a task done several times at once meets its window whole (attempts.rs).
 //! What they share is here: a time of this machine's day, the passes that start and carry on, a command as typed.
 use crate::common;
 use common::*;
@@ -9,6 +10,7 @@ use serde_json::{json, Value};
 use sw::json::*;
 
 mod after;
+mod attempts;
 mod before;
 mod late;
 mod pause;
@@ -21,11 +23,13 @@ pub fn local(days: i64, h: u32, m: u32) -> i64 {
 }
 /// One housekeeping pass at `at`: it starts what may start.
 pub fn housekeep(w: &World, at: i64) { sw::clock::set(Some(at)); sw::housekeeping::housekeeping(&w.socket, sw::housekeeping::Force::Yes); }
-/// The limits' own pass at `at`, which carries on a task whose stop no longer holds.
+/// The limits' own pass at `at`, which carries on a task whose stop no longer holds: on the board's rows and their
+/// attempts, as the keeper gives it them (keeper.rs).
 pub fn limits(w: &World, at: i64) {
     sw::clock::set(Some(at));
     let c = |id: &str| { let _ = sw::actions::limits::carry_on(id, true); };
-    sw::limits::tick::limits_tick(&sw::flow::live::board_for(&w.socket), at, Some(&c));
+    let rows: Vec<Obj> = sw::flow::live::board_for(&w.socket).iter().flat_map(|t| std::iter::once(t.clone()).chain(t.arr("tries").iter().filter_map(|x| x.as_object().cloned()))).collect();
+    sw::limits::tick::limits_tick(&rows, at, Some(&c));
 }
 /// A command as typed: what it answers, or why it was refused.
 pub fn run(a: &[&str]) -> Result<(Value, String), String> { sw::cli::tasks::command(a[0], &sw::cli::flags::parse(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>())).map_err(|e| e.msg) }

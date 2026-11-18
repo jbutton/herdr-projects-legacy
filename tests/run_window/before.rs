@@ -65,6 +65,8 @@ fn run_window_is_kept_in_one_spelling_and_a_value_it_cannot_read_names_the_neare
     let _w = afternoon(json!({}));
     run(&["set", "run.window", "Mon-Fri 22:00-06:00 ,Weekends"]).unwrap();
     assert_eq!(sw::store::settings::lookup::setting_text("run.window", None), "mon-fri 22:00-06:00, weekends");
+    run(&["set", "run.window", "Mon - Fri 22:00 - 06:00"]).unwrap();
+    assert_eq!(sw::store::settings::lookup::setting_text("run.window", None), "mon-fri 22:00-06:00");
     let refused = |v: &str| run(&["set", "run.window", v]).unwrap_err();
     assert!(refused("22-06").ends_with("Did you mean 22:00-06:00?"), "{}", refused("22-06"));
     assert!(refused("wekends").ends_with("Did you mean weekends?"));

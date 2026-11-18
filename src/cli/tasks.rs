@@ -113,7 +113,7 @@ pub fn command(cmd: &str, a: &Args) -> Res<(Value, String)> {
             let how = if let Some(w) = crate::after::waiting_words(&t) { format!("delegated, it {w}") }
                 else if crate::run_window::gate::start_waits(&t) { format!("delegated, {}", t.s("msg")) }
                 else if anyway && !["queued", "attempts"].contains(&t.s("stage")) { format!("started, outside its window ({}), as you said", crate::run_window::words::named(&t)) }
-                else if t.s("stage") == "attempts" { format!("started, {} attempts at once ({})", t.arr("attempts").len(), t.arr("attempts").iter().map(|x| format!("{} {}", x.s("letter"), x.s("agent"))).collect::<Vec<_>>().join(", ")) }
+                else if t.s("stage") == "attempts" { format!("started, {} attempts at once ({}){}", t.arr("attempts").len(), t.arr("attempts").iter().map(|x| format!("{} {}", x.s("letter"), x.s("agent"))).collect::<Vec<_>>().join(", "), if anyway { format!(", outside its window ({}), as you said", crate::run_window::words::named(&t)) } else { String::new() }) }
                 else if t.s("stage") == "queued" { format!("started, {}", queue_words(&crate::flow::live::saved(&t))) } else { "started, an agent is on it".into() };
             (shown_of(t.s("id")), format!("{}: {how}", t.s("id")))
         }

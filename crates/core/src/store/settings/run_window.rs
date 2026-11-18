@@ -52,7 +52,8 @@ fn window(text: &str) -> Result<Window, String> {
 /// Reads a value. Days on their own before a window that starts with days are that window's days too, as
 /// `autopilot.hours` reads `sat,sun 10:00-16:00`; elsewhere they are those days, all day.
 pub fn read(typed: &str) -> Result<Read, String> {
-    let s = typed.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    // Spaces around a range's dash are no part of it: `22:00 - 06:00` is `22:00-06:00`, `mon - fri` is `mon-fri`.
+    let s = typed.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase().replace(" - ", "-").replace(" -", "-").replace("- ", "-");
     if s.is_empty() { return Err("it needs a value".into()); }
     if s == ANY { return Ok(Read { windows: vec![], text: ANY.into() }); }
     let pieces: Vec<String> = s.split(',').map(|p| p.trim().to_string()).collect();
@@ -135,6 +136,7 @@ mod tests {
         assert_eq!(read("weekdays").unwrap().windows[0], Window { days: vec![0, 1, 2, 3, 4], from: 0, to: 1440 });
         assert!(read("any").unwrap().windows.is_empty());
         assert_eq!(read("fri-mon 00:00-24:00").unwrap().windows[0].days, vec![0, 4, 5, 6]);
+        assert_eq!(kept("Mon - Fri 22:00 - 06:00"), "mon-fri 22:00-06:00");
     }
     #[test]
     fn a_value_it_cannot_read_names_the_nearest_right_one() {
