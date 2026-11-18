@@ -157,3 +157,40 @@ fn run_window_pause_does_not_hold_a_repair_of_work_that_waited_for_your_approval
     assert_eq!(t.s("stage"), "approval", "{} {:?}", t.s("msg"), t.at("limitStop"));
     assert_eq!(reviewer_starts(&w), 2);
 }
+
+#[test]
+fn run_window_pause_holds_the_fix_of_a_failed_check_the_board_sent_back_inside_the_window() {
+    let w = world();
+    // The first turn leaves the check failing; its fix (sent back by the board at 05:55) ends after the window closed.
+    w.script(json!({ "worker": [{ "status": "working", "after": 0, "then": turn() }, { "status": "working", "after": 0, "then": { "files": { "good.txt": "ok\n" }, "note": "Fixed the check." } }], "reviewer": [passes()] }));
+    sw::clock::set(Some(local(0, 5, 50)));
+    let id = w.add("Night work");
+    delegate_with(&id, json!({ "run.window": "22:00-06:00", "run.windowEnd": "pause", "check.command": "test -f good.txt" }));
+    assert_eq!(settle(&id).s("stage"), "working");
+    let t = end_turn(&w, &id, local(0, 5, 55));
+    assert_eq!((t.s("stage"), t.at("expectedWake").s("reason")), ("working", "check"), "{}", t.s("msg"));
+    // A failed check's send-back is the run's own: the end of the fix waits for the window.
+    let t = end_turn(&w, &id, local(0, 6, 10));
+    assert_eq!((t.s("stage"), t.at("limitStop").s("what"), t.b("windowDone")), ("stopped", "window", false), "{}", t.s("msg"));
+    limits(&w, local(0, 22, 0) + 30_000);
+    assert_eq!(settle(&id).s("stage"), "approval");
+}
+
+#[test]
+fn run_window_pause_holds_nothing_after_the_run_a_repair_ending_inside_the_window_and_its_review_go_on() {
+    let w = world();
+    let fails = json!({ "verdict": { "meets": false, "findings": [], "text": "The merge lost a line." } });
+    w.script(json!({ "worker": [{ "status": "working", "after": 0, "then": turn() }, { "files": { "f.txt": "v2\n" }, "note": "Repaired." }, { "files": { "f.txt": "v3\n" }, "note": "Put the line back." }],
+        "reviewer": [passes(), fails, passes()] }));
+    let id = night_work(&w, "pause");
+    assert_eq!(end_turn(&w, &id, local(0, 5, 55)).s("stage"), "approval");
+    // A conflict repair sent at 05:57 ends at once, inside the window; the window closes while its review runs, and the
+    // findings that review sends back go on: the run was over.
+    let after = local(0, 6, 1);
+    w.during("agent start", move || sw::clock::set(Some(after)));
+    sw::clock::set(Some(local(0, 5, 57)));
+    sw::flow::send::send_own(&id, "Main moved and conflicts with this branch: merge it in and fix it.", "conflict", false, Obj::new(), 0).unwrap();
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "approval", "{} {:?}", t.s("msg"), t.at("limitStop"));
+    assert_eq!(reviewer_starts(&w), 3);
+}

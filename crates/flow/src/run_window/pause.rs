@@ -5,7 +5,8 @@
 //! finish`: finish/turn_ended.rs); at a send-back the board starts itself, the words kept (`then: send`: flow/send.rs);
 //! before a review (`role: reviewer`: finish/review.rs). The limits' tick carries it on by itself once the window is
 //! open again (`lifted`, `carry_on`), as it carries on a stop for extra usage at its reset (PRJ-26). Never held: an
-//! approved merge on its way, a chat-only task, a task with your leave (gate.rs: `outside`).
+//! approved merge on its way, a chat-only task, a task with your leave (gate.rs: `outside`), and anything after its run
+//! is over (`run_over`).
 use super::gate::{outside, window_of, LATE};
 use super::words::{stop_line, END};
 use crate::actions::shared::{say, Said};
@@ -23,11 +24,13 @@ use crate::window_times::{next_open, stretch};
 /// conflict with main, GitHub's checks) and a turn a provider cut off (`retry`) go on.
 pub const HELD: [&str; 4] = ["check", "review", "research", "plan"];
 
-/// Does `pause` hold this task's next step now? Not for a repair of work that waited for you (`windowRepair`).
-pub fn holds(t: &Obj, at: i64) -> bool { setting_text(END, Some(t)) == "pause" && !t.b("mergeIntent") && !t.b("windowRepair") && outside(t, at) }
-/// The turn that ended repaired work that had waited for you: the board sent it a conflict with main or GitHub's failed
-/// checks (`reason`, its wake), or the pull request's feedback or a failure to fix (sent for this very turn).
-fn repair(t: &Obj, reason: &str) -> bool { ["conflict", "checks"].contains(&reason) || ["failure", "prFailure"].iter().any(|k| t.at(k).i("sentAt") >= t.i("armedAt").max(1)) }
+/// Does `pause` hold this task's next step now? Not once its run is over (`windowDone`).
+pub fn holds(t: &Obj, at: i64) -> bool { setting_text(END, Some(t)) == "pause" && !t.b("mergeIntent") && !t.b("windowDone") && outside(t, at) }
+/// This round's run is over: its work was reviewed and stands up for your approval, or merges (finish/pipeline_end.rs,
+/// where `reviewedHead` is kept). What the board does to it from here (a repair of a conflict with main, of GitHub's
+/// checks, of pull-request feedback, a sync, a review again and what that sends back) is never held, until the task
+/// is delegated again (gate.rs: `on_delegate`).
+pub fn run_over(t: &mut Task) { t.put("windowDone", true); }
 fn holds_now(id: &str) -> bool { get(id).is_some_and(|t| t.s("stage") != "stopped" && holds(&t, now())) }
 /// Stops the task to wait for its window: `role` whose step waits, `extra` what carrying on does.
 fn stop(id: &str, role: &str, mut extra: Obj) -> bool {
@@ -36,14 +39,8 @@ fn stop(id: &str, role: &str, mut extra: Obj) -> bool {
     extra.put("opens", next_open(&win, at));
     stop_at(id, "window", &win, 0.0, StopHow { role: role.into(), extra, ..Default::default() }).is_some()
 }
-/// At the end of the agent's turn, before the finish line: true when the task stopped there. `reason`: the board's own
-/// wake that started the turn. A repair of work that waited for you goes on, and so does all that follows it (its
-/// check, its review, what that sends back) until the task is delegated again.
-pub fn at_turn_end(id: &str, reason: &str) -> bool {
-    if !holds_now(id) { return false; }
-    if get(id).is_some_and(|t| repair(&t, reason)) { let _ = update_wait(id, 2000, |t| { t.put("windowRepair", true); Ok(Change::Write) }); return false; }
-    stop(id, "agent", obj(json!({ "then": "finish" })))
-}
+/// At the end of the agent's turn, before the finish line: true when the task stopped there.
+pub fn at_turn_end(id: &str) -> bool { holds_now(id) && stop(id, "agent", obj(json!({ "then": "finish" }))) }
 /// Before a review starts: true when the task stopped to wait for its window (carrying on checks and reviews it).
 pub fn before_review(id: &str) -> bool { holds_now(id) && stop(id, "reviewer", Obj::new()) }
 /// A send-back the board starts itself: true when the words were kept for the window instead.

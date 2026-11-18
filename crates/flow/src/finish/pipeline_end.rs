@@ -108,7 +108,7 @@ pub fn after_review(c: Ctx, g: &mut Guard) -> Res<()> {
         let why = c.sync.map(sync::held_why).unwrap_or_default();
         let ch2 = change.clone().unwrap_or(Value::Null);
         let head = { let h = ch2.t("head"); if h.is_empty() { flow::git::head_of(c.folder) } else { h } };
-        g.set(|t| { t.put("review", review.clone().unwrap_or(Value::Null)); t.put("stat", ch2.at("stat").clone()); t.put("reviewedHead", if head.is_empty() { Value::Null } else { json!(head) }); t.put("mergeFailed", false); t.put("failure", Value::Null); t.put("syncBlocked", if why.is_empty() { Value::Null } else { sync::blocked(&why, c.sync) }); })?;
+        g.set(|t| { crate::run_window::pause::run_over(t); t.put("review", review.clone().unwrap_or(Value::Null)); t.put("stat", ch2.at("stat").clone()); t.put("reviewedHead", if head.is_empty() { Value::Null } else { json!(head) }); t.put("mergeFailed", false); t.put("failure", Value::Null); t.put("syncBlocked", if why.is_empty() { Value::Null } else { sync::blocked(&why, c.sync) }); })?;
         stop_at(id, "tokens", limit, *used, StopHow { role: "reviewer".into(), ready: true, ..Default::default() });
         return Ok(());
     }
@@ -149,7 +149,8 @@ pub fn after_review(c: Ctx, g: &mut Guard) -> Res<()> {
         return done(g, &t, &msg, review.as_ref());
     }
     let stat = change.as_ref().map(|x| x.at("stat").clone()).unwrap_or(Value::Null);
-    t = g.set(|t| { t.put("review", review.clone().unwrap_or(Value::Null)); t.put("stat", stat.clone()); t.put("reviewedHead", head_v.clone()); t.put("mergeFailed", false); })?;
+    // Its run is over: what the board does to it from here waits for no run window (run_window/pause.rs).
+    t = g.set(|t| { crate::run_window::pause::run_over(t); t.put("review", review.clone().unwrap_or(Value::Null)); t.put("stat", stat.clone()); t.put("reviewedHead", head_v.clone()); t.put("mergeFailed", false); })?;
     if hold_pr_failure(g, &mut t)? { return Ok(()); }
     // A task that merges by itself (`merge.by`, read now) still wants a review that passed the gate.
     let skip = c.sync.map(|s| !sync::held_why(s).is_empty()).unwrap_or(false);
