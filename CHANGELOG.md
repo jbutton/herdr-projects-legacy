@@ -87,3 +87,8 @@ each. This copy makes no version tags yet, so the list is one section.
   and is reviewed by itself then (under `ask` it waits for you). A task waiting for a usage window carries on as soon as
   a fresh reading shows room in both windows, so a reset bought early is no longer waited out.
   ([#32](https://github.com/jbutton/herdr-projects-legacy/pull/32))
+- `run.window` holds tasks until a quiet time window of this machine, such as `nights`, `weekends` or
+  `mon-fri 22:00-06:00, weekends`: a task delegated outside it waits as `waiting for its window: starts 22:00`, holding
+  no slot, and starts by itself when it opens (late after a sleep, its row says so); `delegate --now` starts it anyway.
+  `run.windowEnd pause` lets a task still working when its window closes end the step under way and carry on by itself
+  in the next window. ([#33](https://github.com/jbutton/herdr-projects-legacy/pull/33))

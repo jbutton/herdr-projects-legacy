@@ -119,3 +119,24 @@ fn run_window_pause_holds_a_review_not_yet_started_and_reviews_when_the_window_o
     assert_eq!(t.s("stage"), "approval", "{} {}", t.s("msg"), t.at("failure"));
     assert_eq!(reviewer_starts(&w), 1);
 }
+
+#[test]
+fn run_window_pause_a_stop_for_extra_usage_whose_reset_comes_outside_the_window_waits_for_the_window() {
+    let w = world();
+    w.script(json!({ "worker": vec![json!({ "status": "working" }); 4] }));
+    sw::clock::set(Some(local(0, 3, 0)));
+    let id = w.add("Night work");
+    delegate_with(&id, json!({ "run.window": "22:00-06:00", "run.windowEnd": "pause", "usage.extra": "defer" }));
+    assert_eq!(settle(&id).s("stage"), "working");
+    // Claude moves onto extra usage at 03:00, its window resetting at 07:00: stopped for it (usage.extra defer).
+    crate::usage::claude_window(&id, local(0, 3, 0), 100.0, local(0, 7, 0));
+    crate::usage::tick(&w, local(0, 3, 0) + 10_000);
+    assert_eq!((task(&id).s("stage"), task(&id).at("limitStop").s("what")), ("stopped", "usage"));
+    // The reset comes after its run window closed: it waits for the run window, and says so.
+    limits(&w, local(0, 7, 30));
+    let t = task(&id);
+    assert_eq!((t.s("stage"), t.s("msg")), ("stopped", "waiting for its window: continues 22:00"));
+    assert_eq!(row(&id).s("state"), "working", "it waits by itself");
+    limits(&w, local(0, 22, 0) + 30_000);
+    assert_eq!(settle(&id).s("stage"), "working");
+}

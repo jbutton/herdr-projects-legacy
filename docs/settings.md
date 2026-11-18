@@ -60,7 +60,7 @@ One setting is neither: `repo.key`, a fact about one repo.
   the automation's own settings here; an automation is not a place of its own.
 - **The repo's own file**: `.herdr-projects.json`, committed in that repo. It may hold these facts only: `research.only`,
   `chat.only`, `workspace.setup`, `workspace.include`, `workspace.teardown`, `check.command`, `check.timeout`,
-  `usage.extra` and `repo.key`.
+  `usage.extra`, `run.window`, `run.windowEnd` and `repo.key`.
   - Anything else in it is refused, and said on the task (a `Note` in the task panel, and `show <id>`).
   - It is read from the commit the worktree started from. So code written by agents can never loosen a guard: it cannot
     switch on merging by itself, drop the review, or change the rules its own branch is checked by.
