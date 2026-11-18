@@ -78,8 +78,8 @@ pub fn delegate(id: &str, asked: Vec<(String, Value)>) -> Res<Task> { delegate_w
 /// and one that waits already is only started early with `now`.
 pub fn delegate_with(id: &str, asked: Vec<(String, Value)>, w: Wait) -> Res<Task> {
     let cur = find(id)?;
-    // Held for its window already: `--now` starts it, outside its window, as you said (run_window/gate.rs).
-    if w.now && crate::run_window::gate::start_waits(&cur) { return crate::run_window::gate::start_anyway(cur.s("id")).map(|s| s.task); }
+    // Held for its window already: `--now` alone starts it, outside its window, as you said (run_window/gate.rs).
+    if w.now && w.after.is_none() && asked.is_empty() && crate::run_window::gate::start_waits(&cur) { return crate::run_window::gate::start_anyway(cur.s("id")).map(|s| s.task); }
     if cur.s("stage") == after::STAGE && !w.now && w.after.is_none() && asked.is_empty() { crate::fail!("{}", after::still_waits(&cur)); }
     let deps = match &w.after { Some(r) => Some(after::checked(Some(cur.s("id")), r)?), None => None };
     let asked: Vec<(String, Value)> = asked.into_iter().filter(|(_, v)| !(v.is_null() || *v == json!(""))).collect();
