@@ -1,11 +1,12 @@
 //! Before a start (actions/start.rs: start_queued): a queued task whose agent's program is known to be on extra usage
-//! does not start under `ask` or `defer`. Under `defer` the first agent on `worker.fallback` that is not on extra usage
-//! starts instead (a hand-over before it began); else it stays in the queue, holding no slot, as "waiting for the usage
+//! does not start under `ask` or `defer`, as that program's setting says (words.rs: `setting_for`). Under `defer` the
+//! first agent on `worker.fallback` not passed over for extra usage (its own program's setting) starts instead (a
+//! hand-over before it began); else it stays in the queue, holding no slot, as "waiting for the usage
 //! window: resets 17:00", and starts by itself once that has passed. Under `defer` a window used up (`hard`) holds it
 //! back the same way. Under `ask`, or with its reset not known, it waits
 //! for you (`usageWait.you`), and a retry starts it anyway, with leave for this episode (`extraOk`).
 use super::stop::{fallback_for, why};
-use super::words::{setting_of, start_line};
+use super::words::{said_for, start_line};
 use crate::actions::shared::{say, Said};
 use crate::clock::now;
 use crate::err::Res;
@@ -36,7 +37,7 @@ pub fn start_waits(t: &Obj) -> bool { t.s("stage") == "queued" && t.b("usageWait
 pub fn held(w: &Obj) -> bool {
     let (id, at) = (w.t("id"), now());
     let kind = kind_of(w);
-    let s = setting_of(w);
+    let (s, by, _) = said_for(w, &kind);
     let n = if s == "defer" { fresh_now(&kind, at) } else { now_of(&kind, at) };
     // Under `defer` a window used up with nothing to pay on (`hard`) holds it back as extra usage does: started, its
     // program would end at once. One that waits for its window already goes before that reset only on a reading with
@@ -69,7 +70,7 @@ pub fn held(w: &Obj) -> bool {
     // at every pass (that reading knows no reset, and would turn the wait into one for you, let go at the next pass).
     let (resets, window) = if own { (n.resets, n.since) } else { (was.i("resets"), was.i("window")) };
     let you = s == "ask" || resets == 0;
-    let line = start_line(&kind, resets, you, &s, at);
+    let line = start_line(&kind, resets, you, &s, &by, at);
     let since = if was.s("agent") == kind { was.i("at") } else { at };
     let wait = json!({ "agent": kind, "resets": resets, "you": you, "window": window, "at": since });
     if tidy(wait.clone()) != *w.at("usageWait") || w.s("msg") != line {

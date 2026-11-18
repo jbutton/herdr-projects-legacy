@@ -7,8 +7,9 @@
 //! this coordinator -> you -> built in, store/settings/coord.rs), `ty` (what a value is:
 //! settings/values.rs), `builtin`, `values` (a choice's words), `none` (an agent or a time that may be `none`), `like`
 //! (the example a refused time names, when not its built-in one), `min` (a count's smallest), `repo` (one of the facts
-//! the repo's own file may hold), `task` (one task's own only), `adds` (its values add up across the places), `label`
-//! (its plain name on the settings page), `means` (a few words beside what the row may be), `doc`.
+//! the repo's own file may hold), `task` (one task's own only), `adds` (its values add up across the places), `falls`
+//! (another setting a place's answer is taken from where that place does not say this one: `usage.extra.codex` falls to
+//! `usage.extra`), `label` (its plain name on the settings page), `means` (a few words beside what the row may be), `doc`.
 use crate::json::{json, Value};
 use std::sync::LazyLock;
 
@@ -21,10 +22,10 @@ pub enum Ty { Switch, Choice, Time, Count, Tokens, Agent, Agents, Effort, Access
 #[derive(Clone, Debug)]
 pub struct Entry {
     pub name: String, pub label: String, pub kind: Kind, pub ty: Ty, pub builtin: Value,
-    pub values: Vec<String>, pub none: bool, pub like: String, pub min: i64, pub repo: bool, pub adds: bool, pub task: bool, pub means: String, pub doc: String,
+    pub values: Vec<String>, pub none: bool, pub like: String, pub min: i64, pub repo: bool, pub adds: bool, pub task: bool, pub falls: String, pub means: String, pub doc: String,
 }
 fn e(name: &str, label: &str, kind: Kind, ty: Ty, builtin: Value, doc: &str) -> Entry {
-    Entry { name: name.into(), label: label.into(), kind, ty, builtin, values: vec![], none: false, like: String::new(), min: 0, repo: false, adds: false, task: false, means: String::new(), doc: doc.into() }
+    Entry { name: name.into(), label: label.into(), kind, ty, builtin, values: vec![], none: false, like: String::new(), min: 0, repo: false, adds: false, task: false, falls: String::new(), means: String::new(), doc: doc.into() }
 }
 impl Entry {
     fn values(mut self, v: &[&str]) -> Self { self.values = v.iter().map(|s| s.to_string()).collect(); self }
@@ -33,6 +34,7 @@ impl Entry {
     fn min(mut self, n: i64) -> Self { self.min = n; self }
     fn repo(mut self) -> Self { self.repo = true; self }
     fn task(mut self) -> Self { self.task = true; self }
+    fn falls(mut self, to: &str) -> Self { self.falls = to.into(); self }
     fn means(mut self, m: &str) -> Self { self.means = m.into(); self }
 }
 
@@ -118,7 +120,12 @@ pub static SETTINGS: LazyLock<Vec<Entry>> = LazyLock::new(|| {
     s.push(e("limit.tokens", "Most tokens", Work, Ty::Tokens, json!("none"), "the most tokens a task may use, all its agents, attempts and reviews together, what is read again from the provider's cache included: a count (`2m`, `500k`) or `none`. Counted at the end of each turn, so one turn can pass it. Reached: as `limit.time` (`stopped at 2m tokens`). For a program whose tokens cannot be counted it does nothing, and `show <id>` says so. More: [limits](limits.md)").means("the most tokens the task may use, all its agents and reviews together, counted at the end of each turn. At it the task is stopped, its work is kept, nothing merges, and it waits for you"));
     // paid extra usage past an agent program's usage window (crates/flow/src/usage/). A fact the repo's own file may hold:
     // your own places come before it, so it can never loosen what you set.
-    s.push(e("usage.extra", "Extra usage", Work, Ty::Choice, json!("allow"), "what a task does when its agent's program moves onto paid extra usage past its 5-hour or weekly window (Claude Code's usage credits, Codex's credits), as the board reads it for Claude Code and Codex. `allow`: it works on, and the board only warns: its row, `details`, `board.notify` once, the header. `ask`: the agent is stopped at once, its work kept, and the task waits for you; while its program is on extra usage a task does not start without your yes. `defer`: the next agent on `worker.fallback` that is not on extra usage takes over; else the agent is stopped at once, its work kept, and the task waits for the window and carries on by itself when it resets, or as soon as a fresh reading shows room in both windows (its reset not known: it waits for you); while its program is on extra usage a task does not start. Under `ask` and `defer` a review waits the same way while its reviewer's program is on extra usage (under `defer` the next on `reviewer.fallback` with room reviews first). More: [extra usage](extra-usage.md)").values(&["allow", "ask", "defer"]).repo());
+    s.push(e("usage.extra", "Extra usage", Work, Ty::Choice, json!("allow"), "what a task does when its agent's program moves onto paid extra usage past its 5-hour or weekly window (Claude Code's usage credits, Codex's credits), as the board reads it for Claude Code and Codex. `allow`: it works on, and the board only warns: its row, `details`, `board.notify` once, the header. `ask`: the agent is stopped at once, its work kept, and the task waits for you; while its program is on extra usage a task does not start without your yes. `defer`: the next agent on `worker.fallback` that is not on extra usage takes over; else the agent is stopped at once, its work kept, and the task waits for the window and carries on by itself when it resets, or as soon as a fresh reading shows room in both windows (its reset not known: it waits for you); while its program is on extra usage a task does not start. Under `ask` and `defer` a review waits the same way while its reviewer's program is on extra usage (under `defer` the next on `reviewer.fallback` with room reviews first). Each program goes by its own where one is said (`usage.extra.claude`, `usage.extra.codex`), else by this one. More: [extra usage](extra-usage.md)").values(&["allow", "ask", "defer"]).repo());
+    // the same for one program alone: the worker's, the reviewer's or a fallback's program goes by its own
+    for k in crate::store::usage::READ {
+        let (short, who) = match k { "claude" => ("Claude", "Claude Code"), "codex" => ("Codex", "Codex"), k => (k, k) };
+        s.push(e(&format!("usage.extra.{k}"), &format!("Extra usage for {short}"), Work, Ty::Choice, json!("allow"), &format!("`usage.extra` for {who} alone (`allow`, `ask` or `defer`, as there): what a task does when {who} moves onto paid extra usage, whether it is the task's agent, its reviewer or a fallback about to take over. Where a place does not say it, that place's `usage.extra` counts: the nearest place that says either wins, and in one place this one before `usage.extra`. More: [extra usage](extra-usage.md)")).values(&["allow", "ask", "defer"]).repo().falls("usage.extra"));
+    }
     // when its agent may run (crates/flow/src/run_window/, docs/run-window.md). Facts the repo's own file may hold: your
     // own places come before it.
     s.push(e("run.window", "Runs in", Work, Ty::Window, json!("any"), "when a task's agent may run, in this machine's time zone: `any`, or windows: `nights` (22:00 to 06:00), `weekends` (Saturday and Sunday, all day), `weekdays`, days alone (`sat`, all day) or days and hours as in `autopilot.hours` (`mon-fri 22:00-06:00`, `sat,sun 10:00-16:00`), several with commas between them (`mon-fri 22:00-06:00, weekends`). A task delegated outside its window waits in the queue as `waiting for its window: starts 22:00`, holding no slot, and starts by itself when it opens (after a sleep or with the board closed: the next time the board runs inside it, and its row says it started late). `delegate --now` starts it anyway. \"Run this tonight\": `--run.window nights`. More: [run windows](run-window.md)").repo());

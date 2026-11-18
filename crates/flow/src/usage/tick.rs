@@ -8,7 +8,7 @@
 use super::gate::extra_ok;
 use super::review::{held_now, stop_review};
 use super::stop::{fallback_for, stop_now};
-use super::words::{setting_of, stop_how, untold};
+use super::words::{setting_for, stop_how, untold};
 use crate::agents::read_window::{codex_newest, newest, status_file, status_reading, Reading};
 use crate::flow::task::is_agent_task;
 use crate::json::*;
@@ -76,7 +76,7 @@ fn review_look(r: &Obj, now: i64) {
     let n = match &own { Some(x) => fold(&k, x, now), None => now_of(&k, now) };
     // Its own reading, where there is one (Claude Code's status line), says it too.
     if r.b("comparing") || !n.extra || own.is_some_and(|x| !x.at_now(now).extra) { return; }
-    let s = setting_of(r);
+    let s = setting_for(r, &k);
     if held_now(r, &s, &k, &n, now) { stop_review(r.s("id"), &k, &n, &s, now); }
 }
 fn clear(id: &str) { let _ = update_wait(id, 300, |t| { t.put("extra", Value::Null); Ok(Change::Write) }); }
@@ -92,7 +92,7 @@ fn mark(r: &Obj, kind: &str, x: &Reading, n: &Now, now: i64) {
     let m = json!({ "agent": kind, "since": since, "resets": n.resets, "window": n.since });
     if tidy(m.clone()) != *was { let _ = update_wait(&id, 300, |t| { if t.s("stage") != "working" { return Ok(Change::Keep); } t.put("extra", m.clone()); Ok(Change::Write) }); }
     if crate::chat_only::is_chat(r) || extra_ok(r, kind, n, now) { return; }
-    match setting_of(r).as_str() {
+    match setting_for(r, kind).as_str() {
         "ask" => { stop_now(&id, kind, n, since, "ask"); }
         "defer" if fallback_for(r, now).is_some() => { crate::runner::spawn_claimed("usage", &id, &[]); }
         "defer" => { stop_now(&id, kind, n, since, "defer"); }

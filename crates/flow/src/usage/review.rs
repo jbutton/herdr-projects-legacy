@@ -4,10 +4,11 @@
 //! the task is stopped as an agent is (limitStop `what: usage`, `role: reviewer`), its row "Reviewing: waiting for the
 //! usage window: resets 17:00", and is reviewed again by itself once the window has room (stop.rs: `lifted`). Under
 //! `ask` it waits for you, and your carrying on is leave for that episode. A review under way is stopped the same way
-//! the moment its program is seen on extra usage (tick.rs).
+//! the moment its program is seen on extra usage (tick.rs). Each by the setting of the reviewer's own program, and a
+//! fallback's by its own (words.rs: `setting_for`).
 use super::gate::{extra_ok, fresh_now};
 use super::stop::{not_stopped, passed_over, why};
-use super::words::{hm, setting_of};
+use super::words::{hm, in_work, setting_for};
 use crate::agents::installed::installed;
 use crate::clock::now;
 use crate::err::Res;
@@ -35,11 +36,13 @@ pub fn held_now(t: &Obj, setting: &str, kind: &str, n: &Now, at: i64) -> bool {
     setting != "allow" && READ.contains(&kind) && !crate::chat_only::is_chat(t) && !extra_ok(t, kind, n, at) && (n.extra || (setting == "defer" && n.hard && n.resets > at))
 }
 /// Why a fallback reviewer has no room: its program, read afresh (passed_over), is on extra usage too, or out of
-/// allowance ("" when it has room).
-pub fn no_room(agent: &str, at: i64) -> String {
-    let over = passed_over(agent, at);
+/// allowance ("" when it has room, or when its program's setting in `ch` is `allow`: nothing is held back for it).
+pub fn no_room(agent: &str, ch: &Obj, at: i64) -> String {
+    let k = agent_of(agent).kind;
+    if in_work(ch, &k) == "allow" { return String::new(); }
+    let over = passed_over(agent, ch, at);
     if !over.is_empty() { return over; }
-    let n = now_of(&agent_of(agent).kind, at);
+    let n = now_of(&k, at);
     if n.hard && n.resets > at { format!("{agent} is out of allowance too, until {}", hm(n.resets, at)) } else { String::new() }
 }
 /// The first on `reviewer.fallback` that could review now: not `from`, able to review here under its access, and its
@@ -47,7 +50,7 @@ pub fn no_room(agent: &str, at: i64) -> String {
 pub fn fallback_for(ch: &Obj, from: &str, at: i64) -> Option<String> {
     let list = list_of(ch.at("reviewer.fallback"));
     if list.is_empty() { return None; }
-    let next = next_fallback(&list, from, &[], |a| { let u = usable(a, ch.s("reviewer.access")); if u.is_empty() { no_room(a, at) } else { u } }).0;
+    let next = next_fallback(&list, from, &[], |a| { let u = usable(a, ch.s("reviewer.access")); if u.is_empty() { no_room(a, ch, at) } else { u } }).0;
     (!next.is_empty()).then_some(next)
 }
 /// A review stopped for extra usage: the next on `reviewer.fallback` that has room now, as the settings read now.
@@ -69,8 +72,8 @@ pub fn stop_review(id: &str, kind: &str, n: &Now, how: &str, at: i64) -> bool {
 /// that took it over now; false when the task was stopped to wait for the window, or for you.
 pub fn may_review(id: &str, g: &mut Guard, ch: &Obj) -> Res<bool> {
     let t = g.check()?;
-    let s = setting_of(&t);
     let (agent, kind) = program_of(&t, ch);
+    let s = setting_for(&t, &kind);
     if s == "allow" || !READ.contains(&kind.as_str()) { return Ok(true); }
     let at = now();
     // Codex's window read afresh before a review, as before a start; a fallback's too, before it is chosen (no_room).

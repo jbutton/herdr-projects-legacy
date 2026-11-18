@@ -13,7 +13,7 @@ use crate::limits::reached::{stop_at, StopHow};
 use crate::store::failures::failure_patch;
 use crate::store::tasks::{get, update_wait, Change, Task};
 use crate::store::usage::{fold, now_of, READ};
-use crate::usage::words::setting_of;
+use crate::usage::words::setting_for;
 
 /// herdr's answer for it, as `hand` gives it: nothing was typed.
 pub const GONE: &str = "agent_gone";
@@ -24,7 +24,7 @@ pub fn error() -> HerdrError { HerdrError { code: GONE.into(), message: "the age
 pub fn window_used(id: &str) -> Option<Obj> {
     let t = get(id)?;
     let kind = t.t("agent");
-    if setting_of(&t) != "defer" || crate::chat_only::is_chat(&t) || !READ.contains(&kind.as_str()) { return None; }
+    if setting_for(&t, &kind) != "defer" || crate::chat_only::is_chat(&t) || !READ.contains(&kind.as_str()) { return None; }
     let at = now();
     let fresh = if kind == "codex" { codex_newest() } else { crate::usage::tick::reading_of(&t, &kind, "agent") };
     if let Some(r) = fresh { fold(&kind, &r, at); }

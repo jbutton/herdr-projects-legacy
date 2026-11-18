@@ -2,8 +2,9 @@
 //! `ask` and `defer` its agent is stopped the moment it is seen on extra usage, its work kept, nothing committed or
 //! merged. `ask` waits for you; `defer` hands it to the next agent on `worker.fallback` that is not on extra usage
 //! (`handover_job`), else waits for its window and carries on by itself at the reset (`lifted`, seen by the limits'
-//! tick). Under `defer` a turn that ended out of allowance waits for its window too (`out_of_allowance`).
-use super::words::setting_of;
+//! tick). Under `defer` a turn that ended out of allowance waits for its window too (`out_of_allowance`). Each goes by
+//! the setting of the program it is about: the one stopped, the one about to take over (words.rs: `setting_for`).
+use super::words::{in_work, setting_for};
 use crate::agents::read_turn::Turn;
 use crate::clock::now;
 use crate::finish::hand_over::{hand_over, usable};
@@ -37,7 +38,7 @@ pub fn stop_now(id: &str, kind: &str, n: &Now, since: i64, how: &str) -> Option<
 /// `reviewer.fallback` has room (review.rs). `ask`: only you say so.
 pub fn lifted(t: &Obj) -> bool {
     let ls = t.at("limitStop");
-    match setting_of(t).as_str() {
+    match setting_for(t, ls.s("limit")).as_str() {
         "allow" => true,
         "defer" => {
             let at = now();
@@ -64,18 +65,20 @@ pub fn follow(t: &Obj) {
     });
 }
 /// The first agent on `worker.fallback` that could take the task over now: not the one on it, not tried since you last
-/// stepped in, installed, able to work under its access, and its program not on extra usage.
+/// stepped in, installed, able to work under its access, and not passed over for extra usage (`passed_over`).
 pub fn fallback_for(t: &Obj, now_ms: i64) -> Option<String> {
     let w = work(Some(t));
     let list = list_of(w.at("worker.fallback"));
     if list.is_empty() { return None; }
     let (from, access) = (on_now(t, &w.t("worker.agent")), w.t("worker.access"));
-    let next = next_fallback(&list, &from, &strings(t.at("tried")), |a| { let u = usable(a, &access); if u.is_empty() { passed_over(a, now_ms) } else { u } }).0;
+    let next = next_fallback(&list, &from, &strings(t.at("tried")), |a| { let u = usable(a, &access); if u.is_empty() { passed_over(a, &w, now_ms) } else { u } }).0;
     (!next.is_empty()).then_some(next)
 }
-/// Why a fallback agent is passed over for extra usage: its program is on it too, as read afresh ("" when it is not).
-pub fn passed_over(agent: &str, now_ms: i64) -> String {
+/// Why a fallback agent is passed over for extra usage: its program is on it too, as read afresh, and that program's
+/// setting (in `w`, the task's settings) is `ask` or `defer` ("" when it is not: under `allow` it works on it).
+pub fn passed_over(agent: &str, w: &Obj, now_ms: i64) -> String {
     let k = agent_of(agent).kind;
+    if in_work(w, &k) == "allow" { return String::new(); }
     let n = super::gate::fresh_now(&k, now_ms);
     if !n.extra { return String::new(); }
     format!("{agent} is on extra usage too{}", if n.resets > 0 { format!(", until {}", super::words::hm(n.resets, now_ms)) } else { String::new() })
@@ -121,7 +124,7 @@ pub fn out_of_allowance(id: &str, t: &Task, x: &Turn, why: &str) -> bool {
     if !why.starts_with("out of allowance") { return false; }
     let (kind, at) = (t.t("agent"), now());
     if let Some(r) = &x.window { fold(&kind, r, at); }
-    if setting_of(t) != "defer" || crate::chat_only::is_chat(t) { return false; }
+    if setting_for(t, &kind) != "defer" || crate::chat_only::is_chat(t) { return false; }
     let resets = x.window.as_ref().map(|r| r.resets).filter(|r| *r > at).unwrap_or_else(|| words_reset(why, at));
     if resets <= at { return false; }
     let extra = obj(json!({ "how": "defer", "resets": resets, "hard": true }));
