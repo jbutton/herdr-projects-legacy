@@ -79,11 +79,13 @@ herdr-projects set usage.extra.codex allow     Codex may run on extra usage
 herdr-projects set usage.extra.claude defer    Claude Code never does: it waits for its window
 ```
 
-- **Each program goes by its own, where one is said, else by `usage.extra`**: the same three values, below. It is
-  looked up as every work setting is, and the nearest place that says either counts; in that place the program's own
-  comes before `usage.extra`. So `set usage.extra allow --task 12` lets task 12 run on extra usage whatever its
-  program, though you said `usage.extra.claude defer`; and a repo's own file saying `usage.extra.claude allow` cannot
-  loosen your `usage.extra defer`.
+- **Each program goes by its own, where one is said, else by `usage.extra`**: the same three values, below. Your places
+  are the ones of every work setting: the task → your entry for the repo → you. A program's own, said in any of them,
+  comes before every `usage.extra` of yours: `set usage.extra allow --repo my-app` does not let Claude Code run on extra
+  usage there when you said `usage.extra.claude defer`; for one task, say it for that program:
+  `set usage.extra.claude allow --task 12`. Where you said nothing for the program, the nearest `usage.extra` counts.
+- **The repo's own file comes after all of yours**, the same way: its word for the program, then its `usage.extra`. So
+  what it says for one program never loosens what you set, `usage.extra` included.
 - **The board decides by the program that is about to run, or is running**: the working agent's at its start and at
   work, the reviewer's for a review (the worker's program, where the reviewer's is not installed here), and a
   fallback's own before it takes over. A Claude Code agent under `defer` waits for its window while a Codex review of
@@ -91,11 +93,13 @@ herdr-projects set usage.extra.claude defer    Claude Code never does: it waits 
   it.
 - **A stop for extra usage follows its own program's setting** while it waits: set to `allow`, it carries on.
 - **Where it shows**: `show` and `show <id>` have a row for each, with where its value came from: `you`, or
-  `you (usage.extra)` where that place said only `usage.extra` (not marked `*` then: nothing was set there for that
-  program). `details <id>`: the `usage` entry has what its program goes by (`setting`, the setting that said it in
-  `settingName`, where in `settingFrom`) and what each program goes by (`settings`). A start that waits for you names
-  the setting that held it: `(usage.extra.claude ask)`.
-- In your `config.json` it is kept beside `usage.extra`: `"usage": { "extra": "defer", "extra.codex": "allow" }`.
+  `you (usage.extra)` where it is your `usage.extra` that counts for that program (not marked `*` then: nothing was set
+  for that program there). `details <id>`: the `usage` entry has what its program goes by (`setting`, the setting that
+  said it in `settingName`, where in `settingFrom`) and what each program goes by (`settings`). A start that waits for
+  you names the setting that held it: `(usage.extra.claude ask)`.
+- In your `config.json` it is kept beside `usage.extra`: `"usage": { "extra": "defer", "extra.codex": "allow" }`. Written
+  by hand below it (`"usage.extra": { "codex": "allow" }`) it is read too, and setting or unsetting `usage.extra` keeps
+  it.
 
 Below, `ask`, `defer` and `allow` are each program's as it reads them.
 
@@ -190,7 +194,7 @@ A chat-only task gets the warnings only: you are in that conversation.
   (`review.rs`), the stops and their carrying on (`stop.rs`), the words and the setting each program goes by
   (`words.rs`: `setting_for`); the stops are the limits' own (`limitStop` with `what: usage`; `role: reviewer` for a
   review);
-- `crates/core/src/store/settings/lookup.rs`: a setting that falls to another place by place (`falls` in
-  settings_list.rs: `usage.extra.codex` to `usage.extra`);
+- `crates/core/src/store/settings/lookup.rs`: a setting that falls to another (`fall_back`; `falls` in
+  settings_list.rs: `usage.extra.codex` to `usage.extra`); `places.rs`: how your file keeps both;
 - tests: `tests/usage.rs` and `tests/usage/` (`review.rs`: the review; `early.rs`: a reset bought early; `program.rs`:
   each program by its own setting).

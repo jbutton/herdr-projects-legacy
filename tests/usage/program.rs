@@ -1,7 +1,8 @@
-//! One program's own setting (`usage.extra.claude`, `usage.extra.codex`): each program goes by its own where the nearest
-//! place says one, else by `usage.extra`. A Claude agent waits for its window while a Codex review runs on extra usage;
-//! a working Codex agent works on; a fallback, the worker's or the reviewer's, goes by its own program's; `usage.extra`
-//! alone counts for every program; and the lookup's order, `show`, `details` and how your file keeps both.
+//! One program's own setting (`usage.extra.claude`, `usage.extra.codex`): each program goes by its own where any of your
+//! places says one, else by `usage.extra`, and the repo's own file after them, the same way. A Claude agent waits for its
+//! window while a Codex review runs on extra usage; a working Codex agent works on; a fallback, the worker's or the
+//! reviewer's, goes by its own program's; `usage.extra` alone counts for every program; and the lookup's order, `show`,
+//! `details` and how your file keeps both, however it was spelled.
 use super::review::{reviewers, window};
 use super::*;
 use sw::store::handovers::{handovers, last_handover};
@@ -22,7 +23,9 @@ fn has(text: &str, re: &str) -> bool { regex::Regex::new(re).unwrap().is_match(t
 
 #[test]
 fn usage_extra_per_program_holds_a_claude_start_for_its_window_and_reviews_on_codex_extra_usage() {
-    let w = world_with(Opts { repo: true, settings: json!({ "usage.extra.claude": "defer", "usage.extra.codex": "allow" }), ..Default::default() });
+    // Your entry for the repo allows extra usage for all: your word for Claude Code alone still counts.
+    let settings = json!({ "usage.extra.claude": "defer", "usage.extra.codex": "allow", "repos": { "proj": { "usage.extra": "allow" } } });
+    let w = world_with(Opts { repo: true, settings, ..Default::default() });
     w.script(json!({ "worker": [step(1)], "reviewer": [pass()] }));
     let t0 = sw::clock::now();
     at(t0);
@@ -59,7 +62,7 @@ fn usage_extra_per_program_leaves_a_codex_agent_at_work_on_extra_usage_under_a_t
     put(&id, "transcript", json!(file.display().to_string()));
     codex_turn(&file, t0, 100.0, resets, true);
     tick(&w, t0 + 10_000);
-    // In one place its own setting comes before `usage.extra`: it works on, and is only marked.
+    // Its own setting comes before `usage.extra`: it works on, and is only marked.
     let t = task(&id);
     assert_eq!((t.s("stage"), t.at("extra").s("agent"), t.b("limitStop")), ("working", "codex", false), "{}", t.s("msg"));
     assert_eq!((usage_of(&id).s("setting"), usage_of(&id).s("settingFrom")), ("allow", "this task"));
@@ -117,11 +120,12 @@ fn usage_extra_alone_counts_for_every_program_and_a_programs_own_ask_names_itsel
 }
 
 #[test]
-fn usage_extra_per_program_is_looked_up_place_by_place_its_own_before_usage_extra_and_shown_with_where_it_came_from() {
+fn usage_extra_per_program_said_anywhere_of_yours_comes_before_usage_extra_and_the_repo_file_after_both() {
     let w = world_with(Opts { repo: true, repo_settings: Some(json!({ "usage": { "extra.claude": "allow", "extra": "ask" } })), ..Default::default() });
     let id = w.add("One");
     crate::settings::started(&w, &id);
     let ot = |name: &str| { let t = task(&id); on(name, &Scope::task(&t)) };
+    let here = || { let t = task(&id); show_text(&Scope::task(&t)) };
     let you = Scope::you;
     assert_eq!(on("usage.extra.claude", &you()), p("allow", "built in"));
     // The repo's file says both: its own comes first there.
@@ -138,21 +142,30 @@ fn usage_extra_per_program_is_looked_up_place_by_place_its_own_before_usage_extr
     assert!(has(&mine, r"\n\* usage\.extra +defer +you\n"), "{mine}");
     assert!(has(&mine, r"\n {2}usage\.extra\.claude +defer +you \(usage\.extra\)\n"), "not yours as such: {mine}");
     assert!(has(&mine, r"\n\* usage\.extra\.codex +allow +you\n"), "{mine}");
-    // A nearer place's `usage.extra` comes before your program's own.
+    // A program's own, said by you, is not passed over for a nearer `usage.extra`: your entry for the repo's, the task's.
+    set_value("usage.extra.claude", &json!("defer"), &you()).unwrap();
+    set_value("usage.extra", &json!("allow"), &Scope::repo("proj")).unwrap();
     set_value("usage.extra", &json!("ask"), &Scope::task(&task(&id))).unwrap();
+    assert_eq!((ot("usage.extra.claude"), ot("usage.extra.codex")), (p("defer", "you"), p("allow", "you")));
+    assert!(has(&here(), r"\n {2}usage\.extra\.claude +defer +you\n"), "{}", here());
+    // Where you said nothing for that program, the nearest `usage.extra` counts; a task's own for it comes first of all.
+    unset_value("usage.extra.codex", &you()).unwrap();
     assert_eq!(ot("usage.extra.codex"), p("ask", "this task (usage.extra)"));
-    set_value("usage.extra.codex", &json!("allow"), &Scope::task(&task(&id))).unwrap();
-    let theirs = show_text(&Scope::task(&task(&id)));
-    assert!(has(&theirs, r"\n\* usage\.extra\.codex +allow +this task\n") && has(&theirs, r"\n {2}usage\.extra\.claude +ask +this task \(usage\.extra\)\n"), "{theirs}");
-    let rows: Vec<Value> = sw::store::settings::show::rows(&Scope::task(&task(&id))).iter().map(|r| r.json()).collect();
-    let claude = rows.iter().find(|r| r.s("name") == "usage.extra.claude").unwrap();
-    assert_eq!((claude.b("own"), claude.s("via"), claude.s("place")), (false, "usage.extra", "task"));
-    // Each `unset` hands it to the next place down; yours of `usage.extra` goes, its program's own stays.
-    unset_value("usage.extra.codex", &Scope::task(&task(&id))).unwrap();
+    let rows: Vec<Value> = { let t = task(&id); sw::store::settings::show::rows(&Scope::task(&t)).iter().map(|r| r.json()).collect() };
+    let codex = rows.iter().find(|r| r.s("name") == "usage.extra.codex").unwrap();
+    assert_eq!((codex.b("own"), codex.s("via"), codex.s("place")), (false, "usage.extra", "task"));
+    set_value("usage.extra.claude", &json!("allow"), &Scope::task(&task(&id))).unwrap();
+    assert_eq!(ot("usage.extra.claude"), p("allow", "this task"));
+    assert!(has(&here(), r"\n\* usage\.extra\.claude +allow +this task\n") && has(&here(), r"\n {2}usage\.extra\.codex +ask +this task \(usage\.extra\)\n"), "{}", here());
+    // Each `unset` hands it to the next one down, the repo's file last.
+    unset_value("usage.extra.claude", &Scope::task(&task(&id))).unwrap();
     unset_value("usage.extra", &Scope::task(&task(&id))).unwrap();
+    assert_eq!((ot("usage.extra.claude"), ot("usage.extra.codex")), (p("defer", "you"), p("allow", "your entry for proj (usage.extra)")));
+    unset_value("usage.extra.claude", &you()).unwrap();
+    unset_value("usage.extra", &Scope::repo("proj")).unwrap();
     unset_value("usage.extra", &you()).unwrap();
-    assert_eq!(saved()["usage"], json!({ "extra.codex": "allow" }));
-    assert_eq!((ot("usage.extra.codex"), ot("usage.extra.claude")), (p("allow", "you"), p("allow", "the repo's file")));
+    assert!(saved()["usage"].is_null(), "{}", saved());
+    assert_eq!((ot("usage.extra.claude"), ot("usage.extra.codex")), (p("allow", "the repo's file"), p("ask", "the repo's file (usage.extra)")));
 }
 
 #[test]
@@ -163,4 +176,20 @@ fn usage_extra_per_program_written_by_hand_below_usage_extra_is_read_and_kept() 
     set_value("usage.extra", &json!("ask"), &Scope::you()).unwrap();
     assert_eq!(saved()["usage"], json!({ "extra.codex": "defer", "extra": "ask" }));
     assert_eq!((on("usage.extra.codex", &Scope::you()), on("usage.extra.claude", &Scope::you())), (p("defer", "you"), p("ask", "you (usage.extra)")));
+}
+
+#[test]
+fn usage_extra_per_program_below_a_dotted_usage_extra_is_kept_when_usage_extra_is_set_or_unset() {
+    let _w = world_with(Opts { repo: true, settings: json!({ "usage.extra": { "claude": "defer", "codex": "ask" } }), ..Default::default() });
+    let both = || (on("usage.extra.claude", &Scope::you()), on("usage.extra.codex", &Scope::you()));
+    assert_eq!(both(), (p("defer", "you"), p("ask", "you")));
+    assert!(sw::store::settings::show::problems(None).is_empty(), "{:?}", sw::store::settings::show::problems(None));
+    set_value("usage.extra", &json!("allow"), &Scope::you()).unwrap();
+    assert_eq!((both(), on("usage.extra", &Scope::you())), ((p("defer", "you"), p("ask", "you")), p("allow", "you")), "{}", saved());
+    unset_value("usage.extra", &Scope::you()).unwrap();
+    assert_eq!(both(), (p("defer", "you"), p("ask", "you")), "{}", saved());
+    assert_eq!((saved()["usage.extra.claude"].clone(), saved()["usage.extra.codex"].clone(), saved()["usage"].clone()), (json!("defer"), json!("ask"), Value::Null));
+    // Each program's own taken out leaves the other where it is.
+    unset_value("usage.extra.claude", &Scope::you()).unwrap();
+    assert_eq!(both(), (p("allow", "built in"), p("ask", "you")), "{}", saved());
 }

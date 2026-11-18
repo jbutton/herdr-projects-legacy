@@ -93,6 +93,6 @@ each. This copy makes no version tags yet, so the list is one section.
   `run.windowEnd pause` lets a task still working when its window closes end the step under way and carry on by itself
   in the next window. ([#33](https://github.com/jbutton/herdr-projects-legacy/pull/33))
 - `usage.extra.claude` and `usage.extra.codex`: extra usage can be allowed for one program and not the other (Codex
-  reviews on its credits while a Claude Code agent waits for its window). Each program goes by its own where one is
-  said, else by `usage.extra`, place by place, and `show`, `show <id>` and `details <id>` say which counted and where.
+  reviews on its credits while a Claude Code agent waits for its window). A program's own, said anywhere of yours,
+  comes before any `usage.extra`, and `show`, `show <id>` and `details <id>` say which counted and where.
   ([#34](https://github.com/jbutton/herdr-projects-legacy/pull/34))

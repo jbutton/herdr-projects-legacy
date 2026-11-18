@@ -107,31 +107,35 @@ fn read_yours() -> Mine {
 pub fn write_yours(name: &str, value: Option<&Value>, repo: &str) -> crate::err::Res<()> {
     write_at(name, value, &if repo.is_empty() { vec![] } else { vec!["repos".to_string(), repo.to_string()] })
 }
+/// Take setting `full`'s own value out of `o`, `rest` the part of its name still to find there, at every spelling a hand
+/// or this program wrote: dotted (`"usage.extra"`), nested (`"usage": { "extra" }`) or both (`"usage": { "extra.codex" }`).
+/// What was nested below it for the settings under it (`"usage.extra": { "codex": … }`) is kept, beside it
+/// (`"usage.extra.codex"`). A part left empty goes.
+fn take(o: &mut Obj, rest: &str, full: &str) {
+    let keys: Vec<String> = o.keys().filter(|k| k.as_str() == rest || rest.starts_with(&format!("{k}."))).cloned().collect();
+    for k in keys {
+        if k == rest {
+            let Some(Value::Object(kids)) = o.shift_remove(&k) else { continue };
+            for (c, v) in kids { let n = format!("{k}.{c}"); if entry_of(&format!("{full}.{c}")).is_some() && !o.contains_key(&n) { o.insert(n, v); } }
+        } else if let Some(Value::Object(inner)) = o.get_mut(&k) {
+            take(inner, &rest[k.len() + 1..], full);
+            if inner.is_empty() { o.shift_remove(&k); }
+        }
+    }
+}
 /// The same at any place in your file: `[]` your own, `["repos", <repo>]`, `["coordinators", "main"]`. A place left
 /// with nothing in it goes, and so does each part above it that it leaves empty.
 pub fn write_at(name: &str, value: Option<&Value>, path: &[String]) -> crate::err::Res<()> {
     let mut file = read_obj(&config_file()).unwrap_or_default();
-    let parts: Vec<&str> = name.split('.').collect();
     let keys = keys_of(name);
-    let keys: Vec<&str> = keys.iter().map(|k| k.as_str()).collect();
     {
         let mut at: &mut Obj = &mut file;
         for p in path { at = at.obj_mut(p); }
-        at.shift_remove(name); // the dotted spelling, where a hand wrote it that way
-        // What a hand nested below the setting (`"extra": { "codex": … }`) is kept, beside it (`"extra.codex"`).
-        fn drop(o: &mut Obj, parts: &[&str], name: &str) {
-            if parts.len() == 1 {
-                if let Some(Value::Object(kids)) = o.shift_remove(parts[0]) { for (k, v) in kids { if entry_of(&format!("{name}.{k}")).is_some() { o.insert(format!("{}.{k}", parts[0]), v); } } }
-                return;
-            }
-            if let Some(Value::Object(inner)) = o.get_mut(parts[0]) { drop(inner, &parts[1..], name); if inner.is_empty() { o.shift_remove(parts[0]); } }
-        }
-        drop(at, &parts, name); // nested at every dot, where a hand wrote it that way
-        drop(at, &keys, name);
+        take(at, name, name);
         if let Some(v) = value {
             let mut o = at;
             for p in &keys[..keys.len() - 1] { o = o.obj_mut(p); }
-            o.insert(keys[keys.len() - 1].to_string(), v.clone());
+            o.insert(keys[keys.len() - 1].clone(), v.clone());
         }
     }
     fn prune(o: &mut Obj, path: &[String]) {
