@@ -140,3 +140,20 @@ fn run_window_pause_a_stop_for_extra_usage_whose_reset_comes_outside_the_window_
     limits(&w, local(0, 22, 0) + 30_000);
     assert_eq!(settle(&id).s("stage"), "working");
 }
+
+#[test]
+fn run_window_pause_does_not_hold_a_repair_of_work_that_waited_for_your_approval() {
+    let w = world();
+    w.script(json!({ "worker": [{ "status": "working", "after": 0, "then": turn() }, { "files": { "f.txt": "v2\n" }, "note": "Repaired." }], "reviewer": [passes(), passes()] }));
+    let id = night_work(&w, "pause");
+    // Finished inside its window: it waits for your approval.
+    assert_eq!(end_turn(&w, &id, local(0, 5, 55)).s("stage"), "approval");
+    // At 10:00 main conflicts and the board sends the repair (sync/conflict.rs); its turn, check and review go on, and
+    // it waits for your approval again, not for the night.
+    sw::clock::set(Some(local(0, 10, 0)));
+    sw::flow::send::send_own(&id, "Main moved and conflicts with this branch: merge it in and fix it.", "conflict", false, Obj::new(), 0).unwrap();
+    sw::clock::set(Some(local(0, 10, 15)));
+    let t = settle(&id);
+    assert_eq!(t.s("stage"), "approval", "{} {:?}", t.s("msg"), t.at("limitStop"));
+    assert_eq!(reviewer_starts(&w), 2);
+}

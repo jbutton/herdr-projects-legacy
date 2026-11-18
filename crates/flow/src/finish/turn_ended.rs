@@ -248,6 +248,6 @@ fn finish_steps(id: &str, g: &mut Guard, mut t: Task, ev: Option<Value>, force: 
     let _ = &t;
     if super::chat_only::turn_waits(g, &said)? { return Ok(()); } // a chat-only task: every turn end waits for you
     if super::chat::after_turn(g)? { return Ok(()); } // a chat with reviewed work: kept as it was, or reviewed once you are done
-    if crate::run_window::pause::at_turn_end(id) { return Ok(()); } // run.windowEnd pause, its window closed: the finish line waits for it
+    if crate::run_window::pause::at_turn_end(id, wake.s("reason")) { return Ok(()); } // run.windowEnd pause, its window closed: the finish line waits for it
     pipeline(id, g, &said, wake.b("keepIntent"), wake.s("reason"), None)
 }

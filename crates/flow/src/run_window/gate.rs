@@ -59,7 +59,7 @@ pub fn held(w: &Obj) -> bool {
 /// As a task is delegated (actions/start.rs, with its settings for this start already on it): what an earlier round
 /// left of its window goes, and `--now` outside its window is leave until the window next opens.
 pub fn on_delegate(t: &mut Task, now_said: bool) {
-    for k in ["windowWait", "windowLate", "windowOk"] { t.del(k); }
+    for k in ["windowWait", "windowLate", "windowOk", "windowRepair"] { t.del(k); }
     let at = now();
     if now_said && outside(t, at) { let ok = leave_now(t, at); t.put("windowOk", ok); }
 }

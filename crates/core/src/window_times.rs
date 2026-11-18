@@ -13,7 +13,7 @@ const AHEAD: i64 = 8;
 /// A day's minute as a moment here, in ms: 1440 is the next day's midnight.
 fn moment(d: NaiveDate, min: u32) -> i64 {
     let at = d.and_hms_opt(0, 0, 0).unwrap_or_default() + Duration::minutes(min as i64);
-    Local.from_local_datetime(&at).earliest().or_else(|| Local.from_local_datetime(&(at + Duration::hours(1))).earliest()).map(|t| t.timestamp_millis()).unwrap_or(0)
+    Local.from_local_datetime(&at).earliest().or_else(|| (1..=180).find_map(|m| Local.from_local_datetime(&(at + Duration::minutes(m))).earliest())).map(|t| t.timestamp_millis()).unwrap_or(0)
 }
 /// The open stretches around `at` (from, to: to not included), in order and joined where they touch.
 fn stretches(ws: &[Window], at: i64) -> Vec<(i64, i64)> {
@@ -67,5 +67,14 @@ mod tests {
         assert_eq!(stretch("thu-sun", at(6, 12, 0)), Some((at(3, 0, 0), at(7, 0, 0))));
         assert!(open("any", at(0, 3, 0)) && next_open("any", at(0, 3, 0)) == 0 && stretch("any", at(0, 3, 0)).is_none());
         assert!(open("nights", at(3, 23, 30)) && !open("nights", at(3, 12, 0)));
+    }
+    #[test]
+    fn a_time_the_clock_skips_is_the_first_moment_after_the_gap() {
+        // The night summer time starts, where this machine's time zone has one at 02:00 (as Europe's, on 2027-03-28).
+        let day = NaiveDate::from_ymd_opt(2027, 3, 28).unwrap();
+        if Local.from_local_datetime(&day.and_hms_opt(2, 30, 0).unwrap()).earliest().is_some() { return; }
+        let three = Local.from_local_datetime(&day.and_hms_opt(3, 0, 0).unwrap()).earliest().unwrap().timestamp_millis();
+        assert_eq!(moment(day, 150), three);
+        assert!(open("02:30-05:00", three + 10 * 60_000));
     }
 }

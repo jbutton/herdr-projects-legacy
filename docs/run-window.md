@@ -88,9 +88,10 @@ alone.
 - **When the window opens, it carries on by itself**: a turn that ended goes through the check and the review, what was
   kept goes to the agent, a review that waited is done. It waits by itself as a queued task does: not "needs you", no
   word to `board.notify`.
-- **What `pause` does not hold**: work that waits for your approval, or merges (a repair the board sends for it: a
-  conflict with main, GitHub's checks failing, pull-request feedback); a turn a provider error cut off and the board
-  tries again; a hand-over to `worker.fallback`; an agent started again after its terminal went; an approved merge on
+- **What `pause` does not hold**: work that waits for your approval, or merges. A repair the board sends for it (a
+  conflict with main, GitHub's checks failing, pull-request feedback) goes on with all that follows it: the repair's
+  turn, its check and review, and what that review sends back, until it waits for you again (and until the task is
+  delegated anew). Nor a turn a provider error cut off and the board tries again; a hand-over to `worker.fallback`; an agent started again after its terminal went; an approved merge on
   its way. A chat-only task is a conversation with you: it is never held or paused.
 
 ## The machine asleep, or the board closed

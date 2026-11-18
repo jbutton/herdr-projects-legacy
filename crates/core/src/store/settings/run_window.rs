@@ -95,9 +95,22 @@ fn meant(w: &str) -> Option<String> {
     let all: Vec<&str> = WORDS.iter().copied().chain(DAYS.iter().copied()).collect();
     crate::store::settings::values::nearest(w, &all)
 }
+/// Days typed without their comma (`sat sun`), hours without their dash (`22:00 06:00`): joined.
+fn joined(s: &str) -> String {
+    let list = |w: &str| w.split(',').all(|p| day_item(p).is_some());
+    let mut out: Vec<String> = vec![];
+    for w in s.split(' ') {
+        match out.last_mut() {
+            Some(last) if list(last) && list(w) => { last.push(','); last.push_str(w); }
+            Some(last) if clock(last).is_some() && clock(w).is_some() => { last.push('-'); last.push_str(w); }
+            _ => out.push(w.to_string()),
+        }
+    }
+    out.join(" ")
+}
 /// Each word that cannot be read put right, as long as that leads somewhere: the whole value that would be taken.
 fn put_right(s: &str) -> Option<String> {
-    let mut cur = s.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    let mut cur = joined(&s.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase());
     for _ in 0..6 {
         if read(&cur).is_ok() { return (cur != s.to_lowercase()).then_some(cur); }
         let fine = |w: &str| WORDS.contains(&w) || day_item(w).is_some() || hours_of(w).is_some();
@@ -152,5 +165,7 @@ mod tests {
         assert!(refused("22:00-22:00").contains("begins where it ends"));
         assert!(refused("any, nights").contains("any stands alone"));
         assert!(refused("nights,").contains("nothing between two commas"));
+        assert!(refused("sat sun").ends_with("Did you mean sat,sun?"), "{}", refused("sat sun"));
+        assert!(refused("mon-fri 22:00 06:00").ends_with("Did you mean mon-fri 22:00-06:00?"), "{}", refused("mon-fri 22:00 06:00"));
     }
 }
