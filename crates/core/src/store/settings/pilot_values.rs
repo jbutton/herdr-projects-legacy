@@ -62,13 +62,14 @@ pub fn may_change(may: &str, name: &str) -> bool {
 /// Awake hours as read: the days (0 Monday … 6 Sunday) and the minutes of the day from and to (to before from: across
 /// midnight, the night belongs to the day it began on).
 pub struct Hours { pub days: Vec<u32>, pub from: u32, pub to: u32, pub text: String }
-fn clock(s: &str) -> Option<u32> {
+/// `22:00` as minutes of the day (`24:00` ends one); `run.window` reads its hours the same way (run_window.rs).
+pub fn clock(s: &str) -> Option<u32> {
     let (h, m) = s.split_once(':')?;
     if h.is_empty() || h.len() > 2 || m.len() != 2 || !h.bytes().chain(m.bytes()).all(|b| b.is_ascii_digit()) { return None; }
     let (h, m): (u32, u32) = (h.parse().ok()?, m.parse().ok()?);
     (h <= 24 && m < 60 && h * 60 + m <= 1440).then_some(h * 60 + m)
 }
-fn day(s: &str) -> Option<u32> { DAYS.iter().position(|d| *d == s).map(|n| n as u32) }
+pub fn day(s: &str) -> Option<u32> { DAYS.iter().position(|d| *d == s).map(|n| n as u32) }
 pub fn hours_of(s: &str) -> Result<Hours, String> {
     let how = "any, or days and hours such as mon-fri 09:00-18:00, 22:00-06:00 or sat,sun 10:00-16:00";
     let parts: Vec<&str> = s.split_whitespace().collect();

@@ -90,7 +90,8 @@ pub fn delegate_with(id: &str, asked: Vec<(String, Value)>, w: Wait) -> Res<Task
         let id = t.t("id");
         if t.s("stage") == "attempts" { crate::fail!("{id} already has its attempts working on it."); }
         if t.s("stage") == "pick" { crate::fail!("{id} waits for you to pick one of its attempts: herdr-projects pick {id} <letter>."); }
-        if is_agent_stage(t.s("stage")) || runner_alive(t) { crate::fail!("{id} already has an agent working on it."); }
+        // One held for its run window has no agent yet: delegated again (`--now`, new settings), it is queued afresh.
+        if (is_agent_stage(t.s("stage")) && !crate::run_window::gate::start_waits(t)) || runner_alive(t) { crate::fail!("{id} already has an agent working on it."); }
         if t.b("autoMerge") { crate::fail!("{id} is waiting for an automatic merge. Reply to its agent to cancel that first."); }
         if t.at("link").b("socket") && !same_socket(t.at("link").s("socket"), &socket) { crate::fail!("{id} lives in another herdr session. Open the board there."); }
         if !values.is_empty() { let s = t.obj_mut("settings"); for (k, v) in &values { s.insert(k.clone(), v.clone()); } }
@@ -123,6 +124,7 @@ pub fn delegate_with(id: &str, asked: Vec<(String, Value)>, w: Wait) -> Res<Task
         for k in ["checkFails", "reviewRounds", "prRounds", "syncRepairs", "retried"] { t.put(k, 0); }
         if let Some(d) = &deps { t.put("after", d.clone()); }
         after::on_delegate(t, w.now);
+        crate::run_window::gate::on_delegate(t, w.now);
         Ok(Change::Write)
     })?;
     for c in &stale { let _ = crate::attempts::adopt::discard(&t, c); }
@@ -134,16 +136,26 @@ pub fn delegate_with(id: &str, asked: Vec<(String, Value)>, w: Wait) -> Res<Task
 /// Start queued tasks while slots are free. Counting and claiming happen under one lock, so two passes cannot both
 /// take the last slot. A turn the human started in an agent's terminal counts toward the total.
 pub fn start_queued(socket: &str) -> Vec<String> {
-    // A task done several times at once is split into its attempts first: each then waits for a slot of its own.
-    for w in list(ListOpts::default()) { if w.s("stage") == "queued" && same_socket(w.at("link").s("socket"), socket) { let _ = crate::attempts::fan_out::fan_out(w.s("id")); } }
+    // A task done several times at once is split into its attempts first: each then waits for a slot of its own. One
+    // held for its window waits whole, and is split when its window opens. Whether it is held is asked once a pass:
+    // one let go between two asks would start whole, its attempts never made.
+    let mut held = std::collections::HashMap::new();
+    for w in list(ListOpts::default()) {
+        if w.s("stage") != "queued" || !same_socket(w.at("link").s("socket"), socket) { continue; }
+        let h = crate::run_window::gate::held(&w);
+        held.insert(w.t("id"), h);
+        if !h { let _ = crate::attempts::fan_out::fan_out(w.s("id")); }
+    }
     let mut started = vec![];
     let _ = with_lock_wait("slots", 5000, || {
         let all = list(ListOpts { attempts: true, ..Default::default() });
-        // A remembered auto-merge runs nothing, nor does a task waiting in line to merge (finish/line.rs).
-        let mut busy = all.iter().filter(|t| SLOT_STAGES.contains(&t.s("stage")) && !t.b("autoMerge") && !crate::finish::line::in_line(t)).count() as i64;
+        // A task paused at its window's end whose window is open again keeps a slot for itself: it goes on first.
+        let mut busy = busy_of(&all) + all.iter().filter(|t| crate::run_window::pause::to_go_on(t)).count() as i64;
         let waiting = crate::shown::queue::order(all.iter(), socket); // the order the board says (Q#1, Q#2 …)
-        let max = setting("board.agents", None).as_i64().unwrap_or(4);
+        let max = max_agents();
         for w in waiting {
+            // outside its run.window: no slot until it opens (run_window/gate.rs)
+            if held.get(w.s("id")).copied().unwrap_or_else(|| crate::run_window::gate::held(w)) { continue; }
             if busy >= max { break; }
             if crate::leftovers::room::still_waiting(w) { continue; } // no room on the disk yet: no runner for it
             if crate::usage::gate::held(w) { continue; } // held back for extra usage (usage/gate.rs), or handed to a fallback first
@@ -157,3 +169,9 @@ pub fn start_queued(socket: &str) -> Vec<String> {
     for id in &started { spawn_runner("delegate", id, &[]); }
     started
 }
+/// The slots in use. A remembered auto-merge runs nothing, nor does a task waiting in line to merge (finish/line.rs).
+fn busy_of(all: &[Task]) -> i64 { all.iter().filter(|t| SLOT_STAGES.contains(&t.s("stage")) && !t.b("autoMerge") && !crate::finish::line::in_line(t)).count() as i64 }
+fn max_agents() -> i64 { setting("board.agents", None).as_i64().unwrap_or(4) }
+/// Is a slot free now, as `start_queued` counts them? A task paused at its window's end carries on only into one
+/// (limits/reached.rs: `lifted`), so a window's opening never runs more than `board.agents` at once.
+pub fn slot_free() -> bool { busy_of(&list(ListOpts { attempts: true, ..Default::default() })) < max_agents() }

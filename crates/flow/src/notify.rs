@@ -11,7 +11,7 @@ use crate::store::tasks::{update, Change};
 pub fn event_of(t: &Obj) -> &'static str {
     if t.b("archivedAt") { return ""; }
     let st = t.s("stage");
-    let waits_window = crate::usage::words::waits_window(t); // stopped for extra usage, and its window's reset will carry it on
+    let waits_window = crate::limits::run::waits_by_itself(t); // stopped for extra usage or for its run window: carried on by itself
     if ["asks", "reviewneeds", "plan", "pick"].contains(&st) || (st == "stopped" && t.b("limitStop") && !waits_window) || (st == "after" && t.b("afterBlocked")) || crate::usage::words::start_asks(t) { return "needs you"; }
     if st == "attempts" { return if attempts_of(t).iter().any(|c| ["asks", "reviewneeds"].contains(&c.s("stage"))) { "needs you" } else { "" }; }
     if st == "failed" || st == "nosummary" { return "failed"; }

@@ -22,8 +22,11 @@ pub fn carry_on(id: &str, raised: bool) -> Res<Said> {
     assert_unarchived(&cur)?;
     let cid = cur.t("id");
     if crate::usage::gate::start_waits(&cur) { return crate::usage::gate::start_anyway(&cid); } // held back for extra usage
+    if crate::run_window::gate::start_waits(&cur) { return crate::run_window::gate::start_anyway(&cid); } // held for its run window
     if !stopped_at_limit(&cur) { crate::fail!("{cid} was not stopped at a limit."); }
     let ls = cur.at("limitStop").clone();
+    // Stopped at its run window's end (run_window/pause.rs): late when the window opened long before; what it kept.
+    if ls.s("what") == "window" { if raised { crate::run_window::pause::mark_late(&cur); } if !ls.s("then").is_empty() { return crate::run_window::pause::carry_on(&cur, raised); } }
     let done = |out: &Said, msg: String| { let t = get(&cid).unwrap_or_else(|| out.task.clone()); say(t, if out.msg.starts_with("queued") { out.msg.clone() } else { msg }) };
     // A turn the board starts because the limit moved does not give it its limit once more: the mark is taken off
     // first, and put back if nothing could be sent.

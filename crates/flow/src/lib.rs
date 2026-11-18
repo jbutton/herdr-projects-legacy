@@ -29,6 +29,7 @@ pub mod notify;
 pub mod plan;
 pub mod remote;
 pub mod review_page;
+pub mod run_window;
 pub mod runner;
 pub mod shown;
 pub mod stalled;

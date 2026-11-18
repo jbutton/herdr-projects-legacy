@@ -134,6 +134,18 @@ pub fn tag_ids(text: &str, repos: &[String], keys: &Keys) -> String {
     }
     out
 }
+/// What `repo.key` may be (settings/values.rs, `Ty::Key`): 2 to 5 letters or digits, the first a letter, kept in capitals,
+/// or `none`; never `PR`, which a row already reads as a pull request.
+pub fn check(name: &str, v: &Value) -> crate::err::Res<Value> {
+    let refuse = |m: String| Err(crate::err::Error::refused(m));
+    let w = text(v).trim().to_string();
+    if w.to_lowercase() == NONE { return Ok(json!(NONE)); }
+    let k = w.to_uppercase();
+    let ok = v.is_string() && (2..=5).contains(&k.len()) && k.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false) && k.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
+    if !ok { return refuse(format!("{name} is a short key: 2 to 5 letters or digits, the first a letter (HSW), or none; not \"{w}\".")); }
+    if k == "PR" { return refuse(format!("{name} cannot be PR: on a row that already means a pull request. Choose another.")); }
+    Ok(json!(k))
+}
 /// A task as a commit and a pull request name it: the short name with the id it stands for, or the id alone.
 pub fn task_ref(id: &str, keys: &Keys) -> String { let short = say_id(id, keys); if short == id { id.to_string() } else { format!("{short} ({id})") } }
 

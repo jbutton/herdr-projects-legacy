@@ -42,6 +42,8 @@ pub fn run_review_with(id: &str, g: &mut Guard, text: &str, change: Option<&Valu
     let mut tries: i64 = 0;
     let mut again = true;
     loop {
+        // Under run.windowEnd pause, its window closed: the review waits for the window (run_window/pause.rs).
+        if crate::run_window::pause::before_review(id) { return Ok(Reviewed { aborted: true, ..Default::default() }); }
         // Its reviewer's program on extra usage, under `ask` or `defer`: the next on `reviewer.fallback` with room
         // reviews, else the task stops to wait for the window, or for you (usage/review.rs).
         match crate::usage::review::may_review(id, g, ch) {
