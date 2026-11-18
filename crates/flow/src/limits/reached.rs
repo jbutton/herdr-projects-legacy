@@ -28,7 +28,7 @@ pub fn stop_at(id: &str, what: &str, limit: &str, used: f64, how: StopHow) -> Op
         if how.ready { ls.put("ready", true); }
         if !how.done.is_empty() { ls.put("done", how.done.clone()); }
         for (k, v) in &how.extra { ls.put(k, v.clone()); }
-        t.put("msg", if what == "usage" { crate::usage::words::stop_line(&ls, now()) } else { stop_line(&what, &limit) });
+        t.put("msg", if what == "usage" { crate::usage::words::stop_line(&ls, now()) } else if what == "window" { crate::run_window::words::stop_line(ls.i("opens"), now()) } else { stop_line(&what, &limit) });
         t.put("limitStop", ls);
         t.put("runCarry", Value::Null);
         Ok(Change::Write)
@@ -53,7 +53,9 @@ pub fn over_now(t: &Task) -> Option<(String, f64)> {
 pub fn lifted(t: &Task) -> bool {
     if !stopped_at_limit(t) { return false; }
     let ls = t.at("limitStop");
-    if ls.s("what") == "usage" { return crate::usage::stop::lifted(t); }
+    // A stop for extra usage under `run.windowEnd pause` waits for its run window too, once its usage window reset.
+    if ls.s("what") == "usage" { return crate::usage::stop::lifted(t) && !crate::run_window::pause::holds(t, crate::clock::now()); }
+    if ls.s("what") == "window" { return crate::run_window::pause::lifted(t); }
     let limit = setting_text(&format!("limit.{}", ls.s("what")), Some(t));
     if limit == NONE { return true; }
     if ls.s("what") == "time" { ms(&limit) as f64 > ls.f("used") } else { tokens_of(&limit) as f64 > used_of(t) }

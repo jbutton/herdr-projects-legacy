@@ -19,6 +19,8 @@ pub fn named(t: &Obj) -> String { format!("{SETTING} {}", setting_text(SETTING, 
 pub fn start_line(opens: i64, now: i64) -> String { format!("{WAITS}: starts {}", hm(opens, now)) }
 /// A task paused at its window's end (`limitStop.what: window`), or one waiting for it to carry on (pause.rs).
 pub fn stop_line(opens: i64, now: i64) -> String { format!("{WAITS}: continues {}", hm(opens, now)) }
+/// What it had come to when it paused, for the task panel and `finish`: "paused when its window (nights) had closed".
+pub fn used_say(ls: &Value) -> String { format!("paused when its window ({}) had closed", ls.t("limit")) }
 /// Stopped at its window's end, to carry on by itself when the window opens again (pause.rs).
 pub fn paused(t: &Obj) -> bool { t.s("stage") == "stopped" && t.at("limitStop").s("what") == "window" && !t.b("archivedAt") }
 /// Let go or carried on well after its window opened, and no turn of its has ended since: its row says so.

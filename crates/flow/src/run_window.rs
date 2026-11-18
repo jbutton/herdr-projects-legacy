@@ -4,4 +4,5 @@
 //! extra usage: a start held in the queue (gate.rs, beside usage/gate.rs), and under `pause` the limits' own stop with
 //! its carry-on by itself (pause.rs). The words: words.rs. One area per file.
 pub mod gate;
+pub mod pause;
 pub mod words;

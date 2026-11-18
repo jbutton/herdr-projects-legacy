@@ -11,6 +11,7 @@ use sw::json::*;
 mod after;
 mod before;
 mod late;
+mod pause;
 
 /// `days` after today (the real one: the test's clock moves), at h:m on this machine's clock, in ms.
 pub fn local(days: i64, h: u32, m: u32) -> i64 {

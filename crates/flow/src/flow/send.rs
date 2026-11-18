@@ -70,6 +70,8 @@ pub fn note_rule(t: &Task) -> String { format!("Before you stop, write your clos
 /// A prompt the plugin itself sends (check output, review findings, conflict or pull-request repair). It writes
 /// expectedWake first, so the turn it causes is known to be the plugin's own: counters and an approved merge survive.
 pub fn send_own(id: &str, text: &str, reason: &str, keep_intent: bool, patch: Obj, tries: i64) -> Res<&'static str> {
+    // Under run.windowEnd pause, its window closed: a send-back of its run waits for the window (run_window/pause.rs).
+    if crate::run_window::pause::hold_send(id, text, reason, keep_intent, &patch, tries) { return Ok("held"); }
     let mut wake = obj(json!({ "reason": reason, "keepIntent": keep_intent, "at": now() }));
     if tries > 0 { wake.put("tries", tries); }
     let wake = Value::Object(wake);
