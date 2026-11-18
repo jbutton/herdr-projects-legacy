@@ -82,3 +82,8 @@ each. This copy makes no version tags yet, so the list is one section.
 - A question the coordinator needs you to answer is the first line of its message, a `decision` tag and the question in
   bold, so a long answer no longer hides it.
   ([#31](https://github.com/jbutton/herdr-projects-legacy/pull/31))
+- Under `usage.extra defer` a review no longer runs on extra usage: while its reviewer's program is on it, the next on
+  `reviewer.fallback` with room reviews, else the task waits as `Reviewing: waiting for the usage window: resets 17:00`
+  and is reviewed by itself then (under `ask` it waits for you). A task waiting for a usage window carries on as soon as
+  a fresh reading shows room in both windows, so a reset bought early is no longer waited out.
+  ([#32](https://github.com/jbutton/herdr-projects-legacy/pull/32))

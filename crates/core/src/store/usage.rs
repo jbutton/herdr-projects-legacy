@@ -19,6 +19,15 @@ pub fn all() -> Obj { read_obj(&file()).unwrap_or_default() }
 /// episode too, so a leave given for it (`extraOk`) ends with it.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Now { pub known: bool, pub at: i64, pub windows: Vec<Window>, pub extra: bool, pub hard: bool, pub since: i64, pub resets: i64 }
+impl Now {
+    /// Room in both the 5-hour and the weekly window, each of them shown, every window it shows under 100%, and neither
+    /// on extra usage nor refused: a program a task waiting for its window may carry on with, whatever reset it was told
+    /// before (one bought early). A reading that leaves one of the two out says nothing of it, so it is no room.
+    pub fn room(&self) -> bool {
+        let under = |w: &Window| w.pct < crate::agents::read_window::FULL;
+        self.known && !self.extra && !self.hard && self.windows.iter().all(under) && ["5h", "week"].iter().all(|n| self.windows.iter().any(|w| w.name == *n))
+    }
+}
 fn reading_of(rec: &Value) -> Reading { serde_json::from_value(rec.clone()).unwrap_or_default() }
 /// A program's window now, from what was kept.
 pub fn now_of(kind: &str, now: i64) -> Now {

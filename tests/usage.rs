@@ -1,7 +1,8 @@
 //! Extra usage (`usage.extra`, docs/extra-usage.md): what Claude Code and Codex say of their usage window and how the
 //! board reads it (read.rs), and what a task does under each value: `allow` warns (allow.rs), `ask` stops and waits for
-//! you (ask.rs), `defer` hands over, holds back, stops and carries on at the window's reset (defer.rs). What they share
-//! is here: the files the programs write, a task at work, one pass of the ticks.
+//! you (ask.rs), `defer` hands over, holds back, stops and carries on at the window's reset (defer.rs), or sooner, at a
+//! reset bought early (early.rs); and a review held back for its reviewer's program (review.rs). What they share is
+//! here: the files the programs write, a task at work, one pass of the ticks.
 use crate::common;
 use common::*;
 use serde_json::{json, Value};
@@ -11,7 +12,9 @@ use sw::json::*;
 mod allow;
 mod ask;
 mod defer;
+mod early;
 mod read;
+mod review;
 
 pub const HOUR: i64 = 3_600_000;
 /// A line added to a saved conversation.
@@ -34,6 +37,12 @@ pub fn codex_turn(file: &Path, at: i64, pct: f64, resets: i64, credits: bool) {
     line(file, json!({ "timestamp": sw::clock::iso(at - 1000), "type": "event_msg", "payload": { "type": "task_started", "turn_id": format!("t{at}") } }));
     line(file, codex_count(at, pct, resets, credits));
 }
+/// A Codex turn of yours today, its 5-hour window at `pct` (on credits at 100%), as the board's `codex_newest` reads it.
+pub fn codex_yours(w: &World, at: i64, pct: f64, resets: i64) {
+    use chrono::TimeZone;
+    let day = chrono::Local.timestamp_millis_opt(sw::clock::now()).single().unwrap().format("%Y/%m/%d").to_string();
+    codex_turn(&w.base.join("codex/sessions").join(day).join("rollout-yours.jsonl"), at, pct, resets, pct >= 100.0);
+}
 /// Claude Code's status line input (its `rate_limits`, as 2.1.323 gives it), kept beside the task by the board's own
 /// status line at `at`. `resets` 0: the window does not say.
 pub fn claude_window(id: &str, at: i64, five: f64, resets: i64) {
@@ -55,13 +64,31 @@ pub fn at_work(w: &World, agent: &str, settings: Value) -> String {
     sw::clock::set(Some(sw::clock::now()));
     id
 }
+/// The clock moved to `now`, and the world's programs still installed then: its record of their versions made as new
+/// as the clock, which the board trusts for ten minutes. Past them it would run the real programs of this machine for
+/// their versions, and count one this machine lacks (CI) as not installed.
+pub fn at(now: i64) {
+    sw::clock::set(Some(now));
+    let f = sw::store::files::data_dir().join("versions.json");
+    let mut v = sw::store::files::read_json(&f).unwrap_or(json!({}));
+    if let Some(all) = v.as_object_mut() { for e in all.values_mut() { e["at"] = json!(now); } }
+    sw::store::files::write_json(&f, &v).unwrap();
+}
 /// Each reading of extra usage's own pass, the clock moved to `now` first (a look waits a few seconds after the last).
-pub fn tick(w: &World, now: i64) { sw::clock::set(Some(now)); sw::usage::tick::usage_tick(&sw::flow::live::board_for(&w.socket), now); }
+pub fn tick(w: &World, now: i64) { at(now); sw::usage::tick::usage_tick(&sw::flow::live::board_for(&w.socket), now); }
 /// The limits' own pass, which carries on a task whose stop no longer holds.
 pub fn limits(w: &World, now: i64) {
-    sw::clock::set(Some(now));
+    at(now);
     let c = |id: &str| { let _ = sw::actions::limits::carry_on(id, true); };
     sw::limits::tick::limits_tick(&sw::flow::live::board_for(&w.socket), now, Some(&c));
+}
+/// One keeper pass as the keeper makes it: the limits' pass, then extra usage's, on the same rows read once before.
+pub fn keeper_pass(w: &World, now: i64) {
+    at(now);
+    let rows = sw::flow::live::board_for(&w.socket);
+    let c = |id: &str| { let _ = sw::actions::limits::carry_on(id, true); };
+    sw::limits::tick::limits_tick(&rows, now, Some(&c));
+    sw::usage::tick::usage_tick(&rows, now);
 }
 /// What the task's agent was told.
 pub fn told(w: &World, id: &str) -> Vec<String> { prompts(w, task(id).at("link").s("pane")) }

@@ -201,6 +201,20 @@ fn usage_defer_meets_a_task_queued_after_others_once_they_are_done() {
 }
 
 #[test]
+fn usage_defer_leaves_an_agent_its_time_limit_stopped_in_the_same_pass_as_it_is() {
+    let w = world();
+    let id = at_work(&w, "claude", json!({ "usage.extra": "defer", "limit.time": "1m" }));
+    let t0 = sw::clock::now();
+    let resets = (t0 + HOUR) / 1000 * 1000;
+    claude_window(&id, t0 + 60_000, 100.0, resets);
+    keeper_pass(&w, t0 + 2 * 60_000);
+    let t = task(&id);
+    assert_eq!((t.s("stage"), t.at("limitStop").s("what"), t.s("msg")), ("stopped", "time", "stopped at its 1m limit"), "the time limit's stop stays");
+    limits(&w, resets + 1000);
+    assert_eq!((settle(&id).s("stage"), task(&id).at("limitStop").s("what")), ("stopped", "time"));
+}
+
+#[test]
 fn usage_defer_leaves_a_task_stopped_at_its_token_limit_as_it_is() {
     let w = world();
     let id = at_work(&w, "claude", json!({ "usage.extra": "defer", "limit.tokens": "1m" }));

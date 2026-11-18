@@ -32,7 +32,10 @@ there; for Claude Code, the status line's input only comes after an answer was s
   agent's pane shows yours as before. Yours is found where Claude Code looks: the project's local settings, the
   project's, then yours, with your `padding`. With no status line of yours, the agent's is empty.
 - **Codex's own sessions.** The newest Codex conversation of the machine, yours or a task's, is read once a minute, so
-  Codex's window is known before a task runs it.
+  Codex's window is known before a task runs it, and before a start or a review under `defer`.
+- **While a task waits for a window**, that program is read again every few seconds by the keeper's pass: Codex's
+  newest conversation, and for Claude Code the status line input kept beside the waiting task. Every other Claude agent
+  of the board at work is read anyway.
 - **What is not seen:**
   - Claude Code's saved conversation says nothing of extra usage while answers are served.
   - Claude Code's notice "You're now using usage credits" is a short-lived note on its screen, not something the board
@@ -43,7 +46,8 @@ there; for Claude Code, the status line's input only comes after an answer was s
     window cannot be seen`).
 
 Each program's window is kept for the machine in `usage.json` in the board's data folder: the newest reading of any of
-its agents. A window whose reset has passed is a fresh one.
+its agents. A window whose reset has passed is a fresh one, and so is one a newer reading shows with room: a reset you
+bought early is seen as soon as something reads it, by a task of the board or by you using that program.
 
 ## What you see
 
@@ -83,6 +87,11 @@ Today's behaviour: the agent works on, and the board only says so (above).
   (and back to `ask`, it waits for you again).
 - **A task does not start** while its program is known to be on extra usage. It waits for you in the queue:
   `waits for you: claude is on extra usage until 17:00 (usage.extra ask); Ctrl+R starts it anyway`.
+- **A review does not start** while its reviewer's program is on extra usage: the task stops before it, under "needs
+  you", `Reviewing: stopped: codex moved onto extra usage at 14:10 (resets 17:00)`. Nothing is handed to
+  `reviewer.fallback` for it: you decide. Carrying on reviews it on extra usage, with leave for that episode. A review
+  under way is stopped the moment its program is seen on extra usage, and reviewed again from the start when you carry
+  on.
 
 ### `defer`
 
@@ -93,6 +102,11 @@ Today's behaviour: the agent works on, and the board only says so (above).
 - **Nobody to take it: the agent is stopped at once**, as under `ask`, its work kept. The task waits as `waiting for
   the usage window: resets 17:00`, with the queued tasks, not under "needs you". **At the reset it carries on by
   itself**: the agent is told it was stopped for extra usage and that the window has reset.
+- **A reset bought early** (such as Codex's "Full reset") is not waited out: a task waiting for the window carries on
+  (or starts) as soon as a reading newer than its stop shows room in both the 5-hour and the weekly window, not only at
+  the reset it was told. A reading with one of them still full, or that leaves one of them out, changes nothing. The
+  board sees such a reading when an agent of that program answers: one of the board's, or you in Codex (see "What the
+  board can see").
 - **A task does not start** while its program is on extra usage, or its window is used up with nothing to pay on:
   started with an agent on the list that is not, else it stays in the queue as `waiting for the usage window: resets
   17:00`, holding no slot, and starts by itself once the window has reset. Codex's window is read afresh before a start.
@@ -101,6 +115,14 @@ Today's behaviour: the agent works on, and the board only says so (above).
   itself at the reset with its own text. Nothing is typed into the pane ([never into a shell](handing-over.md#never-into-a-shell)).
 - **A turn that ends out of allowance** (extra usage off or used up), with nobody on the list to take it: it waits for
   that window too, instead of "Agent stopped: out of allowance until 17:00", and carries on by itself at the reset.
+- **A review does not start** while its reviewer's program is on extra usage, or its window is used up with nothing to
+  pay on. The first on `reviewer.fallback` whose program has room reviews instead (Codex's window read afresh first,
+  whether it is the reviewer or the fallback), a hand-over like any other
+  ([the fallback agent](fallback.md)): `claude took over the review from codex: codex is on extra usage until 17:00`.
+  With nobody on the list who has room, the task waits as an agent does, its row `Reviewing: waiting for the usage
+  window: resets 17:00`, not under "needs you", and is reviewed by itself at the reset (or a reset bought early), or as
+  soon as one on the list has room. A review under way is stopped the moment its program is seen on extra usage, and
+  starts again from the beginning then. The check runs again before it, as for any review after a stop.
 - **When the reset is not known**, it waits for you instead, under "needs you", with the reason.
 
 `Ctrl+R` (or `retry`) carries on or starts it now, on extra usage, as under `ask`.
@@ -115,12 +137,16 @@ A chat-only task gets the warnings only: you are in that conversation.
 - **`limit.tokens`**: a cap per task, in tokens, whoever pays; `usage.extra` is about who pays, per window. Tokens spent
   on extra usage count as any others. A task stopped at its token limit stays stopped at it, and is not stopped for
   extra usage as well. Carrying on from either stop meets the other again where it applies.
-- **`limit.time`**: a run that waits for the window is not running: its time does not count.
+- **`limit.time`**: a run that waits for the window is not running: its time does not count. An agent or a review
+  stopped at its time limit stays stopped at it, and is not stopped for extra usage as well, even in the same pass.
 - **`--after`**: a task waiting for others is not started anyway. Once they are done it is queued, and the start's rule
   above applies to it. A task that waits for the window is not done, so the tasks after it go on waiting.
 - **Attempts and the plan step**: each attempt's agent and a plan's writer are agents at work like any other.
-- **The reviewer**: its readings count for its program's window (the header, the next start), but a review is not
-  stopped or held back for extra usage.
+- **The reviewer**: its readings count for its program's window (the header, the next start). Under `ask` and `defer`
+  a review is held back or stopped for its own program's window, as above; under `allow` it runs on extra usage, as
+  before. Under `ask` and `defer` a hand-over of the review for any reason passes over one whose program is on extra
+  usage. A plan's review (`plan.approve reviewer`) is a review too. The reviewer's comparison of several attempts is
+  not held back.
 - **A turn the board starts by itself** (findings sent back, a failed check, pull-request feedback, a retry after a
   provider error) is not held back before it starts: the same reading stops it once it runs.
 
@@ -130,6 +156,7 @@ A chat-only task gets the warnings only: you are in that conversation.
   kept status-line input;
 - `crates/core/src/agents/statusline.rs`: the board's status line for Claude Code, and your own run after it;
 - `crates/core/src/store/usage.rs`: each program's window on this machine;
-- `crates/flow/src/usage/`: the keeper's pass (`tick.rs`), the start held back (`gate.rs`), the stops and their carrying
-  on (`stop.rs`), the words (`words.rs`); the stops are the limits' own (`limitStop` with `what: usage`);
-- tests: `tests/usage.rs` and `tests/usage/`.
+- `crates/flow/src/usage/`: the keeper's pass (`tick.rs`), the start held back (`gate.rs`), the review held back
+  (`review.rs`), the stops and their carrying on (`stop.rs`), the words (`words.rs`); the stops are the limits' own
+  (`limitStop` with `what: usage`; `role: reviewer` for a review);
+- tests: `tests/usage.rs` and `tests/usage/` (`review.rs`: the review; `early.rs`: a reset bought early).
