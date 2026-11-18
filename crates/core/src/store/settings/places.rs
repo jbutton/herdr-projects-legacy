@@ -19,11 +19,22 @@ pub fn config_file() -> PathBuf { config_dir().join("config.json") }
 pub struct Problem { pub place: String, pub name: String, pub why: String }
 
 /// A file as written, nested ({ "review": { "rounds": 5 } }) or with dotted names, as one flat list of names and values.
+/// Below a setting of its own: { "usage": { "extra": "defer", "extra.codex": "allow" } }, or { "extra": { "codex": … } }.
 fn leaves(o: &Value, prefix: &str, out: &mut Vec<(String, Value)>) {
     let Some(map) = o.as_object() else { return };
     for (k, v) in map {
         let name = if prefix.is_empty() { k.clone() } else { format!("{prefix}.{k}") };
-        if v.is_object() && entry_of(&name).is_none() { leaves(v, &name, out); } else { out.push((name, v.clone())); }
+        let below = v.as_object().is_some_and(|o| o.keys().any(|k| entry_of(&format!("{name}.{k}")).is_some()));
+        if v.is_object() && (entry_of(&name).is_none() || below) { leaves(v, &name, out); } else { out.push((name, v.clone())); }
+    }
+}
+/// The keys a setting is written under: one per part, but one below another setting (`usage.extra.codex` below
+/// `usage.extra`) keeps its parts from there as one key, beside that setting's own (`usage` → `extra.codex`).
+fn keys_of(name: &str) -> Vec<String> {
+    let parts: Vec<&str> = name.split('.').collect();
+    match (1..parts.len()).rev().find(|i| entry_of(&parts[..*i].join(".")).is_some()) {
+        Some(i) => parts[..i - 1].iter().map(|p| p.to_string()).chain(std::iter::once(parts[i - 1..].join("."))).collect(),
+        None => parts.iter().map(|p| p.to_string()).collect(),
     }
 }
 /// The settings said in one place, checked. `allowed`: the names this place may hold.
@@ -96,24 +107,35 @@ fn read_yours() -> Mine {
 pub fn write_yours(name: &str, value: Option<&Value>, repo: &str) -> crate::err::Res<()> {
     write_at(name, value, &if repo.is_empty() { vec![] } else { vec!["repos".to_string(), repo.to_string()] })
 }
+/// Take setting `full`'s own value out of `o`, `rest` the part of its name still to find there, at every spelling a hand
+/// or this program wrote: dotted (`"usage.extra"`), nested (`"usage": { "extra" }`) or both (`"usage": { "extra.codex" }`).
+/// What was nested below it for the settings under it (`"usage.extra": { "codex": … }`) is kept, beside it
+/// (`"usage.extra.codex"`). A part left empty goes.
+fn take(o: &mut Obj, rest: &str, full: &str) {
+    let keys: Vec<String> = o.keys().filter(|k| k.as_str() == rest || rest.starts_with(&format!("{k}."))).cloned().collect();
+    for k in keys {
+        if k == rest {
+            let Some(Value::Object(kids)) = o.shift_remove(&k) else { continue };
+            for (c, v) in kids { let n = format!("{k}.{c}"); if entry_of(&format!("{full}.{c}")).is_some() && !o.contains_key(&n) { o.insert(n, v); } }
+        } else if let Some(Value::Object(inner)) = o.get_mut(&k) {
+            take(inner, &rest[k.len() + 1..], full);
+            if inner.is_empty() { o.shift_remove(&k); }
+        }
+    }
+}
 /// The same at any place in your file: `[]` your own, `["repos", <repo>]`, `["coordinators", "main"]`. A place left
 /// with nothing in it goes, and so does each part above it that it leaves empty.
 pub fn write_at(name: &str, value: Option<&Value>, path: &[String]) -> crate::err::Res<()> {
     let mut file = read_obj(&config_file()).unwrap_or_default();
-    let parts: Vec<&str> = name.split('.').collect();
+    let keys = keys_of(name);
     {
         let mut at: &mut Obj = &mut file;
         for p in path { at = at.obj_mut(p); }
-        at.shift_remove(name); // the dotted spelling, where a hand wrote it that way
-        fn drop(o: &mut Obj, parts: &[&str]) {
-            if parts.len() == 1 { o.shift_remove(parts[0]); return; }
-            if let Some(Value::Object(inner)) = o.get_mut(parts[0]) { drop(inner, &parts[1..]); if inner.is_empty() { o.shift_remove(parts[0]); } }
-        }
-        drop(at, &parts);
+        take(at, name, name);
         if let Some(v) = value {
             let mut o = at;
-            for p in &parts[..parts.len() - 1] { o = o.obj_mut(p); }
-            o.insert(parts[parts.len() - 1].to_string(), v.clone());
+            for p in &keys[..keys.len() - 1] { o = o.obj_mut(p); }
+            o.insert(keys[keys.len() - 1].clone(), v.clone());
         }
     }
     fn prune(o: &mut Obj, path: &[String]) {

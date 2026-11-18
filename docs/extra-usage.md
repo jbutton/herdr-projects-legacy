@@ -3,12 +3,14 @@
 **An agent on a subscription works within a 5-hour window and a weekly one. Past them, it either stops ("out of
 allowance") or, where extra usage is on, goes on and is paid for by it**: Claude Code's usage credits, Codex's credits on
 a ChatGPT plan. Nothing fails then, so nothing used to show it. The board now reads where each agent stands in its
-windows, says when one works on extra usage, and does what `usage.extra` says.
+windows, says when one works on extra usage, and does what `usage.extra` says, for each program its own where you set
+one.
 
 ```
 herdr-projects set usage.extra defer                 for every task of yours: wait for the window instead
 herdr-projects set usage.extra ask --repo my-app     for one repo: stop and ask me
 herdr-projects set usage.extra allow --task 12       this one may run on it
+herdr-projects set usage.extra.codex allow           Codex may run on it; Claude Code goes by usage.extra
 ```
 
 ## What the board can see
@@ -70,6 +72,37 @@ For every task, whatever `usage.extra` says:
 of the facts the repo's own file may hold: your own places come before it, so it can never loosen what you set, and
 `allow` is the built-in value anyway.
 
+### One program's own: `usage.extra.claude`, `usage.extra.codex`
+
+```
+herdr-projects set usage.extra.codex allow     Codex may run on extra usage
+herdr-projects set usage.extra.claude defer    Claude Code never does: it waits for its window
+```
+
+- **Each program goes by its own, where one is said, else by `usage.extra`**: the same three values, below. Your places
+  are the ones of every work setting: the task → your entry for the repo → you. A program's own, said in any of them,
+  comes before every `usage.extra` of yours: `set usage.extra allow --repo my-app` does not let Claude Code run on extra
+  usage there when you said `usage.extra.claude defer`; for one task, say it for that program:
+  `set usage.extra.claude allow --task 12`. Where you said nothing for the program, the nearest `usage.extra` counts.
+- **The repo's own file comes after all of yours**, the same way: its word for the program, then its `usage.extra`. So
+  what it says for one program never loosens what you set, `usage.extra` included.
+- **The board decides by the program that is about to run, or is running**: the working agent's at its start and at
+  work, the reviewer's for a review (the worker's program, where the reviewer's is not installed here), and a
+  fallback's own before it takes over. A Claude Code agent under `defer` waits for its window while a Codex review of
+  the same task runs on extra usage under `allow`. A fallback whose program allows extra usage is not passed over for
+  it.
+- **A stop for extra usage follows its own program's setting** while it waits: set to `allow`, it carries on.
+- **Where it shows**: `show` and `show <id>` have a row for each, with where its value came from: `you`, or
+  `you (usage.extra)` where it is your `usage.extra` that counts for that program (not marked `*` then: nothing was set
+  for that program there). `details <id>`: the `usage` entry has what its program goes by (`setting`, the setting that
+  said it in `settingName`, where in `settingFrom`) and what each program goes by (`settings`). A start that waits for
+  you names the setting that held it: `(usage.extra.claude ask)`.
+- In your `config.json` it is kept beside `usage.extra`: `"usage": { "extra": "defer", "extra.codex": "allow" }`. Written
+  by hand below it (`"usage.extra": { "codex": "allow" }`) it is read too, and setting or unsetting `usage.extra` keeps
+  it.
+
+Below, `ask`, `defer` and `allow` are each program's as it reads them.
+
 ### `allow` (built in)
 
 Today's behaviour: the agent works on, and the board only says so (above).
@@ -98,7 +131,8 @@ Today's behaviour: the agent works on, and the board only says so (above).
 - **`worker.fallback` first**: the next agent on the list that is not on extra usage takes the task over, in the same
   worktree, as any hand-over does ([the fallback agent](fallback.md)): `codex took over from claude: claude is on extra
   usage until 17:00`. One whose program is on extra usage too is passed over (`codex is on extra usage too, until
-  12:31`). `board.notify` is still told, once, that its agent had moved onto extra usage.
+  12:31`), unless its program allows it (`usage.extra.codex allow`). `board.notify` is still told, once, that its agent
+  had moved onto extra usage.
 - **Nobody to take it: the agent is stopped at once**, as under `ask`, its work kept. The task waits as `waiting for
   the usage window: resets 17:00`, with the queued tasks, not under "needs you". **At the reset it carries on by
   itself**: the agent is told it was stopped for extra usage and that the window has reset.
@@ -116,7 +150,7 @@ Today's behaviour: the agent works on, and the board only says so (above).
 - **A turn that ends out of allowance** (extra usage off or used up), with nobody on the list to take it: it waits for
   that window too, instead of "Agent stopped: out of allowance until 17:00", and carries on by itself at the reset.
 - **A review does not start** while its reviewer's program is on extra usage, or its window is used up with nothing to
-  pay on. The first on `reviewer.fallback` whose program has room reviews instead (Codex's window read afresh first,
+  pay on. The first on `reviewer.fallback` whose program has room, or allows extra usage, reviews instead (Codex's window read afresh first,
   whether it is the reviewer or the fallback), a hand-over like any other
   ([the fallback agent](fallback.md)): `claude took over the review from codex: codex is on extra usage until 17:00`.
   With nobody on the list who has room, the task waits as an agent does, its row `Reviewing: waiting for the usage
@@ -132,8 +166,8 @@ A chat-only task gets the warnings only: you are in that conversation.
 ## Beside the other settings
 
 - **`worker.fallback`**: under `defer`, the list is used before any wait, at the start and at work. Under `ask`, nothing
-  is handed over for extra usage: you decide. Under `ask` and `defer`, a hand-over for any reason passes over an agent
-  whose program is on extra usage.
+  is handed over for extra usage: you decide. A hand-over for any reason passes over an agent whose program is on extra
+  usage under that program's own `ask` or `defer`.
 - **`limit.tokens`**: a cap per task, in tokens, whoever pays; `usage.extra` is about who pays, per window. Tokens spent
   on extra usage count as any others. A task stopped at its token limit stays stopped at it, and is not stopped for
   extra usage as well. Carrying on from either stop meets the other again where it applies.
@@ -142,10 +176,10 @@ A chat-only task gets the warnings only: you are in that conversation.
 - **`--after`**: a task waiting for others is not started anyway. Once they are done it is queued, and the start's rule
   above applies to it. A task that waits for the window is not done, so the tasks after it go on waiting.
 - **Attempts and the plan step**: each attempt's agent and a plan's writer are agents at work like any other.
-- **The reviewer**: its readings count for its program's window (the header, the next start). Under `ask` and `defer`
-  a review is held back or stopped for its own program's window, as above; under `allow` it runs on extra usage, as
-  before. Under `ask` and `defer` a hand-over of the review for any reason passes over one whose program is on extra
-  usage. A plan's review (`plan.approve reviewer`) is a review too. The reviewer's comparison of several attempts is
+- **The reviewer**: its readings count for its program's window (the header, the next start). Under its program's
+  `ask` and `defer` a review is held back or stopped for its own program's window, as above; under `allow` it runs on
+  extra usage, as before. A hand-over of the review for any reason passes over one whose program is on extra usage
+  under that program's own `ask` or `defer`. A plan's review (`plan.approve reviewer`) is a review too. The reviewer's comparison of several attempts is
   not held back.
 - **A turn the board starts by itself** (findings sent back, a failed check, pull-request feedback, a retry after a
   provider error) is not held back before it starts: the same reading stops it once it runs.
@@ -157,6 +191,10 @@ A chat-only task gets the warnings only: you are in that conversation.
 - `crates/core/src/agents/statusline.rs`: the board's status line for Claude Code, and your own run after it;
 - `crates/core/src/store/usage.rs`: each program's window on this machine;
 - `crates/flow/src/usage/`: the keeper's pass (`tick.rs`), the start held back (`gate.rs`), the review held back
-  (`review.rs`), the stops and their carrying on (`stop.rs`), the words (`words.rs`); the stops are the limits' own
-  (`limitStop` with `what: usage`; `role: reviewer` for a review);
-- tests: `tests/usage.rs` and `tests/usage/` (`review.rs`: the review; `early.rs`: a reset bought early).
+  (`review.rs`), the stops and their carrying on (`stop.rs`), the words and the setting each program goes by
+  (`words.rs`: `setting_for`); the stops are the limits' own (`limitStop` with `what: usage`; `role: reviewer` for a
+  review);
+- `crates/core/src/store/settings/lookup.rs`: a setting that falls to another (`fall_back`; `falls` in
+  settings_list.rs: `usage.extra.codex` to `usage.extra`); `places.rs`: how your file keeps both;
+- tests: `tests/usage.rs` and `tests/usage/` (`review.rs`: the review; `early.rs`: a reset bought early; `program.rs`:
+  each program by its own setting).

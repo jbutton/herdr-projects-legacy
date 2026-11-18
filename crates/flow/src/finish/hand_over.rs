@@ -76,8 +76,8 @@ pub fn hand_over_to(id: &str, g: &mut Guard, why: &str, findings: &str, first: O
     let access = w.t("worker.access");
     let note = |g: &mut Guard, words: String| -> Res<()> { match g.set(|t| t.obj_mut("fallbacks").put("worker", words.clone())) { Ok(_) => Ok(()), Err(e) if is_aborted(&e) => Err(e), Err(_) => Ok(()) } };
     loop {
-        // Under usage.extra ask or defer, one whose program is on extra usage too is passed over (usage/stop.rs).
-        let (next, why_not) = next_fallback(&list, &from, &tried, |a| { let u = usable(a, &access); if u.is_empty() && w.t("usage.extra") != "allow" { crate::usage::stop::passed_over(a, now()) } else { u } });
+        // One whose program is on extra usage too, under its own `ask` or `defer`, is passed over (usage/stop.rs).
+        let (next, why_not) = next_fallback(&list, &from, &tried, |a| { let u = usable(a, &access); if u.is_empty() { crate::usage::stop::passed_over(a, &w, now()) } else { u } });
         for s in why_not { if !skipped.contains(&s) { skipped.push(s); } }
         if next.is_empty() { note(g, nobody_left("worker.fallback", &skipped))?; return Ok(false); }
         tried.push(next.clone());

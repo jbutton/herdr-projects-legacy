@@ -34,9 +34,8 @@ pub fn next_reviewer(g: &mut Guard, ch: &Obj, from: &str, cut: &Cut, auth: bool,
     }
     let list = list_of(ch.at("reviewer.fallback"));
     if list.is_empty() { return Ok(String::new()); }
-    // Under `ask` and `defer` one whose program is on extra usage is passed over (usage/review.rs).
-    let room = ch.t("usage.extra") != "allow";
-    let (next, skipped) = next_fallback(&list, from, tried, |a| { let u = usable(a, ch.s("reviewer.access")); if u.is_empty() && room { crate::usage::review::no_room(a, crate::clock::now()) } else { u } });
+    // One whose program is on extra usage under its own `ask` or `defer` is passed over (usage/review.rs).
+    let (next, skipped) = next_fallback(&list, from, tried, |a| { let u = usable(a, ch.s("reviewer.access")); if u.is_empty() { crate::usage::review::no_room(a, ch, crate::clock::now()) } else { u } });
     if next.is_empty() { g.set(|t| t.obj_mut("fallbacks").put("reviewerLeft", nobody_left("reviewer.fallback", &skipped)))?; return Ok(String::new()); }
     let why = why_of(&cut.error, auth, cut.passing, &cut.reason, tries, crate::clock::now());
     g.set(|t| { let h = log_handover(t, "reviewer", from, &next, &why); t.put("reviewerOn", next.clone()); t.put("msg", handover_line(&h)); t.put("waiting", Value::Null); t.obj_mut("fallbacks").del("reviewerLeft"); })?;

@@ -12,10 +12,17 @@ use crate::store::repos::folder_of;
 use crate::store::settings_list::{needs_repo, Entry, Kind, Ty, SETTINGS};
 use crate::store::tasks::Task;
 
-pub struct Row { pub name: String, pub kind: Kind, pub value: Value, pub from: String, pub place: String, pub own: bool, pub note: String, pub later: String }
+/// `via`: the setting its value was said by, where not this one (`usage.extra` for `usage.extra.codex`): not this
+/// place's own then.
+pub struct Row { pub name: String, pub kind: Kind, pub value: Value, pub from: String, pub place: String, pub own: bool, pub note: String, pub later: String, pub via: String }
 impl Row {
     /// As the command line's --json and another machine read it.
-    pub fn json(&self) -> Value { let mut o = json!({ "name": self.name, "kind": self.kind.name(), "value": self.value, "from": self.from, "place": self.place, "own": self.own, "note": self.note }); if !self.later.is_empty() { o.as_object_mut().unwrap().put("later", self.later.as_str()); } o }
+    pub fn json(&self) -> Value {
+        let mut o = json!({ "name": self.name, "kind": self.kind.name(), "value": self.value, "from": self.from, "place": self.place, "own": self.own, "note": self.note });
+        if !self.later.is_empty() { o.as_object_mut().unwrap().put("later", self.later.as_str()); }
+        if !self.via.is_empty() { o.as_object_mut().unwrap().put("via", self.via.as_str()); }
+        o
+    }
 }
 
 /// Why a value does nothing where it stands: the first reason that says something is the note.
@@ -66,7 +73,7 @@ pub fn rows(scope: &Scope) -> Vec<Row> {
         let n = note(s, &r, task, scope, at.no_repo, &get);
         let own_place = if task.is_some() { "task" } else if !scope.repo.is_empty() { "repo" } else if scope.coord.is_some() { "coord" } else { "you" };
         let later = match task { Some(t) if s.name == RESEARCH => later_words(t, &r.value), Some(t) if s.name == crate::chat_only::CHAT => crate::chat_only::later_words(t, &r.value), _ => String::new() };
-        Some(Row { name: s.name.clone(), kind: s.kind, own: r.place == own_place, value: r.value.clone(), from: r.from.clone(), place: r.place.clone(), note: n, later })
+        Some(Row { name: s.name.clone(), kind: s.kind, own: r.place == own_place && r.via.is_empty(), value: r.value.clone(), from: r.from.clone(), place: r.place.clone(), note: n, later, via: r.via.clone() })
     }).collect()
 }
 /// What is wrong in the files, one sentence each. The board keeps running: each such setting falls to the next place.

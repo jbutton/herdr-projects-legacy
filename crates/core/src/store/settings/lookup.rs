@@ -86,15 +86,30 @@ pub fn places_of(scope: &Scope, mine: &Mine) -> Places {
     Places { work, board: vec![Place::now("you", "you", mine.you.clone()), builtin()], repo: own, coord, no_repo: task.is_some() && !repo_places, problems }
 }
 
+/// `via`: the setting the value was said by, where it is not this one (`usage.extra` for `usage.extra.codex`).
 #[derive(Clone, Debug)]
-pub struct Found { pub name: String, pub value: Value, pub place: String, pub from: String, pub applies: bool, pub parts: Vec<(String, Value)>, pub skipped: Vec<String> }
+pub struct Found { pub name: String, pub value: Value, pub place: String, pub from: String, pub applies: bool, pub parts: Vec<(String, Value)>, pub skipped: Vec<String>, pub via: String }
 
+/// One that falls to another (`usage.extra.codex` to `usage.extra`): its own answer from any of your places (this task,
+/// your entry for the repo, you) before the other's from any of them; then the repo's own file, the same way, so that
+/// what the file says for one program never loosens what you set; then the built-in one.
+fn fall_back(name: &str, falls: &str, builtin: &Value, list: &[Place]) -> Found {
+    let tier = |p: &Place| match p.place { "file" => 1, "builtin" => 2, _ => 0 };
+    let found = |p: &Place, said: &str| {
+        let via = if said == name { String::new() } else { said.to_string() };
+        let from = if via.is_empty() { p.from.clone() } else { format!("{} ({via})", p.from) };
+        Found { name: name.into(), value: p.values()[said].clone(), place: p.place.into(), from, applies: true, parts: vec![], skipped: vec![], via }
+    };
+    for t in 0..3 { for said in [name, falls] { if let Some(p) = list.iter().find(|p| tier(p) == t && p.values().contains_key(said)) { return found(p, said); } } }
+    Found { name: name.into(), value: builtin.clone(), place: "builtin".into(), from: "built in".into(), applies: true, parts: vec![], skipped: vec![], via: String::new() }
+}
 /// A setting's value for a scope, with the place it came from. Instructions add up, broadest first; everything else
-/// is the nearest answer.
+/// is the nearest answer, and one that falls to another as `fall_back` says.
 pub fn lookup_at(name: &str, scope: &Scope, at: &Places) -> Res<Found> {
     let entry = known(name)?;
-    if at.no_repo && needs_repo(name) { return Ok(Found { name: name.into(), value: entry.builtin.clone(), place: "builtin".into(), from: "built in".into(), applies: false, parts: vec![], skipped: vec![] }); }
+    if at.no_repo && needs_repo(name) { return Ok(Found { name: name.into(), value: entry.builtin.clone(), place: "builtin".into(), from: "built in".into(), applies: false, parts: vec![], skipped: vec![], via: String::new() }); }
     let list = match entry.kind { Kind::Work => &at.work, Kind::Board => &at.board, Kind::Repo => &at.repo, Kind::Coord => &at.coord };
+    if !entry.falls.is_empty() { return Ok(fall_back(name, &entry.falls, &entry.builtin, list)); }
     // One task's own setting (`merge.closes`) is said by that task alone: a broader place's answer is never read.
     let mut said: Vec<&Place> = list.iter().filter(|p| p.values().contains_key(name) && (!entry.task || ["task", "builtin"].contains(&p.place))).collect();
     // An effort and an access are right or wrong for one program: an answer that does not fit the program the role has
@@ -118,10 +133,10 @@ pub fn lookup_at(name: &str, scope: &Scope, at: &Places) -> Res<Found> {
         let near = said[0];
         let value = if parts.is_empty() { json!(NONE) } else { json!(parts.iter().map(|p| text(&p.values()[name])).collect::<Vec<_>>().join("\n\n")) };
         let from = if parts.len() > 1 { parts.iter().map(|p| p.from.clone()).collect::<Vec<_>>().join(" + ") } else { parts.first().copied().unwrap_or(near).from.clone() };
-        return Ok(Found { name: name.into(), value, place: near.place.into(), from, applies: true, parts: parts.iter().map(|p| (p.from.clone(), p.values()[name].clone())).collect(), skipped: vec![] });
+        return Ok(Found { name: name.into(), value, place: near.place.into(), from, applies: true, parts: parts.iter().map(|p| (p.from.clone(), p.values()[name].clone())).collect(), skipped: vec![], via: String::new() });
     }
     let p = said[0];
-    Ok(Found { name: name.into(), value: p.values()[name].clone(), place: p.place.into(), from: p.from.clone(), applies: true, parts: vec![], skipped })
+    Ok(Found { name: name.into(), value: p.values()[name].clone(), place: p.place.into(), from: p.from.clone(), applies: true, parts: vec![], skipped, via: String::new() })
 }
 pub fn lookup(name: &str, scope: &Scope, mine: &Mine) -> Res<Found> { lookup_at(name, scope, &places_of(scope, mine)) }
 /// A setting's value for one task (or for you, with none).
