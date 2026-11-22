@@ -168,6 +168,14 @@ pub fn command(cmd: &str, a: &Args) -> Res<(Value, String)> {
             settings_command(cmd, pos, &w, if pos.len() > 2 { Some(json!(rest(2))) } else { None })?
         }
         "models" => crate::agents::models::say::models_command(&pos.get(1).cloned().unwrap_or_default())?,
+        "usage" => {
+            let kind = pos.get(1).cloned().unwrap_or_default();
+            if !kind.is_empty() && !crate::store::usage::READ.contains(&kind.as_str()) { crate::fail!("herdr-projects usage takes claude or codex, not {kind}"); }
+            let days = match flag("days") { None => 7, Some(d) => match d.trim().parse::<i64>() { Ok(n) if n > 0 => n, _ => crate::fail!("--days takes a number of days, not {d}") } };
+            let lines = crate::store::usage_log::since(&kind, crate::clock::now() - days * 86_400_000);
+            let s = crate::store::usage_log::say(&lines);
+            (json!(lines), s)
+        }
         "automations" | "automation" => crate::automations::command::automations_command(&pos[1..], flags, &here)?,
         "coordinator" => coordinator(a, &here, me.as_ref())?,
         "autopilot" => crate::autopilot::command::autopilot_command(&pos[1..], flags)?,

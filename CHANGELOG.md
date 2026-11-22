@@ -96,3 +96,6 @@ each. This copy makes no version tags yet, so the list is one section.
   reviews on its credits while a Claude Code agent waits for its window). A program's own, said anywhere of yours,
   comes before any `usage.extra`, and `show`, `show <id>` and `details <id>` say which counted and where.
   ([#34](https://github.com/jbutton/herdr-projects-legacy/pull/34))
+- `herdr-projects usage [claude|codex] [--days N]`: when each program's usage window changed, as the board read it,
+  and where its agents' extra usage began and ended. Kept from now on in `usage-log.jsonl` beside `usage.json`, which
+  holds only the newest reading. (#PR)

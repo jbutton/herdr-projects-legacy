@@ -59,6 +59,9 @@ pub const HELP: &str = r#"herdr-projects: a work board for herdr
                                        refused with the reason)
   herdr-projects models [PROGRAM]              the model names each program takes, written as a setting writes them
                                       (codex/<model>); a name it does not take is refused when it is set
+  herdr-projects usage [claude|codex] [--days N]   each change of a program's usage window the board read, the last
+                                      7 days unless --days says: its percents and resets, and where extra usage began
+                                      and ended
   herdr-projects automations [add|show|change|on|off|run|firings|remove] …
                                       tasks made on a schedule or when something happens on the board; each firing adds
                                       a task and puts an agent on it. `herdr-projects automations help` says how

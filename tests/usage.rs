@@ -2,8 +2,9 @@
 //! board reads it (read.rs), and what a task does under each value: `allow` warns (allow.rs), `ask` stops and waits for
 //! you (ask.rs), `defer` hands over, holds back, stops and carries on at the window's reset (defer.rs), or sooner, at a
 //! reset bought early (early.rs); a review held back for its reviewer's program (review.rs); and each program by its own
-//! setting, `usage.extra.claude` and `usage.extra.codex` (program.rs). What they share is here: the files the programs
-//! write, a task at work, one pass of the ticks.
+//! setting, `usage.extra.claude` and `usage.extra.codex` (program.rs); the history of each window, kept for
+//! `herdr-projects usage` (log.rs). What they share is here: the files the programs write, a task at work, one pass of
+//! the ticks.
 use crate::common;
 use common::*;
 use serde_json::{json, Value};
@@ -14,6 +15,7 @@ mod allow;
 mod ask;
 mod defer;
 mod early;
+mod log;
 mod program;
 mod read;
 mod review;

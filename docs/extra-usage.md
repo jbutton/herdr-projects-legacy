@@ -51,6 +51,26 @@ Each program's window is kept for the machine in `usage.json` in the board's dat
 its agents. A window whose reset has passed is a fresh one, and so is one a newer reading shows with room: a reset you
 bought early is seen as soon as something reads it, by a task of the board or by you using that program.
 
+### When it happened: `herdr-projects usage`
+
+`usage.json` holds only the newest reading. Every reading that changes something (a window's percent or reset, extra
+usage starting or ending, a refusal) is also kept as one line in `usage-log.jsonl` beside it; a reading that only came
+later is not. Past 2 MB the oldest half goes.
+
+```
+herdr-projects usage                  the last 7 days, every program
+herdr-projects usage claude --days 30
+```
+
+```
+Wed 11-18 09:12  claude 5h 96% (resets Wed 12:20) · week 25% (resets Mon 18:00)
+Wed 11-18 09:29  claude 5h 100% (resets Wed 12:20) · week 25% (resets Mon 18:00)  << ON EXTRA USAGE from here
+Wed 11-18 12:21  claude 5h 1% (resets Wed 17:20) · week 27% (resets Mon 18:00)  >> off extra usage
+```
+
+It holds what the board read from its own agents only: your own sessions, the Claude app, and Claude's per-model
+weekly bucket are not in it (above). `--json` gives the lines as kept.
+
 ## What you see
 
 For every task, whatever `usage.extra` says:

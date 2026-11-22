@@ -34,3 +34,4 @@ pub mod task_cache;
 pub mod tasks;
 pub mod titles;
 pub mod usage;
+pub mod usage_log;
