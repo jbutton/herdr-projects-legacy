@@ -98,4 +98,5 @@ each. This copy makes no version tags yet, so the list is one section.
   ([#34](https://github.com/jbutton/herdr-projects-legacy/pull/34))
 - `board.notify` no longer says a task waiting for approval needs you when only the network kept main from being
   fetched (a machine that woke before its network did), nor that the same work is ready to approve again once it is
-  fetched: each wake used to bring a second "ready to approve" for nothing new. (#PR)
+  fetched: each wake used to bring a second "ready to approve" for nothing new.
+  ([#36](https://github.com/jbutton/herdr-projects-legacy/pull/36))
