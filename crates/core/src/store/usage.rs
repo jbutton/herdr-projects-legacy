@@ -52,6 +52,7 @@ pub fn fold(kind: &str, r: &Reading, now: i64) -> Now {
         let mut rec = obj(serde_json::to_value(r).unwrap_or(Value::Null));
         rec.put("since", since);
         if old == tidy(Value::Object(rec.clone())) { return Ok(()); }
+        super::usage_log::note(kind, r, &reading_of(&old), since);
         all.put(kind, Value::Object(rec));
         write_json(&file(), &Value::Object(all))
     });
