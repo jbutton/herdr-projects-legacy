@@ -98,4 +98,5 @@ each. This copy makes no version tags yet, so the list is one section.
   ([#34](https://github.com/jbutton/herdr-projects-legacy/pull/34))
 - `herdr-projects usage [claude|codex] [--days N]`: when each program's usage window changed, as the board read it,
   and where its agents' extra usage began and ended. Kept from now on in `usage-log.jsonl` beside `usage.json`, which
-  holds only the newest reading. (#PR)
+  holds only the newest reading.
+  ([#37](https://github.com/jbutton/herdr-projects-legacy/pull/37))
