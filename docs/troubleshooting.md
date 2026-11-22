@@ -172,6 +172,10 @@ the remote cannot be reached at all, so the branch cannot be pushed either, the 
 push and review, and those run by themselves once the remote answers. A merge you had approved waits the same way,
 with nothing merged: approve it again once the row is back to ready.
 
+`board.notify` tells such a hold as needing you only once main could not be fetched 5 tries in a row (one a minute
+while the machine is awake). A fetch that fails for a moment, as when the machine wakes before its network or its SSH
+agent does, is no news, and neither is the same work ready to approve again once main is fetched.
+
 The panel (`Alt+P`) says why in plain words under **Behind main**, and what git itself said under **Details**:
 
 | The reason says | What to do |

@@ -547,7 +547,9 @@ requests, starts queued tasks, runs the Watcher, and keeps Herdr's sidebar curre
   since, also when they go on a line still being written. What was read is kept in memory while the agent works and let
   go a minute after; a file replaced, cut shorter or changed in place is read from its end again, and more than 768 KB
   added at once is read as its last 768 KB (`crates/core/src/agents/read_kept.rs`).
-- **No notifications.** It raises no pop-up or sound: what needs you is on the board and in Herdr's sidebar.
+- **Notifications.** It rings no bell (it has no terminal): what needs you is on the board and in Herdr's sidebar. A
+  `board.notify` command is run by it too, so that command tells you with the board closed, for as long as Herdr's
+  server runs: closing Herdr's window leaves the server, its agents and the keeper running.
 - **Its life.** Herdr starts it with its server. Any Herdr event, or opening the board, starts it again if it died. It
   replaces itself when the plugin is updated, and exits when Herdr is gone. It looks after this machine's tasks only.
 - An open board does the same. After an update it loads the new version by itself, in place, once nothing is half typed.

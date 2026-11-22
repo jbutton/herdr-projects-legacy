@@ -75,3 +75,42 @@ fn board_notify_a_command_runs_once_per_event_with_the_task_s_id_title_and_what_
     assert_eq!(rings(&mut b), 0);
     assert_eq!(ran().len(), 2);
 }
+
+#[test]
+fn board_notify_main_that_could_not_be_fetched_for_a_few_tries_is_no_news_and_neither_is_the_same_work_ready_again() {
+    let w = world_with(Opts { repo: true, origin: true, settings: json!({ "review.when": "never", "board.notify": "tell-me" }), ..Default::default() });
+    w.script(json!({ "worker": [{ "files": { "a.txt": "from the agent\n" }, "commit": "agent", "note": "Changed a.txt." }] }));
+    let id = w.add("Waits for you");
+    delegate(&id);
+    for _ in 0..12 { drain(); let t = task(&id); if t.at("link").b("pane") { on_pane(&w, t.at("link").s("pane")); } if t.s("stage") == "approval" { break; } }
+    assert_eq!(task(&id).s("stage"), "approval", "{}", task(&id).at("failure"));
+    sw::clock::set(Some(sw::clock::now()));
+    pass();
+    let events = || ran().iter().map(|(_, e)| e[2].trim_start_matches("HERDR_PROJECTS_EVENT=").to_string()).collect::<Vec<_>>();
+    assert_eq!(events(), vec!["ready to approve"]);
+    let told = task(&id).at("notice").clone();
+    let (bare, gone) = (w.base.join("origin.git").display().to_string(), w.base.join("gone.git").display().to_string());
+    // main cannot be fetched (the machine woke before its network or its SSH agent did): held, and tried once a minute
+    let retry = || { update(&id, |t| { t.put("syncRetryAt", sw::clock::now() - 1); Ok(Change::Write) }).unwrap(); pass(); drain(); pass(); };
+    git(&w.root, &["remote", "set-url", "origin", &gone]);
+    sw::housekeeping::poll_prs(); drain(); pass();
+    for n in 1..sw::sync::TOLD_AFTER {
+        if n > 1 { retry(); }
+        let t = task(&id);
+        assert!(t.at("syncBlocked").s("why").starts_with(sw::sync::UNFETCHED), "{}", t.at("syncBlocked"));
+        assert_eq!((t.at("syncBlocked").i("tries"), event_of(&t), t.at("notice")), (n, "", &told), "what was told stays told");
+    }
+    // origin answers again: the same work is ready to approve, which was told already
+    git(&w.root, &["remote", "set-url", "origin", &bare]);
+    retry();
+    assert!(task(&id).at("syncBlocked").is_null(), "{}", task(&id).at("syncBlocked"));
+    assert_eq!(events(), vec!["ready to approve"]);
+    // held for as many tries as it takes: that needs you, and the work ready again after it is news
+    git(&w.root, &["remote", "set-url", "origin", &gone]);
+    sw::housekeeping::poll_prs(); drain(); pass();
+    for _ in 1..sw::sync::TOLD_AFTER { retry(); }
+    assert_eq!(task(&id).at("syncBlocked").i("tries"), sw::sync::TOLD_AFTER);
+    git(&w.root, &["remote", "set-url", "origin", &bare]);
+    retry();
+    assert_eq!(events(), vec!["ready to approve", "needs you", "ready to approve"]);
+}

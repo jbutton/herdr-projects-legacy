@@ -176,10 +176,22 @@ pub fn held_why(r: &Synced) -> String {
         "error" => {
             let f: String = r.detail.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("").chars().take(300).collect();
             if f.starts_with("main could not be test-merged") { return f.trim_end_matches('.').into(); }
-            format!("main could not be fetched ({})", if f.is_empty() { "git fetch failed" } else { f.trim_end_matches('.') })
+            format!("{UNFETCHED} ({})", if f.is_empty() { "git fetch failed" } else { f.trim_end_matches('.') })
         }
         _ => String::new(),
     }
+}
+/// How the reason of a task held because main could not be fetched begins.
+pub const UNFETCHED: &str = "main could not be fetched";
+/// How many tries in a row main could not be fetched before a task held for it is told as needing you (notify.rs): one
+/// a minute while the machine is awake (`syncRetryAt`).
+pub const TOLD_AFTER: i64 = 5;
+/// Waiting for approval, held as "behind main" because main could not be fetched, and tried fewer than `TOLD_AFTER`
+/// times in a row (`tries`): most likely a moment, as when the machine wakes before its network or its SSH agent does.
+/// The board lifts the hold by itself once a fetch works, so there is nothing to tell you yet (notify.rs).
+pub fn held_for_now(t: &Obj) -> bool {
+    let b = t.at("syncBlocked");
+    t.s("stage") == "approval" && b.s("why").starts_with(UNFETCHED) && b.i("tries") < TOLD_AFTER
 }
 /// What a task held as "behind main" keeps: why, in plain words, since when, and what git itself said, for its details.
 pub fn blocked(why: &str, r: Option<&Synced>) -> Value {
