@@ -31,7 +31,7 @@ pub fn sync_job(id: &str, force: bool) {
         else { r = Some(sync::sync_main(&t, &tree)); }
         if let Some(x) = &r { why = sync::held_why(x); }
         if !why.is_empty() {
-            let b = g.set(|t| { let rerun = t.at("syncBlocked").b("rerun"); let p = sync::seen_patch(t, None); sync::apply(t, p); let mut v = sync::blocked(&why, r.as_ref()); if rerun { v["rerun"] = json!(true); } t.put("syncBlocked", v); t.put("msg", sync::behind_msg(&why)); })?;
+            let b = g.set(|t| { let rerun = t.at("syncBlocked").b("rerun"); let p = sync::seen_patch(t, None); sync::apply(t, p); let mut v = sync::blocked(&why, r.as_ref()); if rerun { v["rerun"] = json!(true); } v["tries"] = json!(t.at("syncBlocked").i("tries") + 1); t.put("syncBlocked", v); t.put("msg", sync::behind_msg(&why)); })?;
             flow::sidebar::tell_sidebar(&b);
             return Ok(());
         }

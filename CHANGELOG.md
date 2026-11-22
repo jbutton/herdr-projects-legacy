@@ -96,3 +96,7 @@ each. This copy makes no version tags yet, so the list is one section.
   reviews on its credits while a Claude Code agent waits for its window). A program's own, said anywhere of yours,
   comes before any `usage.extra`, and `show`, `show <id>` and `details <id>` say which counted and where.
   ([#34](https://github.com/jbutton/herdr-projects-legacy/pull/34))
+- `board.notify` no longer says a task waiting for approval needs you the moment main cannot be fetched (a machine
+  that woke before its network or its SSH agent did), nor that the same work is ready to approve again once it is: only
+  5 failed tries in a row are news. Each wake used to bring a second "ready to approve" for nothing new.
+  ([#36](https://github.com/jbutton/herdr-projects-legacy/pull/36))
