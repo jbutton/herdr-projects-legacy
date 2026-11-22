@@ -6,7 +6,7 @@ use crate::json::*;
 use crate::store::attempts::attempts_of;
 use crate::store::settings::lookup::setting_text;
 use crate::store::tasks::{update, Change};
-use crate::sync::held_by_itself;
+use crate::sync::held_for_now;
 
 /// What happened, from where the task stands; "" for a task nobody needs to hear about.
 pub fn event_of(t: &Obj) -> &'static str {
@@ -16,15 +16,15 @@ pub fn event_of(t: &Obj) -> &'static str {
     if ["asks", "reviewneeds", "plan", "pick"].contains(&st) || (st == "stopped" && t.b("limitStop") && !waits_window) || (st == "after" && t.b("afterBlocked")) || crate::usage::words::start_asks(t) { return "needs you"; }
     if st == "attempts" { return if attempts_of(t).iter().any(|c| ["asks", "reviewneeds"].contains(&c.s("stage"))) { "needs you" } else { "" }; }
     if st == "failed" || st == "nosummary" { return "failed"; }
-    if st == "approval" && held_by_itself(t) && !t.b("failure") && !t.b("prFailure") { return ""; } // behind main until origin answers again: the board sees to it
+    if st == "approval" && held_for_now(t) && !t.b("failure") && !t.b("prFailure") { return ""; } // main could not be fetched, for now: the board tries again
     if st == "approval" { return if t.b("failure") || t.b("prFailure") || t.b("syncBlocked") { "needs you" } else { "ready to approve" }; }
     if crate::usage::words::untold(t) { return crate::usage::words::EVENT; } // once per task and episode of extra usage
     ""
 }
 fn noted(t: &Obj, event: &str) -> bool { t.at("notice").s("event") == event && (event.is_empty() || t.at("notice").s("stage") == t.s("stage")) }
-/// A task held behind main for a moment is passed over, its notice as it was: what it was told stays told, so the
-/// moment's end (main fetched again, the same work ready to approve) is no news either.
-fn passed_over(t: &Obj) -> bool { event_of(t).is_empty() && held_by_itself(t) }
+/// A task held behind main for now is passed over, its notice as it was: what it was told stays told, so the hold's end
+/// (main fetched again, the same work ready to approve) is no news either.
+fn passed_over(t: &Obj) -> bool { event_of(t).is_empty() && held_for_now(t) }
 /// The housekeeping pass: each event is noted on its task once (`notice`), and the command is run for it.
 pub fn notify_pass(tasks: &[Obj]) {
     let how = setting_text("board.notify", None);

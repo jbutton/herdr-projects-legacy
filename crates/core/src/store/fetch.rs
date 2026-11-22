@@ -61,9 +61,6 @@ fn login(said: &str) -> bool {
 }
 /// origin could not be reached at all: the network, the server, or no answer in time.
 pub fn unreachable(said: &str) -> bool { network(said) || has(said, &["did not answer within", "does not appear to be a git repository"]) }
-/// A fetch that failed for a moment, with nothing for you to do: the network or the server, or no answer in time (a
-/// machine that just woke, its network not up yet). Never a login, a branch origin lacks or a lock file left behind.
-pub fn passing(said: &str) -> bool { (network(said) || has(said, &["did not answer within"])) && !login(said) && !no_such_branch(said) && lock_file(said).is_none() }
 /// Whether git said origin has no such branch.
 pub fn no_such_branch(said: &str) -> bool { has(said, &["couldn't find remote ref"]) }
 /// What a fetch that failed means, in plain words, with what to do: the first line of every failure that names it.
@@ -140,10 +137,6 @@ mod tests {
         assert_eq!(plain("fatal: something new", "main"), "something new");
         assert!(plain("origin did not answer within 10 seconds", "main").starts_with("origin did not answer within 10 seconds. If it waits"));
         assert!(!network("fatal: couldn't find remote ref main") && !locked("Permission denied (publickey)"));
-        // a moment's failure (nothing for you to do) and the ones that need you
-        assert!(passing("fatal: unable to access 'https://x/': Could not resolve host: x") && passing("origin did not answer within 60 seconds"));
-        assert!(!passing("git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.") && !passing("fatal: couldn't find remote ref trunk"));
-        assert!(!passing("fatal: '/gone.git' does not appear to be a git repository") && !passing(held));
         // git 2.53's words for a lock file in the way, and for a real conflict: the lock only when its file is there
         let dir = std::env::temp_dir().join(format!("sw-fetch-plain-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);

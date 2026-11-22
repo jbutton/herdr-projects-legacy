@@ -172,10 +172,9 @@ the remote cannot be reached at all, so the branch cannot be pushed either, the 
 push and review, and those run by themselves once the remote answers. A merge you had approved waits the same way,
 with nothing merged: approve it again once the row is back to ready.
 
-A hold for the network or the server only (`origin could not be reached`, or no answer in time), as after the machine
-wakes before its network does, is not told by `board.notify`, and the same work ready again once origin answers is not
-told a second time. A hold that needs you (a login, a branch origin lacks, a lock file left behind) is told as needing
-you.
+`board.notify` tells such a hold as needing you only once main could not be fetched 5 tries in a row (one a minute
+while the machine is awake). A fetch that fails for a moment, as when the machine wakes before its network or its SSH
+agent does, is no news, and neither is the same work ready to approve again once main is fetched.
 
 The panel (`Alt+P`) says why in plain words under **Behind main**, and what git itself said under **Details**:
 

@@ -183,11 +183,15 @@ pub fn held_why(r: &Synced) -> String {
 }
 /// How the reason of a task held because main could not be fetched begins.
 pub const UNFETCHED: &str = "main could not be fetched";
-/// Waiting for approval, held as "behind main" only for a moment: origin did not answer (the network or the server, a
-/// machine that just woke). The board lifts the hold by itself once it does, so there is nothing to tell you (notify.rs).
-pub fn held_by_itself(t: &Obj) -> bool {
+/// How many tries in a row main could not be fetched before a task held for it is told as needing you (notify.rs): one
+/// a minute while the machine is awake (`syncRetryAt`).
+pub const TOLD_AFTER: i64 = 5;
+/// Waiting for approval, held as "behind main" because main could not be fetched, and tried fewer than `TOLD_AFTER`
+/// times in a row (`tries`): most likely a moment, as when the machine wakes before its network or its SSH agent does.
+/// The board lifts the hold by itself once a fetch works, so there is nothing to tell you yet (notify.rs).
+pub fn held_for_now(t: &Obj) -> bool {
     let b = t.at("syncBlocked");
-    t.s("stage") == "approval" && b.s("why").starts_with(UNFETCHED) && fetch::passing(b.s("detail"))
+    t.s("stage") == "approval" && b.s("why").starts_with(UNFETCHED) && b.i("tries") < TOLD_AFTER
 }
 /// What a task held as "behind main" keeps: why, in plain words, since when, and what git itself said, for its details.
 pub fn blocked(why: &str, r: Option<&Synced>) -> Value {
