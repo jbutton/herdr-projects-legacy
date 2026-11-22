@@ -75,3 +75,33 @@ fn board_notify_a_command_runs_once_per_event_with_the_task_s_id_title_and_what_
     assert_eq!(rings(&mut b), 0);
     assert_eq!(ran().len(), 2);
 }
+
+/// Held as "behind main" the way a sync holds it when main could not be fetched, with what git said.
+fn held(said: &str) -> serde_json::Value {
+    let plain = sw::store::fetch::plain(said, "main");
+    json!({ "why": format!("{} ({plain})", sw::sync::UNFETCHED), "at": sw::clock::now(), "detail": format!("{plain}.\n\nWhat git said (git fetch origin main):\n{said}") })
+}
+
+#[test]
+fn board_notify_a_task_held_behind_main_until_origin_answers_again_is_no_news_and_neither_is_the_hold_s_end() {
+    let w = world_with(Opts { repo: true, settings: json!({ "board.notify": "tell-me" }), ..Default::default() });
+    let id = w.add("Waits for you");
+    let events = || ran().iter().map(|(_, e)| e[2].trim_start_matches("HERDR_PROJECTS_EVENT=").to_string()).collect::<Vec<_>>();
+    put(&id, |t| { t.put("stage", "approval"); }); pass();
+    assert_eq!(events(), vec!["ready to approve"]);
+    let told = task(&id).at("notice").clone();
+    // the machine woke before its network did: main could not be fetched, and the board holds it until origin answers
+    for said in ["fatal: unable to access 'https://github.com/o/r.git/': Could not resolve host: github.com", "origin did not answer within 60 seconds"] {
+        put(&id, |t| { t.put("syncBlocked", held(said)); });
+        assert_eq!(event_of(&task(&id)), "", "{said}");
+        pass(); pass();
+        assert_eq!(task(&id).at("notice"), &told, "what was told stays told: {said}");
+        put(&id, |t| { t.put("syncBlocked", Value::Null); }); pass(); pass();
+    }
+    assert_eq!(events(), vec!["ready to approve"], "the same work, ready again, once origin answered: no news");
+    // a hold the board cannot lift by itself needs you, and the work ready again after it is news
+    put(&id, |t| { t.put("syncBlocked", held("git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.")); }); pass();
+    put(&id, |t| { t.put("syncBlocked", Value::Null); }); pass();
+    put(&id, |t| { t.put("syncBlocked", json!({ "why": "its worktree has unsaved files" })); }); pass();
+    assert_eq!(events(), vec!["ready to approve", "needs you", "ready to approve", "needs you"]);
+}
