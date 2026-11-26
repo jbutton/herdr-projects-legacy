@@ -78,11 +78,12 @@ pub fn used_say(ls: &Value) -> String {
     let resets = if ls.i("resets") > 0 { format!(", its window resets {}", hm(ls.i("resets"), now)) } else { String::new() };
     if ls.b("hard") { format!("{} out of allowance{resets}", ls.t("limit")) } else { format!("{} on extra usage since {}{resets}", ls.t("limit"), hm(ls.i("used"), now)) }
 }
-/// What the stopped agent is told when it carries on: why it was stopped, and why it goes on now.
+/// What the stopped agent is told when it carries on: that the board stopped it, not the human, and why; that its
+/// program was ended to hold it, where it was (stop_hold.rs); and why it goes on now.
 pub fn carry_words(ls: &Value, raised: bool, t: &Obj) -> String {
-    let why = if ls.b("hard") { "its program's usage window was used up" } else { "its program moved onto paid extra usage" };
+    let why = if ls.b("hard") { "your program's usage window was used up" } else { "your program moved onto paid extra usage" };
     let go = if !raised { "The human said to carry on" } else if setting_for(t, ls.s("limit")) == "allow" { "The human allowed extra usage for this task" } else { "The usage window has reset" };
-    format!("You were stopped because {why}, not because of anything you did. {go}: continue the task where you left off.")
+    format!("The board stopped you, not the human, because {why}: not because of anything you did.{} {go}: continue the task where you left off.", crate::stop_hold::yours::ended_words(t))
 }
 /// A queued task held back for extra usage: what it waits for. `by`: the setting that said `setting`.
 pub fn start_line(kind: &str, resets: i64, you: bool, setting: &str, by: &str, now: i64) -> String {

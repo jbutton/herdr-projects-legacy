@@ -83,6 +83,7 @@ fn delegate_retry_tell_stop_and_archive_keep_to_the_tasks_it_may_look_after() {
         assert!(task(&mine_id).at("settings").at("merge.by").is_null());
         ok(&["delegate", &mine_id]);
         let t = settle(&mine_id); assert_eq!(t.s("stage"), "approval");
+        sw::store::tasks::set(&mine_id, json!({ "stage": "stopped" })).unwrap(); assert!(refused(&["retry", &mine_id]).contains("carrying it on is the human's"), "stopped: yours to carry on");
         sw::store::tasks::set(&mine_id, json!({ "stage": "failed", "failure": { "title": "The check failed", "detail": "boom" } })).unwrap();
         ok(&["retry", &mine_id]);
         assert_eq!(sw::autopilot::record::task_rec(&record(&co), &mine_id).unwrap().i("retries"), 1);

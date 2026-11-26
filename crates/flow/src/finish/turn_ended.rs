@@ -66,6 +66,7 @@ fn finish_once(id: &str, force: bool) -> bool {
     if !pending_events(&t).iter().any(mine0) { sleep(ms("HERDR_PROJECTS_SETTLE_MS", 5000)); }
     let mut ev: Option<Value> = None;
     let mut mine = false;
+    let woke = crate::stop_hold::woke::woke_itself(&t); // a stopped agent's turn that nobody's prompt began: not yours (stop_hold/woke.rs)
     let Ok(t) = update_wait(id, 10000, |t| {
         if t.at("runner").is_object() && t.at("runner").i("pid") != std::process::id() as i64 && marker_alive(t.at("runner")) { return Ok(Change::Keep); }
         let pending = pending_events(t);
@@ -74,7 +75,7 @@ fn finish_once(id: &str, force: bool) -> bool {
         if pending.is_empty() && (t.s("stage") != "working" || t.b("archivedAt")) { return Ok(Change::Keep); }
         // Every event up to here is now judged: accepted below, or dropped as a repeat, a side chat or a stale round.
         if !pending.is_empty() { let n = pending.iter().map(|e| e.i("n")).max().unwrap_or(0); t.put("eventsHandled", n); t.put("events", json!([])); }
-        let skip = t.b("archivedAt") || match &ev { Some(e) => IGNORES.contains(&t.s("stage")) || (t.s("stage") == "stopped" && e.i("at") < t.i("stoppedAt") + 3000), None => t.s("stage") != "working" };
+        let skip = t.b("archivedAt") || match &ev { Some(e) => IGNORES.contains(&t.s("stage")) || (t.s("stage") == "stopped" && (e.i("at") < t.i("stoppedAt") + 3000 || woke)), None => t.s("stage") != "working" };
         if skip { return Ok(Change::Write); }
         mine = true;
         let mut m = marker(); m.put("job", "finish"); t.put("runner", m);

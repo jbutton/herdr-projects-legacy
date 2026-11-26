@@ -14,6 +14,8 @@ mod relaunch;
 mod relaunch_fails;
 /// A stop ends what the agent started (a command, a dev server, what runs from its folders) and keeps the agent.
 mod stop;
+/// A stop holds the whole agent: its helpers still writing a minute on end its program; woken by itself, it stays stopped.
+mod stop_hold;
 
 #[test]
 fn at_most_board_agents_work_at_once_and_a_freed_slot_is_reused() {

@@ -21,9 +21,9 @@ pub fn limit_said(t: &Task) -> bool {
     says(t.o("settings")) || says(parent.as_ref().and_then(|p| p.o("settings"))) || says(t.at("carried").o("settings")) || says(Some(&mine.you)) || says(mine.repos.get(&repo))
 }
 pub fn stopped_at_limit(t: &Task) -> bool { t.s("stage") == "stopped" && t.at("limitStop").is_object() && !t.b("archivedAt") }
-/// What carrying on (`retry`, its key) takes up: a stop at a limit, or a start held back for extra usage (usage/gate.rs)
-/// or for its run window (run_window/gate.rs).
-pub fn carries_on(t: &Task) -> bool { stopped_at_limit(t) || crate::usage::gate::start_waits(t) || crate::run_window::gate::start_waits(t) }
+/// What carrying on (`retry`, its key) takes up: a stop at a limit or by you (stop_hold/yours.rs), or a start held back
+/// for extra usage (usage/gate.rs) or for its run window (run_window/gate.rs).
+pub fn carries_on(t: &Task) -> bool { stopped_at_limit(t) || crate::stop_hold::yours::stopped_by_you(t) || crate::usage::gate::start_waits(t) || crate::run_window::gate::start_waits(t) }
 /// "1h12m", "45m", "1m21s", "30s": a time as the limits say it. Seconds only while they matter, under ten minutes.
 pub fn time_say(span: i64) -> String {
     let s = ((span.max(0) as f64) / 1000.0).round() as i64;

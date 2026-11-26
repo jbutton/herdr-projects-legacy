@@ -86,7 +86,9 @@ started for the task that works elsewhere now is named for you to end, not ended
 node …/x.js (pid 9), in /srv/app.` So is what runs from its folders when herdr does not say what runs in its panes:
 then the agent and your shells there cannot be told apart. One that works elsewhere is known by the temporary folder
 it was started with (its `TMPDIR`), which Linux shows for every program and macOS for all but Apple's own (`/bin/sh`,
-`/usr/bin/ruby`): macOS keeps theirs to themselves, so such a one is not named there.
+`/usr/bin/ruby`): macOS keeps theirs to themselves, so such a one is not named there. An agent whose helpers still work
+a minute after the stop has its program ended, and the task stays stopped until you carry it on (`retry`, or a reply):
+[a stop holds the whole agent](stopping.md).
 
 `approve` refuses work whose last review failed, and says what the review found. `approve <id> --anyway` merges it all
 the same. It is for when the human said so in so many words.

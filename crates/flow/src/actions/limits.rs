@@ -1,5 +1,5 @@
 //! What you do to a task a limit stopped: carry on, or take its work as it is. (A reply to its agent carries on too,
-//! with your own words: actions/talk.rs.)
+//! with your own words: actions/talk.rs.) A task you stopped is carried on the same way (stop_hold/yours.rs).
 use super::finish_line::send_review;
 use super::shared::{say, Said};
 use super::talk::tell;
@@ -23,6 +23,7 @@ pub fn carry_on(id: &str, raised: bool) -> Res<Said> {
     let cid = cur.t("id");
     if crate::usage::gate::start_waits(&cur) { return crate::usage::gate::start_anyway(&cid); } // held back for extra usage
     if crate::run_window::gate::start_waits(&cur) { return crate::run_window::gate::start_anyway(&cid); } // held for its run window
+    if crate::stop_hold::yours::stopped_by_you(&cur) && !raised { return crate::stop_hold::yours::carry_on(&cur); } // stopped by you: you carry it on
     if !stopped_at_limit(&cur) { crate::fail!("{cid} was not stopped at a limit."); }
     let ls = cur.at("limitStop").clone();
     // Stopped at its run window's end (run_window/pause.rs): late when the window opened long before; what it kept.
@@ -62,7 +63,7 @@ pub fn carry_on(id: &str, raised: bool) -> Res<Said> {
         spawn_runner("pipeline", &cid, &[]);
         return Ok(say(t, format!("{cid}: carrying on, it is reviewed again")));
     }
-    let words = flow::send::with_tail(&cur, &if ls.s("what") == "usage" { crate::usage::words::carry_words(&ls, raised, &cur) } else { format!("You were stopped because this task reached its limit ({}), not because of anything you did. {}: continue the task where you left off.", what(&ls), if raised { "The limit was raised" } else { "The human said to carry on" }) });
+    let words = flow::send::with_tail(&cur, &if ls.s("what") == "usage" { crate::usage::words::carry_words(&ls, raised, &cur) } else { format!("You were stopped because this task reached its limit ({}), not because of anything you did.{} {}: continue the task where you left off.", what(&ls), crate::stop_hold::yours::ended_words(&cur), if raised { "The limit was raised" } else { "The human said to carry on" }) });
     let out = own(&|| tell(&cid, &words, false))?;
     // The time the run had taken rides on when it is the limit that moved, not you.
     if raised && ls.s("what") == "time" {

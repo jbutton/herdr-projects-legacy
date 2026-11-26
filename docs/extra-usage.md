@@ -129,8 +129,9 @@ Today's behaviour: the agent works on, and the board only says so (above).
 
 ### `ask`
 
-- **The moment the board sees the agent on extra usage, the agent is stopped**: interrupted as the stop key does, its
-  work kept as it is, nothing committed, pushed or merged. The task waits for you under "needs you":
+- **The moment the board sees the agent on extra usage, the agent is stopped**: interrupted as the stop key does, and
+  held as every stop is (its helpers still at work a minute on end its program: [a stop holds the whole
+  agent](stopping.md)), its work kept as it is, nothing committed, pushed or merged. The task waits for you under "needs you":
   `stopped: claude moved onto extra usage at 14:10 (resets 17:00)`.
 - **Carrying on** (`Ctrl+R`, `herdr-projects retry <id>`, or a reply) continues on extra usage, and is leave for the
   rest of that episode: it is not stopped again until the window resets. The next time it moves onto extra usage, it
@@ -155,7 +156,8 @@ Today's behaviour: the agent works on, and the board only says so (above).
   had moved onto extra usage.
 - **Nobody to take it: the agent is stopped at once**, as under `ask`, its work kept. The task waits as `waiting for
   the usage window: resets 17:00`, with the queued tasks, not under "needs you". **At the reset it carries on by
-  itself**: the agent is told it was stopped for extra usage and that the window has reset.
+  itself**, in its own conversation: the agent is told that the board stopped it for extra usage, not you, and that
+  the window has reset.
 - **A reset bought early** (such as Codex's "Full reset") is not waited out: a task waiting for the window carries on
   (or starts) as soon as a reading newer than its stop shows room in both the 5-hour and the weekly window, not only at
   the reset it was told. A reading with one of them still full, or that leaves one of them out, changes nothing. The

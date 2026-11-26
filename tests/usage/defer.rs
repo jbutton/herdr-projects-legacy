@@ -71,7 +71,7 @@ fn usage_defer_stops_a_working_agent_at_once_and_the_window_reset_carries_it_on_
     limits(&w, resets + 1000);
     let t = settle(&id);
     assert_eq!(t.s("stage"), "working");
-    assert!(told(&w, &id).last().unwrap().contains("its program moved onto paid extra usage, not because of anything you did. The usage window has reset: continue the task where you left off."), "{:?}", told(&w, &id));
+    assert!(told(&w, &id).last().unwrap().contains("The board stopped you, not the human, because your program moved onto paid extra usage: not because of anything you did. The usage window has reset: continue the task where you left off."), "{:?}", told(&w, &id));
     // The window is a fresh one: the mark goes at the next look, once board.notify was told of it.
     tick(&w, resets + 20_000);
     assert!(task(&id).b("extra"), "not before it was told");
@@ -179,7 +179,7 @@ fn usage_defer_waits_for_its_window_after_a_turn_out_of_allowance_and_carries_on
     limits(&w, resets + 1000);
     let t = settle(&id);
     assert_eq!(t.s("stage"), "working");
-    assert!(told(&w, &id).last().unwrap().contains("its program's usage window was used up"), "{:?}", told(&w, &id));
+    assert!(told(&w, &id).last().unwrap().contains("The board stopped you, not the human, because your program's usage window was used up"), "{:?}", told(&w, &id));
 }
 
 #[test]
