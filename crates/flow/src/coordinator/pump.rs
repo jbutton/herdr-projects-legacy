@@ -9,6 +9,7 @@ use super::rules::rules_of;
 use super::rules_place::{intro_line_of, put_rules};
 use super::state::{change, dir_of, get, home, pumping};
 use super::who::{choice_of, OFF_WORDS};
+use crate::agents::continued::newest;
 use crate::agents::{adapter, installed, start, start_failed};
 use crate::clock::now;
 use crate::err::Res;
@@ -49,6 +50,8 @@ pub fn tick(co: impl Into<Co>) {
     // Still in the space of its own from before it lived in a tab: moved over as it is, whatever it is doing.
     if let Some(x) = &c { if x.b("workspace") && up(&co.socket) && !pumping(x) && due(&co.mark("coordinator-move"), 60000) { let _ = move_over(&Herdr::new(Some(co.socket.clone())), co, true); c = get(co); } }
     if let Some(x) = &c { if x.b("typed") && x.b("pane") && up(&co.socket) && !(pumping(x) && !mine(x)) { look_typed(co, x); } }
+    // Brought back by herdr in an older conversation of its line: restarted on the newest (follow.rs).
+    if let Some(x) = &c { if up(&co.socket) { super::follow::check(co, x); c = get(co); } }
     let Some(c) = c else { return };
     if (c.arr("queue").is_empty() && !c.b("want")) || (pumping(&c) && !mine(&c)) || !up(&co.socket) { return; }
     if c.b("stopped") && !c.b("want") { return; } // stopped stays stopped, also with words still waiting
@@ -65,6 +68,7 @@ pub fn active(co: impl Into<Co>, c: &Obj) -> Option<String> {
     // A project coordinator shares its folder with the human's own chats in the repo: the newest one there may be theirs.
     // Only what herdr names for its own pane moves it to another conversation; else it keeps the one it has.
     let id = if co.repo().is_some() { told_session(co, c) } else { adapter::latest_session(run.s("kind"), &h, since, moved_from(&h).as_deref()).or_else(|| told_session(co, c)) };
+    let id = id.map(|i| newest(run.s("kind"), &i, &h)); // a chat Claude Code went on with in a new session: that one
     if let Some(i) = &id { if i != c.s("session") { let (since_v, i2) = (c.at("since").clone(), i.clone()); let _ = change(co, |x| { if *x.at("since") != since_v || x.s("session") == i2 { return false; } x.put("session", i2.clone()); true }); } }
     id.or_else(|| c.so("session").map(String::from))
 }
@@ -86,9 +90,16 @@ fn ensure(api: &Herdr, co: &Co) -> Res<(Obj, bool)> {
     if c.b("workspace") { match move_over(api, co, false) { Ok(p) => pane = p, Err(_) => { close_place(api, &c); let _ = change(co, |c| { nowhere(c); true }); pane = None; } } }
     // A board kept somewhere else than the default is the board its commands must reach.
     let env: Vec<(String, String)> = ["HERDR_PROJECTS_HOME", "HERDR_PROJECTS_DATA_DIR", "HERDR_PROJECTS_CONFIG_DIR", "HERDR_PROJECTS_REPORTS_DIR"].iter().filter_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()).map(|v| (k.to_string(), v))).collect();
-    let pane = match pane { Some(p) => p, None => open_tab(api, co, &env)? };
+    let mut pane = match pane { Some(p) => p, None => open_tab(api, co, &env)? };
     c = get(co).unwrap_or_default();
-    if api.agent_get(pane.s("pane_id"))?.is_some() { return Ok((c, false)); }
+    if let Some(a) = api.agent_get(pane.s("pane_id"))? {
+        // Brought back by herdr in an older conversation of its line: started again on the newest (follow.rs).
+        let Some(to) = super::follow::behind(co, &c, &a) else { return Ok((c, false)) };
+        close_place(api, &c);
+        change(co, |c| { nowhere(c); c.put("session", to.clone()); true })?;
+        pane = open_tab(api, co, &env)?;
+    }
+    c = super::follow::to_newest(co, get(co).unwrap_or_default());
     // Its program is not running: start it. The same conversation when there was one and the program can reopen it.
     let run = match c.o("run").cloned().or_else(|| c.o("pick").cloned().map(|mut p| { p.put("oneOff", true); p })).or_else(|| choice_of(co)) { Some(r) => r, None => crate::fail!("{OFF_WORDS}") };
     let k = run.t("kind");

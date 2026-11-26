@@ -5,6 +5,7 @@
 //! `restart`, `fresh`, `stop` and `open` only write the request down and start the detached job (`pump`). One area per file.
 pub mod co;
 pub mod far;
+pub mod follow;
 pub mod look;
 pub mod look_live;
 pub mod place;

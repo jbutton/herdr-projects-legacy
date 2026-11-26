@@ -104,3 +104,7 @@ each. This copy makes no version tags yet, so the list is one section.
   and where its agents' extra usage began and ended. Kept from now on in `usage-log.jsonl` beside `usage.json`, which
   holds only the newest reading.
   ([#37](https://github.com/jbutton/herdr-projects-legacy/pull/37))
+- The Coordinator follows Claude Code's `continued-in` records: a chat Claude Code carried on in a new session is
+  resumed in that one, and one Herdr brought back after a restart in the old session is started again on the newest
+  once it is at rest. It no longer comes back without its latest conversation.
+  ([#38](https://github.com/jbutton/herdr-projects-legacy/pull/38))
