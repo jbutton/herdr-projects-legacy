@@ -35,7 +35,7 @@ fn usage_ask_stops_at_once_waits_for_you_and_your_carry_on_is_leave_for_the_wind
     sw::actions::finish_line::retry(&id).unwrap();
     let t = settle(&id);
     assert_eq!(t.s("stage"), "working");
-    assert!(told(&w, &id).last().unwrap().contains("You were stopped because its program moved onto paid extra usage, not because of anything you did. The human said to carry on"), "{:?}", told(&w, &id));
+    assert!(told(&w, &id).last().unwrap().contains("The board stopped you, not the human, because your program moved onto paid extra usage: not because of anything you did. The human said to carry on"), "{:?}", told(&w, &id));
     assert_eq!(t.at("extraOk").s("agent"), "claude");
     claude_window(&id, t0 + 50_000, 100.0, t0 + HOUR);
     tick(&w, t0 + 60_000);

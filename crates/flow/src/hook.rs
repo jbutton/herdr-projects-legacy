@@ -112,6 +112,8 @@ pub fn apply(id: &str, a: &Value, api: &Herdr) {
             // A late hook cannot undo the stop: `working` re-arms only with a higher seq and an idle seen in between.
             if status != "working" { if seq > t.i("stopSeq") { t.put("sawIdleAfterStop", true); } return Ok(Change::Write); }
             if !(seq > t.i("stopSeq") && t.b("sawIdleAfterStop")) { return Ok(Change::Write); }
+            // Nobody's prompt since the stop: a helper woke it. The stop holds, watched, and is not re-armed (stop_hold/woke.rs).
+            if crate::stop_hold::woke::woke_itself(t) { crate::stop_hold::watch(t, now()); return Ok(Change::Write); }
         }
         if ["todo", "progress", "done", "queued", "starting", "setup"].contains(&t.s("stage")) { return Ok(Change::Write); }
         if status == "working" {

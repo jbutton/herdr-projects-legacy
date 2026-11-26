@@ -144,7 +144,8 @@ pub fn claude_turn(rows: &[Value]) -> Option<Turn> {
                 last = Some(Last::Interrupt(e, said));
             } else {
                 last = Some(Last::User(e)); // a real prompt or a tool result: either way the agent has not answered it yet
-                if !text.trim().is_empty() && !e.b("isMeta") && !e.b("isSidechain") { began = when(e.at("timestamp")); }
+                // (A helper's `<task-notification>` coming back is the program's own message, not a prompt: no turn begins.)
+                if !text.trim().is_empty() && !e.b("isMeta") && !e.b("isSidechain") && !text.contains("<task-notification>") { began = when(e.at("timestamp")); }
             }
         }
     }

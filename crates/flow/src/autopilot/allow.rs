@@ -81,6 +81,7 @@ pub fn guard(cmd: &str, pos: &[String], flags: &Obj, agent: Option<(&Obj, &str)>
         "retry" => {
             let t = task()?;
             if !may_look_after(&ap, &t) { return refused(&format!("retry {}", t.s("id")), "It may only retry tasks it may look after."); }
+            if crate::stop_hold::yours::stopped_by_you(&t) { return refused(&format!("retry {}", t.s("id")), "That task was stopped: carrying it on is the human's."); } // stop_hold/yours.rs
             let used = task_rec(&ap, t.s("id")).map(|r| r.i("retries")).unwrap_or(0);
             if used >= super::record::count(&co, "autopilot.retries") { return refused(&format!("retry {}", t.s("id")), "Its retries of that task are used (autopilot.retries): it is the human's now."); }
             Ok(Some(co))

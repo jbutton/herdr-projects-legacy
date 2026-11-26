@@ -98,7 +98,7 @@ pub fn rearm(t: &mut Task, keep_intent: bool, live: bool, chat: bool) -> Res<()>
     if !chat { t.del("chat"); }
     else if flow::chat::begin(t, "board", live && runner_alive(t)) == flow::chat::Began::During { granted(t); return Ok(()); }
     granted(t); // stopped at a limit: your word gives it the limit once more
-    for k in ["tidy", "waiting", "cutRetry", "relaunched"] { t.put(k, Value::Null); } // a reply is a new start: its agent's tries too (hook/relaunch.rs)
+    for k in ["tidy", "waiting", "cutRetry", "relaunched", "hold"] { t.put(k, Value::Null); } // a reply is a new start: its agent's tries too (hook/relaunch.rs), and no stop holds it
     fresh_list(t);
     if t.at("failure").s("stage") == "send" { t.put("failure", Value::Null); } // what you say now goes into the same box
     t.put("armedAt", now()); t.put("expectedWake", Value::Null); t.put("turnOpen", true); t.put("turnBy", "reply"); t.put("selfBlocked", Value::Null); t.put("blocked", Value::Null);
@@ -161,6 +161,7 @@ pub(crate) fn stop_as(id: &str, yours: bool) -> Res<(Task, Ended)> {
         t.put("stage", "stopped"); t.put("stoppedAt", now()); t.put("stopSeq", seq); t.put("sawIdleAfterStop", false);
         for k in ["expectedWake", "watch", "mergeIntent", "waiting", "limitStop"] { t.put(k, Value::Null); }
         t.put("turnOpen", false); t.put("msg", "");
+        if a.is_some() { crate::stop_hold::begin(t, now()); } else { t.del("hold"); } // its agent there is held (stop_hold.rs)
         Ok(Change::Write)
     })?;
     kill_runner(&t);

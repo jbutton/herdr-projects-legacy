@@ -200,7 +200,8 @@ setting that would allow it.
   at once, or after one of its own tasks.
 - **`delegate`** its own tasks, and under `autopilot.scope all` your to-do tasks in its area, on its own machine.
 - **`tell`** the agent of a task it may look after that asks a question; never into a permission or approval prompt.
-- **`retry`** a task it may look after, at most `autopilot.retries` times. Answering a question uses no retry.
+- **`retry`** a task it may look after, at most `autopilot.retries` times. Answering a question uses no retry. Never a
+  task that was stopped: carrying that on is yours ([a stop holds the whole agent](stopping.md)).
 - **`stop`** and **`archive`** its own tasks, not one waiting for your yes.
 - **`approve`** a plan or a merge, only under `autopilot.approve yes`, on tasks it may look after. Never `--anyway`.
 - **`autopilot off`**, for itself, another or `--all`. `autopilot on` for another only under `autopilot.switchOthers

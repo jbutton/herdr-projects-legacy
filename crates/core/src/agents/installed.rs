@@ -52,7 +52,8 @@ pub fn hook_usable(k: &str) -> bool {
 }
 /// Does a finished turn still need the closing note? Yes unless the hook and the reader both work for this kind.
 pub fn needs_note(k: &str) -> bool { !kind(k).map(|a| a.reads_turn).unwrap_or(false) || !hook_usable(k) || mark(&format!("reader:{k}"), &version_of(k)).is_some() }
-fn file_for(k: &str, file: Option<&Path>, session: &str, cwd: &Path) -> Option<PathBuf> {
+/// Where a task's (or its reviewer's) conversation is saved: the file it names, else its session's.
+pub fn file_for(k: &str, file: Option<&Path>, session: &str, cwd: &Path) -> Option<PathBuf> {
     match file.filter(|f| f.exists()) { Some(f) => Some(f.to_path_buf()), None if !session.is_empty() => adapter::transcript(k, session, cwd), None => None }
 }
 /// The end of a task's (or its reviewer's) saved conversation, or None. `whole`: the whole file is read.
