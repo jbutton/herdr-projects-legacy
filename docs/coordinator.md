@@ -101,6 +101,12 @@ whole conversation, its dialogs, slash commands and menus, **go into it** in Her
   `herdr-projects coordinator stop` closes its tab; your next message starts it again, in the same conversation.
 - The agent's own new-chat command (`/clear`, `/new`) is followed: the chat and a restart go with the conversation it
   is in now.
+- So is a chat Claude Code carried on in a new session. It ends the old session's transcript with a `continued-in`
+  record naming the new one, and `claude --resume` of the old id comes back without what was said since. The board
+  follows those records to the newest session (stopping at one whose file is missing), resumes that one and keeps its
+  id. If Herdr brings the Coordinator back after a restart in an older session of the line, the board starts it again
+  on the newest once it is at rest. An old session that was talked in after its record stays as it is: the
+  conversation went on there.
 - Its program, model and effort are settings (`coordinator.agent`, …): [roles and commands](roles-and-commands.md).
 - `coordinator new`, `restart` and `stop` leave [autopilot](autopilot.md) as it is. `stop` on one on autopilot says
   that its next wake starts it again.

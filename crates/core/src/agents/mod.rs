@@ -4,6 +4,7 @@ pub mod access;
 pub mod adapter;
 pub mod codex_files;
 pub mod codex_trust;
+pub mod continued;
 pub mod efforts;
 pub mod hand_limits;
 pub mod helpers;
