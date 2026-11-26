@@ -100,6 +100,7 @@ each. This copy makes no version tags yet, so the list is one section.
   for extra usage has its program ended, and a helper that wakes a stopped agent no longer carries the task on, reviews
   it or gives it leave for extra usage. `retry` carries on a task you stopped; after a stop for extra usage the agent
   is told the board stopped it, not you.
+  ([#39](https://github.com/jbutton/herdr-projects-legacy/pull/39))
 - `board.notify` no longer says a task waiting for approval needs you the moment main cannot be fetched (a machine
   that woke before its network or its SSH agent did), nor that the same work is ready to approve again once it is: only
   5 failed tries in a row are news. Each wake used to bring a second "ready to approve" for nothing new.
