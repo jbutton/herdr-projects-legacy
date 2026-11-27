@@ -33,7 +33,18 @@ fn retitle(t: &mut Task, title: &str) {
     if !now.title.is_empty() { t.put("title", now.title); t.put("description", now.description); t.del("subject"); }
 }
 pub fn rename(id: &str, title: &str) -> Res<Task> { let cur = find(id)?; update(cur.s("id"), |t| { assert_unarchived(t)?; retitle(t, title); Ok(Change::Write) }) }
-pub fn describe(id: &str, text: &str) -> Res<Task> { let cur = find(id)?; update(cur.s("id"), |t| { assert_unarchived(t)?; t.put("description", text.replace('\r', "").trim()); Ok(Change::Write) }) }
+/// A new description, and when it changed (`describedAt`): what people told the task before that is behind it
+/// (finish/told_later.rs). The same words again change nothing.
+pub fn describe(id: &str, text: &str) -> Res<Task> {
+    let cur = find(id)?;
+    let text = text.replace('\r', "").trim().to_string();
+    update(cur.s("id"), |t| {
+        assert_unarchived(t)?;
+        if t.s("description") != text { t.put("describedAt", crate::clock::now()); }
+        t.put("description", text.as_str());
+        Ok(Change::Write)
+    })
+}
 pub fn pin(id: &str) -> Res<Task> { let cur = find(id)?; update(cur.s("id"), |t| { assert_unarchived(t)?; let p = !t.b("pinned"); t.put("pinned", p); Ok(Change::Write) }) }
 /// Pinned (`on`) or not, whatever it was.
 pub fn set_pin(id: &str, on: bool) -> Res<Task> { let cur = find(id)?; update(cur.s("id"), |t| { assert_unarchived(t)?; t.put("pinned", on); Ok(Change::Write) }) }
