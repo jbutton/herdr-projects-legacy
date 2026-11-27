@@ -119,15 +119,25 @@ fn ensure(api: &Herdr, co: &Co) -> Res<(Obj, bool)> {
     change(co, |c| { c.put("starting", began); true })?;
     let args = start::start_args(&k, &start::StartOpts { model: run.t("model"), effort: run.t("effort"), access: if run.b("access") { run.t("access") } else { "full".into() }, fast: run.b("fast").then_some(true), resume: resume.clone().unwrap_or_default(), session: session.clone().unwrap_or_default(), extra: launch, folder: home(co), ..Default::default() })?;
     let mut blocked = false;
+    let line = std::iter::once(crate::agents::kinds::program(&k).to_string()).chain(args.iter().cloned()).collect::<Vec<_>>().join(" ");
     match api.agent_start(&name, &k, pane.s("pane_id"), &args, 60000) {
-        Ok(_) => { settle(api, pane.s("pane_id"), &std::iter::once(crate::agents::kinds::program(&k).to_string()).chain(args).collect::<Vec<_>>().join(" ")); }
+        Ok(_) => { settle(api, pane.s("pane_id"), &line); }
         Err(e) if e.code == "agent_not_ready" => blocked = true, // a dialog is in the way: what you said waits
         Err(e) => {
-            // Why, in plain words, read from its terminal before its tab is closed; the whole account goes in its log.
-            let why = start_failed::say(api, &start_failed::Start { kind: &k, setting: "coordinator.agent", again: "send your message again" }, pane.s("pane_id"), &e.message, &dir_of(co).join("start.log"));
-            if let Some(c) = get(co) { close_place(api, &c); }
-            let _ = change(co, |c| { nowhere(c); c.put("starting", 0); true });
-            crate::fail!("{why}");
+            // Claude Code kept the conversation running in its background: taken back into this pane (background.rs).
+            let held = super::background::held(api, &k, pane.s("pane_id"), &e.message);
+            let back = held.map(|id| super::background::take_back(&super::background::Refused { api, co, kind: &k, pane: pane.s("pane_id"), name: &name, args: &args, session: resume.as_deref().or(session.as_deref()).unwrap_or("") }, &id));
+            match back {
+                Some(Ok(true)) => blocked = true,
+                Some(Ok(false)) => { settle(api, pane.s("pane_id"), &line); }
+                _ => {
+                    // Why, in plain words, read from its terminal before its tab is closed; the whole account goes in its log.
+                    let why = match back { Some(Err(w)) => w, _ => start_failed::say(api, &start_failed::Start { kind: &k, setting: "coordinator.agent", again: "send your message again" }, pane.s("pane_id"), &e.message, &dir_of(co).join("start.log")) };
+                    if let Some(c) = get(co) { close_place(api, &c); }
+                    let _ = change(co, |c| { nowhere(c); c.put("starting", 0); true });
+                    crate::fail!("{why}");
+                }
+            }
         }
     }
     let version = installed::version_of(&k);
