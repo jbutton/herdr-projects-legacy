@@ -166,7 +166,7 @@ fn a_pane_whose_program_keeps_writing_to_the_newest_session_is_left_alone_while_
     assert_eq!(get(&w).s("tab"), tab);
     // By its own account it is in the newest session: never closed, also at rest long after its last word.
     in_session(&w, B);
-    sw::clock::advance(10 * QUIET_MS);
+    sw::clock::advance(2 * QUIET_MS);
     tick_later(&w);
     assert_eq!(get(&w).s("tab"), tab); assert_eq!(agents(&w).len(), 1);
     assert!(w.state().arr("killed").is_empty(), "{:?}", w.state().at("killed"));
@@ -197,8 +197,10 @@ fn one_whose_program_or_its_session_cannot_be_told_is_left_alone() {
     save(&w, B, said("Where were we?", 0), 0);
     save(&w, &first, link(&first, B, 0), 0);
     herdr_back(&w, &first, "idle");
-    // The newest long still, but nothing says which session its program is in (no record of its own): left alone.
-    sw::clock::advance(10 * QUIET_MS);
+    // The newest still for longer than it takes, but nothing says which session its program is in (no record of its
+    // own): left alone. (The clock stays within the ten minutes a program's version is kept for: a test runs no
+    // `claude --version`, and there may be no claude where it runs.)
+    sw::clock::advance(QUIET_MS);
     tick_later(&w);
     assert_eq!(get(&w).s("tab"), tab);
     // Its record names the first one, but herdr cannot say what runs in its pane: left alone too.
@@ -210,5 +212,6 @@ fn one_whose_program_or_its_session_cannot_be_told_is_left_alone() {
     // Once herdr answers again, it is known to be elsewhere: started again on the newest.
     info(false);
     tick_later(&w);
+    assert!(!get(&w).b("error"), "{}", get(&w).s("error"));
     assert_ne!(get(&w).s("tab"), tab); assert_eq!(resumed(&w), B);
 }
