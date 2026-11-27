@@ -165,3 +165,20 @@ fn an_agent_that_exits_with_typed_text_not_taken_is_not_started_and_a_late_repor
     settle(&id);
     assert_eq!(said_times(&w, &id, "GONE WITH IT"), 1);
 }
+
+#[test]
+fn a_look_dated_after_now_does_not_hold_back_the_next_one() {
+    let (w, id) = long_turn("Long turn");
+    w.patch(|s| s["swallow"] = json!(1));
+    tell(&id, "ONE MORE THING while you are at it");
+    // Its last look was dated an hour from now: a clock that later went back (one a test before this one moved on, in
+    // the same process).
+    let real = sw::clock::now();
+    sw::clock::set(Some(real + 3_600_000));
+    pass(&w);
+    sw::clock::set(None);
+    assert!(task(&id).at("sent").b("busy"));
+    took_mid_turn(&w, &id, &task(&id).at("sent").t("text"));
+    for _ in 0..2 { pass(&w); }
+    assert_eq!((task(&id).t("stage"), task(&id).at("sent").is_null()), ("working".into(), true));
+}
