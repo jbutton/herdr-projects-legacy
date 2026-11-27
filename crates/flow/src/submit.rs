@@ -180,8 +180,10 @@ pub fn check_sent(id: &str, a: Option<&Value>, api: &Herdr) {
         return lost(format!("The board typed the text into the agent's box {secs} seconds ago. The agent's program ended before it started on it: nothing was submitted."), format!("Retry ({}) starts the agent's program again and hands it the text once more.", key_name("yes")));
     };
     if m.b("busy") { // typed into a running turn: looked at from the moment the agent is at rest
+        // Kept for the whole process, by task id: a look dated after now is from a clock that went back since (the
+        // system's, or a test's before this one), and holds nothing back.
         let last = LOOKED.lock().unwrap().get(id).copied().unwrap_or(0);
-        if now() - last >= wait_ms(None) { LOOKED.lock().unwrap().insert(id.into(), now()); if said() == Some(true) { LOOKED.lock().unwrap().remove(id); return clear(); } }
+        if last > now() || now() - last >= wait_ms(None) { LOOKED.lock().unwrap().insert(id.into(), now()); if said() == Some(true) { LOOKED.lock().unwrap().remove(id); return clear(); } }
         if at_rest(a) { let _ = update_wait(id, 10000, |c| { if !mine(c) { return Ok(Change::Keep); } let r = rest(c.at("sent"), a); c.put("sent", r); Ok(Change::Write) }); }
         return;
     }

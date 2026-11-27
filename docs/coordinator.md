@@ -104,9 +104,20 @@ whole conversation, its dialogs, slash commands and menus, **go into it** in Her
 - So is a chat Claude Code carried on in a new session. It ends the old session's transcript with a `continued-in`
   record naming the new one, and `claude --resume` of the old id comes back without what was said since. The board
   follows those records to the newest session (stopping at one whose file is missing), resumes that one and keeps its
-  id. If Herdr brings the Coordinator back after a restart in an older session of the line, the board starts it again
-  on the newest once it is at rest. An old session that was talked in after its record stays as it is: the
-  conversation went on there.
+  id. If Herdr brings the Coordinator back after a restart in an older session of the line, the board starts it again on
+  the newest once it is at rest, and only when its program has exited, or when the program says it is in another session
+  and the newest session's transcript has not grown for three minutes. A program that is itself in the newest session is
+  never closed, whatever session Herdr names for it: Claude Code carries a running chat on in a new session within the
+  same program, and Herdr keeps the id it began with. The board asks the program itself (Claude Code writes the session
+  it is in to `~/.claude/sessions/<pid>.json`); when it cannot tell, it leaves the program alone. An old session that
+  was talked in after its record stays as it is: the conversation went on there.
+- A conversation Claude Code kept running in its background (its terminal was closed while it worked) refuses a
+  resume with `That session is running in the background (<id>)`. The board then waits until that session's transcript
+  stops growing (still for 30 seconds with its turn ended, or for five minutes; at most twenty), runs `claude stop <id>`
+  and resumes the conversation in the Coordinator's tab. A session whose transcript it cannot find is never stopped,
+  since nothing shows that it no longer works. Each step goes to `start.log` in its folder. If that fails,
+  the error above the box names the session and the two commands to run: `claude stop <id>`, then
+  `herdr-projects coordinator restart`.
 - Its program, model and effort are settings (`coordinator.agent`, …): [roles and commands](roles-and-commands.md).
 - `coordinator new`, `restart` and `stop` leave [autopilot](autopilot.md) as it is. `stop` on one on autopilot says
   that its next wake starts it again.

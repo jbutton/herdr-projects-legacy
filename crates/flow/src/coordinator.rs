@@ -3,6 +3,7 @@
 //! What you type in the box is typed into that one conversation; it is kept across board openings, and resumed when the
 //! program exited or herdr restarted. Its state is one file beside the tasks. Nothing here blocks the board: `send`,
 //! `restart`, `fresh`, `stop` and `open` only write the request down and start the detached job (`pump`). One area per file.
+pub mod background;
 pub mod co;
 pub mod far;
 pub mod follow;

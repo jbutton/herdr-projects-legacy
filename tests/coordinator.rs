@@ -12,6 +12,8 @@ use sw::json::*;
 mod undelivered;
 /// A chat Claude Code went on with in a new session: resumed there, also after herdr brought back an older one.
 mod follow;
+/// A conversation Claude Code kept running in its background: stopped there and resumed in the board's pane.
+mod background;
 
 pub fn coord_world() -> World {
     let w = world_with(Opts { repo: true, settings: json!({ "coordinator.agent": "claude", "review.when": "never" }), ..Default::default() });

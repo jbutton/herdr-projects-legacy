@@ -43,6 +43,13 @@ pub fn agent(f: &F, verb: &str, arg2: &str, argv: &[String], flag: &dyn Fn(&str)
                 st["panes"][pi]["screen"] = json!(format!("user@host:{cwd}$ {typed}\nbash: {kind}: command not found\nuser@host:{cwd}$ "));
                 return fail("timeout", "timed out waiting for agent startup");
             }
+            // `background`: the sessions Claude Code keeps running in its background. A resume of one quits at once with
+            // its words, naming it by its short id, and herdr times out (`claude stop` ends one: claude_running.rs).
+            let resumes = rest.iter().position(|a| text(a) == "--resume").and_then(|i| rest.get(i + 1)).map(text).unwrap_or_default();
+            if !resumes.is_empty() && st.at("background").as_array().is_some_and(|l| l.iter().any(|x| text(x) == resumes)) {
+                st["panes"][pi]["screen"] = json!(format!("user@host:{cwd}$ {typed}\nThat session is running in the background ({}). Attach to it with: claude attach {0}\nuser@host:{cwd}$ ", &resumes[..8]));
+                return fail("timeout", "timed out waiting for agent startup");
+            }
             // `canonical`: that many starts find the pane's shell not at its prompt yet, its terminal taking 1024 bytes
             // on a line (macOS): herdr types nothing and says so. `canonicalLate`: it says so, and the program came up.
             // `canonicalName`: only the agents whose name ends so.
