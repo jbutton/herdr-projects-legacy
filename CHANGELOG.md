@@ -119,3 +119,8 @@ each. This copy makes no version tags yet, so the list is one section.
   back by itself: the board waits until it is still, runs `claude stop` and resumes it in the Coordinator's tab, or
   names the two commands to run.
   ([#40](https://github.com/jbutton/herdr-projects-legacy/pull/40))
+- A coordinator on autopilot wakes with `has a question` for every task it added, also one it added while you chatted
+  with it (a research task always ends so), and again when an agent that went to work after its question (as after a
+  usage limit's reset) ends a turn still asking it. Such a task stays yours: autopilot may read it, never answer,
+  retry or approve it.
+  ([#41](https://github.com/jbutton/herdr-projects-legacy/pull/41))

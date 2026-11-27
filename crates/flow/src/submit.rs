@@ -155,7 +155,8 @@ pub fn note_sent(id: &str, mark: Option<Value>, text: &str, first: bool) {
         Ok(Change::Write)
     });
 }
-/// Task id -> when its saved conversation was last read for a text typed into a running turn.
+/// Task id -> when its saved conversation was last read for a text typed into a running turn. A read kept from later than
+/// now (the clock was set back) holds the next one back no more.
 static LOOKED: LazyLock<Mutex<HashMap<String, i64>>> = LazyLock::new(Default::default);
 pub const NOT_STARTED: &str = "Not started: its instructions sit unsent in its box";
 /// Called on every pass with the agent as herdr shows it now. Never waits: one look, at most one enter.

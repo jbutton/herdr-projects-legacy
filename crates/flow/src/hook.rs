@@ -101,6 +101,7 @@ pub fn apply(id: &str, a: &Value, api: &Herdr) {
         let comp_at = if same_term && prev.is_object() && *prev.at("comp") == comp { if prev.has("compAt") { prev.at("compAt").clone() } else { prev.at("at").clone() } } else { json!(now()) };
         t.put("last", json!({ "status": status, "seq": seq, "comp": comp, "term": if term.is_empty() { Value::Null } else { json!(term) }, "at": now(), "compAt": comp_at }));
         if status == "working" { t.put("workedAt", now()); t.del("owedTurn"); } // herdr has seen it work: an idle after this is the end of a turn, not the wait before one (state.rs)
+        if status == "working" && prev.s("status") != "working" { t.put("workFrom", now()); } // a stretch of work begins: from rest, or past a dialog (autopilot/asks.rs)
         // What the board typed in has been taken: the agent works, or has worked since.
         if t.at("sent").b("busy") { let r = rest(t.at("sent"), a); t.put("sent", r); } // typed into a running turn: only what it does once at rest says
         else if t.at("sent").is_object() && took(t.at("sent"), Some(a), None) == Some(true) { taken(t, a); } // on the counters' word alone, confirmed later (submit/unconfirmed.rs)

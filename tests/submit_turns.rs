@@ -1,6 +1,6 @@
-//! A message an agent took in the middle of a long turn: delivered, even found only when it rests, and never retried
-//! as "not started" while its session lives; one only queued is not delivered; and an agent that exits with typed text
-//! not taken is not started with the text kept, whatever late report of its old turn comes in.
+//! A message an agent took in the middle of a long turn: delivered, even found only when it rests or after the clock was
+//! set back, and never retried as "not started" while its session lives; one only queued is not delivered; and an agent
+//! that exits with typed text not taken is not started with the text kept, whatever late report of its old turn comes in.
 use crate::common;
 use common::*;
 use serde_json::{json, Value};
@@ -69,6 +69,19 @@ fn a_message_taken_in_the_middle_of_a_long_turn_is_delivered_and_no_enter_is_pre
     assert!(!c.b("unsent") && c.at("failure").s("stage") != "send", "{}", c.at("failure"));
     assert_eq!((count(&w, r"^agent send-keys .* enter$"), count(&w, r"^agent start")), (0, 1));
     assert_eq!(c.s("stage"), "done", "{}", c.s("msg"));
+}
+
+#[test]
+fn a_read_of_its_conversation_kept_from_a_clock_set_back_does_not_hold_the_next_one_back() {
+    let (w, id) = long_turn("Clock set back");
+    w.patch(|s| s["swallow"] = json!(1));
+    tell(&id, "SAID BEFORE THE CLOCK WENT BACK");
+    // read once while the clock stood five hours on, then the clock goes back: the next pass reads it again all the same
+    sw::clock::set(Some(sw::clock::now() + 5 * 3_600_000)); pass(&w);
+    sw::clock::set(None);
+    took_mid_turn(&w, &id, &task(&id).at("sent").t("text"));
+    pass(&w);
+    assert!(task(&id).at("sent").is_null(), "{}", task(&id).at("sent"));
 }
 
 #[test]

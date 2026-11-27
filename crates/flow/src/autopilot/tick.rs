@@ -3,7 +3,8 @@
 //! answered); a wake that waited 15 minutes is unanswered; a failed start is said; the board's events and its timer add
 //! reasons; and when nothing holds it back the reasons go out as one wake. Nothing holds it back once: it is awake by
 //! its hours, past `autopilot.gap` since its last turn ended (but for the wake of turning on), under
-//! `autopilot.wakesPerDay`, at rest with no message of yours waiting, and with room or a task that needs looking after.
+//! `autopilot.wakesPerDay`, at rest with no message of yours waiting, and with room, a task that needs looking after or
+//! a question of a task it added in a turn of yours (asks.rs).
 //! A reason that is only the timer goes only when the free look (look.rs) finds the board changed, or when it is idle
 //! with room (idle.rs), then at most as often as its backed-off timer allows.
 use super::care::needing;
@@ -106,7 +107,8 @@ pub fn tick(co: &Co, board: &[Obj], now: i64) {
         let busy = look.as_ref().map(|(rest, _)| !rest).unwrap_or(false) || c.arr("queue").iter().any(mine) || ap.at("wake").b("typedAt");
         if ap.b("needsYou") || ask_first || !awake(&hours, now) || ap.i("woke") >= per_day || busy { return true; }
         if !on_wake && now < ended + gap { return true; }
-        if !room(co, ap, board, now) && needing(ap, board, approve).is_empty() { return true; }
+        // A question of a task it added in a turn of yours goes out also with no room (asks.rs).
+        if !room(co, ap, board, now) && needing(ap, board, approve).is_empty() && !super::asks::held(co, ap, board, &pending) { return true; }
         // A reason that is only the timer goes only when the board changed since its last wake ended, or when it is idle
         // with room and its timer, backed off after wakes that changed nothing, is due: an idle autopilot never stalls.
         let due_idle = idle(co, ap, board, now) && now >= ended + timer_gap(every, ap);

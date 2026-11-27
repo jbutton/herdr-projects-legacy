@@ -116,10 +116,10 @@ It has three kinds of reason:
 - **Its timer**, `autopilot.every`, counted from the end of its last wake (or its last look that found nothing new).
   Missed ticks are not caught up.
 - **Board events** in its area, `autopilot.when`: `done` (a task was merged or done), `stuck` (a task it may look after
-  starts to need looking after: once, not again while it stays so), `stalled` (a task it may look after stalled: its
-  agent works but shows nothing new for `stall.after`, or runs well past the Watcher's estimate; once per stall:
-  [stalled tasks](stalled.md)), `added` (a task was added by anyone but this coordinator). Only what happens after it
-  was turned on counts, and each fires once.
+  starts to need looking after: once, not again while it stays so; and a question of any task it added, below),
+  `stalled` (a task it may look after stalled: its agent works but shows nothing new for `stall.after`, or runs well
+  past the Watcher's estimate; once per stall: [stalled tasks](stalled.md)), `added` (a task was added by anyone but
+  this coordinator). Only what happens after it was turned on counts, and each fires once.
 - **Being turned on.**
 
 **The free look.** Before a timer wake, the board looks for itself, at no cost: no model, no tokens. Only if something
@@ -138,11 +138,20 @@ it is idle with room and wakes left today, and nothing ran for more than twice `
 run, or its timer backed off), its row says `Autopilot stalled: no check-in for 3h`, backed off with why: `Autopilot
 stalled: no check-in for 3h, last 4 wakes added nothing`.
 
+**A question wakes it for every task it added** from its own pane, in any turn: also one it added while you chatted
+with it, which it may not look after (a research task always ends on a question that waits for it), in its area or in
+another repo you asked it to add to. That one wakes it with `HSW-84 has a question` all the same, within its hours and
+also with no room left, and stays yours: it may read it and tell you what it found or asks, never answer, retry or
+approve it. Of such a task outside its area, only the question wakes it. A question wakes it once, and once more each
+time the task's agent ends a turn while it still asks, when herdr saw it go to work again after the question was
+reported: an agent that asked as its program hit a usage limit, then carried on by itself after the reset, ends with
+its old question still on its row.
+
 **No wake while** it is off; it says `needs you`; it is outside `autopilot.hours`; it is within `autopilot.gap` of the end
 of its last wake's turn or of a turn of yours; `autopilot.wakesPerDay` are used today; it is mid-turn, or a message of
-yours waits for it; or it has no room and none of its tasks needs looking after (one that stalls does: its slots full
-of hung work still wake it). The reasons are kept and go out as one
-wake when that ends. A reason that is only the timer is dropped if the look then finds nothing new.
+yours waits for it; or it has no room, none of its tasks needs looking after (one that stalls does: its slots full
+of hung work still wake it) and no task it added in a turn of yours has a question. The reasons are kept and go out as
+one wake when that ends. A reason that is only the timer is dropped if the look then finds nothing new.
 
 **You come first.** At most one wake waits in its queue. When a message of yours is queued, a wake not yet typed in is
 taken out again, and its reasons wait. Only the wake of turning on skips the gap after your turn.
@@ -159,7 +168,7 @@ Autopilot: HSW-84 finished, HSW-88 has a question
 | its timer, and the board changed | `Regular check-in` |
 | `done`: a task merged or done | `HSW-84 finished` |
 | `stuck`: it failed | `HSW-84 is stuck` |
-| `stuck`: its agent asks a question | `HSW-84 has a question` |
+| `stuck`: its agent asks a question (any task it added) | `HSW-84 has a question` |
 | `stuck`: it waits for a yes autopilot may give | `HSW-84 is ready to approve` |
 | `stalled`: nothing new on its agent's screen | `HSW-84 has shown nothing new for 21m` |
 | `stalled`: well past the Watcher's estimate | `HSW-84 ran well past its estimate` |
@@ -167,8 +176,9 @@ Autopilot: HSW-84 finished, HSW-88 has a question
 
 No goal, no limits and no counts: **its rules say to read its autopilot first in every wake**, as it stands now, with
 `herdr-projects autopilot show` (`--machine`, `--project <repo>`): its state, goal, today's counts, its tasks under way
-and those that need looking after, and its settings in plain words (what it may set and touch, whether it may say yes
-or add releases). So a change between wakes is always picked up, and nothing is repeated in the chat.
+and those that need looking after, the tasks it added in your turns that have a question, and its settings in plain
+words (what it may set and touch, whether it may say yes or add releases). So a change between wakes is always picked
+up, and nothing is repeated in the chat.
 
 Its rules say plainly that **every message that starts with `Autopilot:` is a real wake** from the board, whatever an
 older version of its rules (or an earlier part of its chat) said about other words. When its rules changed while its
@@ -218,7 +228,8 @@ machine's.
 of yours it did not start. One of them **needs looking after** when it failed (the check, the review after its rounds, a
 limit, its agent's program, its setup) or its agent asks a question; under `autopilot.approve yes`, also when it waits
 for a yes autopilot may give. One that fails or asks again after its retries are used is **left to you**: it wakes
-nothing more, and autopilot may not touch it.
+nothing more, and autopilot may not touch it. The same question asked on after its agent went to work again is not
+asking again.
 
 **Its tasks are ordinary tasks**, with the same check, review, gate and merge, by their repo's settings plus what
 `mayChange` allowed. Three things differ:

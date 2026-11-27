@@ -43,6 +43,9 @@ fn show(co: &Co) -> (Value, String) {
     let none = |l: Vec<String>| if l.is_empty() { "none".to_string() } else { l.join(", ") };
     let mut said = vec![format!("{}: {}", co.name(), v.s("line")), format!("Now: {}", v.s("status")), format!("Goal: {}", v.s("goal")), format!("Today: {}", v.s("today")),
         format!("Under way: {}", none(busy)), format!("Needs looking after: {}", none(needs))];
+    // A question of a task it added in a turn of yours: it reads it and tells you, never answers it (asks.rs).
+    let theirs: Vec<String> = board.iter().filter(|t| super::asks::of_your_turn(co, &ap, t)).map(|t| tag(t.s("id"))).collect();
+    if !theirs.is_empty() { said.push(format!("Has a question, added in the human's turn (read it and tell the human; not yours to answer): {}", theirs.join(", "))); }
     said.extend(super::shown::settings_of(co).into_iter().map(|(l, x, _)| format!("{l}: {x}")));
     (v, said.join("\n"))
 }
