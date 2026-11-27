@@ -195,6 +195,12 @@ When the agent's turn ends, the board:
    ([a task's tabs](tabs.md)). It says what it found, with evidence. Whatever it changed is put back.
    - When the repo has a `check`, the reviewer is told the command and that it passed on this commit, and to run tests
      only through it.
+   - The reviewer reads the task's title and description (its first 3000 characters), and after them what you or a
+     coordinator told the agent since, with `herdr-projects tell` or in the board's chat: under "Later instructions",
+     newest last, each with who said it and when, and where they differ from the description, they win. A task told to
+     keep only part A of a change is reviewed for part A. At most the last 10 and 3000 characters in all are read, the
+     newest kept. The board's own messages (the review sent back, a retry, carry on) are not among them. A task nobody
+     told anything has no such section.
    - A reviewer that ends its turn with no verdict is started once more by itself, as the same review. If it again gives
      none, the review fails, with its last message.
    - Only the reviewer's own turn ending counts. A helper it hands part of the review to (Codex's sub-agents, Claude

@@ -18,10 +18,12 @@ use crate::store::inbox::queue_text;
 use crate::store::tasks::{assert_unarchived, find, get, update, Change, Task};
 
 /// Words a person typed for a task's agent (`by`: "you", or "coordinator"): noted as theirs, so its conversation says
-/// who said them, then told.
+/// who said them, then told; once told, kept whole for its reviewers (finish/told_later.rs).
 pub fn reply(id: &str, text: &str, by: &str) -> Res<Said> {
     if let Ok(t) = find(id) { crate::store::said_by::note_person(t.s("id"), by, text.trim()); }
-    tell_as(id, text, false, true)
+    let out = tell_as(id, text, false, true)?;
+    crate::store::said_by::note_told(out.task.s("id"), by, text);
+    Ok(out)
 }
 /// Who runs this command: a coordinator where it runs in the Coordinator's own folder or in a coordinator's pane, else you.
 pub fn asker() -> &'static str {
@@ -58,7 +60,11 @@ pub fn tell_as(id: &str, text: &str, keep_intent: bool, chat: bool) -> Res<Said>
         if live.is_empty() { crate::fail!("{cid}: none of its attempts can take a message right now."); }
         let asking: Vec<Task> = live.iter().filter(|c| standing_of(c, n) == "needs").cloned().collect(); // an answer is for the ones that asked
         if !asking.is_empty() { live = asking; }
-        for c in &live { crate::store::said_by::carry(&cid, &words, c.s("id"), &words); tell(c.s("id"), &words, keep_intent)?; }
+        for c in &live {
+            let by = crate::store::said_by::carry(&cid, &words, c.s("id"), &words);
+            tell(c.s("id"), &words, keep_intent)?;
+            if let Some(by) = by { crate::store::said_by::note_told(c.s("id"), &by, &words); } // its reviewer holds it to them too
+        }
         let msg = if live.len() == 1 { format!("Sent to attempt {}", live[0].s("letter")) } else { format!("Sent to {} attempts ({})", live.len(), live.iter().map(|c| c.t("letter")).collect::<Vec<_>>().join(", ")) };
         return Ok(say(get(&cid).unwrap_or(cur), msg));
     }

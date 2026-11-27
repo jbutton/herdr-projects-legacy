@@ -124,3 +124,6 @@ each. This copy makes no version tags yet, so the list is one section.
   usage limit's reset) ends a turn still asking it. Such a task stays yours: autopilot may read it, never answer,
   retry or approve it.
   ([#41](https://github.com/jbutton/herdr-projects-legacy/pull/41))
+- The reviewer, of the work and of a plan, now reads what you or a coordinator told the task after its description
+  (`tell`, the board's chat) as later instructions that win over the description, so a task whose scope you narrowed
+  is no longer failed for what it was told to leave out.
