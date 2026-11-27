@@ -155,7 +155,8 @@ pub fn note_sent(id: &str, mark: Option<Value>, text: &str, first: bool) {
         Ok(Change::Write)
     });
 }
-/// Task id -> when its saved conversation was last read for a text typed into a running turn.
+/// Task id -> when its saved conversation was last read for a text typed into a running turn. A read kept from later than
+/// now (the clock was set back) holds the next one back no more.
 static LOOKED: LazyLock<Mutex<HashMap<String, i64>>> = LazyLock::new(Default::default);
 pub const NOT_STARTED: &str = "Not started: its instructions sit unsent in its box";
 /// Called on every pass with the agent as herdr shows it now. Never waits: one look, at most one enter.
@@ -181,7 +182,7 @@ pub fn check_sent(id: &str, a: Option<&Value>, api: &Herdr) {
     };
     if m.b("busy") { // typed into a running turn: looked at from the moment the agent is at rest
         let last = LOOKED.lock().unwrap().get(id).copied().unwrap_or(0);
-        if now() - last >= wait_ms(None) { LOOKED.lock().unwrap().insert(id.into(), now()); if said() == Some(true) { LOOKED.lock().unwrap().remove(id); return clear(); } }
+        if now() - last >= wait_ms(None) || last > now() { LOOKED.lock().unwrap().insert(id.into(), now()); if said() == Some(true) { LOOKED.lock().unwrap().remove(id); return clear(); } }
         if at_rest(a) { let _ = update_wait(id, 10000, |c| { if !mine(c) { return Ok(Change::Keep); } let r = rest(c.at("sent"), a); c.put("sent", r); Ok(Change::Write) }); }
         return;
     }
