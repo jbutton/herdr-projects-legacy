@@ -113,3 +113,8 @@ each. This copy makes no version tags yet, so the list is one section.
   resumed in that one, and one Herdr brought back after a restart in the old session is started again on the newest
   once it is at rest. It no longer comes back without its latest conversation.
   ([#38](https://github.com/jbutton/herdr-projects-legacy/pull/38))
+- The Coordinator is no longer restarted while its program still works in the newest session of its chat: the board
+  closes its tab for the newest session only when its program has exited, or when that session has been still for a
+  few minutes and the program is in another one. A conversation Claude Code kept running in its background is taken
+  back by itself: the board waits until it is still, runs `claude stop` and resumes it in the Coordinator's tab, or
+  names the two commands to run.
