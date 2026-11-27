@@ -13,6 +13,8 @@ use sw::store::settings::places::yours;
 
 /// Who added a task: a project coordinator's add in another repo names it, in `details` and in that repo's history.
 mod added_by;
+/// `has a question` for every task it added: one added in your turn wakes it once, an agent that went on wakes it again.
+mod asks;
 /// Idle with room: its timer wakes it all the same, backs off after wakes that added nothing, and its row says so.
 mod idle;
 /// One that never ran: sent as off, and `Tab` from another machine starts it.

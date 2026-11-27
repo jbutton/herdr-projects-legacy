@@ -1,23 +1,27 @@
 //! The board events that wake a coordinator on autopilot (`autopilot.when`), in its area: `done` (a task was merged or
-//! done), `stuck` (a task it may look after starts to need looking after: once, not again while it stays so),
-//! `stalled` (a task it may look after stalled, stalled.rs: once per stall) and `added` (a task was added by anyone but
-//! this coordinator). Each is read off the tasks as they stand and fired once:
+//! done), `stuck` (a task it may look after starts to need looking after: once, not again while it stays so; and a
+//! question of any task it added, asks.rs), `stalled` (a task it may look after stalled, stalled.rs: once per stall) and
+//! `added` (a task was added by anyone but this coordinator); of a task it added outside its area, only its question.
+//! Each is read off the tasks as they stand and fired once:
 //! what was seen is kept in its record (`seen`), and the first look after it was turned on only takes note. A task
 //! that starts to need looking after once its retries are used is left to you instead, and wakes nothing.
+use super::asks;
 use super::care::{added_by, in_area, may_look_after, need_of};
 use super::record::{task_rec, with_task};
 use crate::clock::now;
 use crate::coordinator::co::Co;
 use crate::json::*;
 
-/// What is so of a task now, one mark per thing that wakes.
-fn marks_of(ap: &Obj, t: &Obj, approve: bool) -> Vec<String> {
+/// What is so of a task now, one mark per thing that wakes. `had`: its marks seen before.
+fn marks_of(co: &Co, ap: &Obj, t: &Obj, approve: bool, had: &[String]) -> Vec<String> {
     let mut out = vec!["added".to_string()];
+    // One it added outside its area (in another repo, as you asked): only its question.
+    if !in_area(co, t) { if asks::of_your_turn(co, ap, t) { out.push(asks::mark(t, had)); } return out; }
     if t.b("mergedAt") || t.s("stage") == "done" { out.push("done".into()); }
     if may_look_after(ap, t) {
-        if let Some(w) = need_of(t, approve) { out.push(format!("stuck:{w}")); }
+        match need_of(t, approve) { Some("asks") => out.push(asks::mark(t, had)), Some(w) => out.push(format!("stuck:{w}")), None => {} }
         out.extend(crate::stalled::marks(t, now()));
-    }
+    } else if asks::of_your_turn(co, ap, t) { out.push(asks::mark(t, had)); }
     out
 }
 /// A reason to wake, as kept: why (`on`, `timer`, `done`, `stuck`, `stalled`, `added`), the task, and its words in plain
@@ -35,14 +39,14 @@ pub fn look(co: &Co, ap: &mut Obj, board: &[Obj], when: &str, approve: bool, ret
     let mut out = vec![];
     let wants = |w: &str| when.split_whitespace().any(|x| x == w);
     // The oldest first, then by number: the reasons of one wake are said in the order things happened.
-    let mut area: Vec<&Obj> = board.iter().filter(|t| in_area(co, t)).collect();
+    let mut area: Vec<&Obj> = board.iter().filter(|t| in_area(co, t) || added_by(co, t)).collect();
     area.sort_by(|a, b| (a.i("created"), a.s("host"), a.i("n"), a.s("id")).cmp(&(b.i("created"), b.s("host"), b.i("n"), b.s("id"))));
     for t in area {
         let id = t.t("id");
         // Another machine's task of its own, seen over: its slot is free also once that machine is heard no more.
         if t.b("host") && super::care::over(t) && task_rec(ap, &id).map(|r| !r.b("over")).unwrap_or(false) { with_task(ap, &id, |r| { r.put("over", true); }); }
         let had: Vec<String> = seen.get(&id).map(strings).unwrap_or_default();
-        let marks = crate::stalled::with_kept(t, marks_of(ap, t, approve), &had); // a stall for as long as it stands
+        let marks = crate::stalled::with_kept(t, marks_of(co, ap, t, approve, &had), &had); // a stall for as long as it stands
         next.put(&id, marks.clone());
         // Never seen and from before it was turned on (another machine's, heard only now): nothing new happened.
         if first || t.b("archivedAt") || (had.is_empty() && t.i("created") < ap.i("since")) { continue; }
@@ -53,9 +57,11 @@ pub fn look(co: &Co, ap: &mut Obj, board: &[Obj], when: &str, approve: bool, ret
                 "stalled" if wants("stalled") => out.push(reason("stalled", &id, &format!("{} {}", tag(&id), crate::stalled::say(m, now())))),
                 "stuck" => {
                     let w = m.split(':').nth(1).unwrap_or("");
-                    // Failing or asking again once its retries are used: yours from now on.
+                    // Failing or asking again once its retries are used: yours from now on. Not the same question once
+                    // more after its agent went on, nor one of a task it may not look after (asks.rs).
                     let used = task_rec(ap, &id).map(|r| r.i("retries")).unwrap_or(0);
-                    if w != "yes" && used >= retries { with_task(ap, &id, |r| { r.put("left", true); }); continue; }
+                    let again = w == "asks" && asks::seen(&had);
+                    if w != "yes" && !again && may_look_after(ap, t) && used >= retries { with_task(ap, &id, |r| { r.put("left", true); }); continue; }
                     if wants("stuck") { out.push(reason("stuck", &id, &format!("{} {}", tag(&id), match w { "asks" => "has a question", "yes" => "is ready to approve", _ => "is stuck" }))); }
                 }
                 _ => {}
