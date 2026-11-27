@@ -187,3 +187,28 @@ fn one_whose_program_exited_in_an_older_session_is_restarted_on_the_newest_at_on
     assert_ne!(get(&w).s("tab"), tab); assert_eq!(agents(&w).len(), 1);
     assert_eq!(resumed(&w), B); assert_eq!(get(&w).s("session"), B);
 }
+
+#[test]
+fn one_whose_program_or_its_session_cannot_be_told_is_left_alone() {
+    let w = coord_world();
+    w.script(json!({ "coordinator": [{ "said": "Hello." }] }));
+    tell(&w, "hello");
+    let (first, tab) = (get(&w).t("session"), get(&w).t("tab"));
+    save(&w, B, said("Where were we?", 0), 0);
+    save(&w, &first, link(&first, B, 0), 0);
+    herdr_back(&w, &first, "idle");
+    // The newest long still, but nothing says which session its program is in (no record of its own): left alone.
+    sw::clock::advance(10 * QUIET_MS);
+    tick_later(&w);
+    assert_eq!(get(&w).s("tab"), tab);
+    // Its record names the first one, but herdr cannot say what runs in its pane: left alone too.
+    in_session(&w, &first);
+    let info = |on: bool| w.patch(|st| { for p in st["panes"].as_array_mut().unwrap() { if p.at("agent").is_object() { p["infoFails"] = json!(on); } } });
+    info(true);
+    tick_later(&w);
+    assert_eq!(get(&w).s("tab"), tab); assert!(w.state().arr("killed").is_empty());
+    // Once herdr answers again, it is known to be elsewhere: started again on the newest.
+    info(false);
+    tick_later(&w);
+    assert_ne!(get(&w).s("tab"), tab); assert_eq!(resumed(&w), B);
+}

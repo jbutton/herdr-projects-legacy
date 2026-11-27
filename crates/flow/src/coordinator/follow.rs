@@ -34,15 +34,16 @@ pub fn behind(co: &Co, c: &Obj, a: &Value) -> Option<String> {
     let to = newest(&kind, &runs, &home(co));
     (to != runs && may_close(co, a, &kind, &to)).then_some(to)
 }
-/// Its pane may be closed for the newest session `to`: its program has exited, or `to`'s transcript has not grown for
-/// `QUIET_MS` and the program is not in `to` by its own account (claude_running.rs). One that is in it, at rest between
-/// two turns or not, is never closed, whatever session herdr names for it.
+/// Its pane may be closed for the newest session `to`, on proof only: herdr shows its program has exited, or the program
+/// says it is in another session than `to` (claude_running.rs) and `to`'s transcript has not grown for `QUIET_MS`. One
+/// that is in `to`, at rest between two turns or not, is never closed, whatever session herdr names for it; nor is one
+/// whose pane, session or transcript cannot be told.
 fn may_close(co: &Co, a: &Value, kind: &str, to: &str) -> bool {
     let api = Herdr::new(Some(co.socket.clone()));
     let pane = a.s("pane_id");
     if api.shell_in_front(pane) { return true; }
-    if in_pane(&api, pane).as_deref() == Some(to) { return false; }
-    transcript(kind, to, &home(co)).and_then(|f| still_for(&f)).is_none_or(|ms| ms >= QUIET_MS)
+    let elsewhere = in_pane(&api, pane).is_some_and(|s| s != to);
+    elsewhere && transcript(kind, to, &home(co)).and_then(|f| still_for(&f)).is_some_and(|ms| ms >= QUIET_MS)
 }
 /// On the tick, with nothing else for it to do: one it finds behind is restarted, on the newest session (the restart
 /// resumes the conversation it is in, followed: pump.rs `active`).
