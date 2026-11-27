@@ -114,7 +114,8 @@ whole conversation, its dialogs, slash commands and menus, **go into it** in Her
 - A conversation Claude Code kept running in its background (its terminal was closed while it worked) refuses a
   resume with `That session is running in the background (<id>)`. The board then waits until that session's transcript
   stops growing (still for 30 seconds with its turn ended, or for five minutes; at most twenty), runs `claude stop <id>`
-  and resumes the conversation in the Coordinator's tab. Each step goes to `start.log` in its folder. If that fails,
+  and resumes the conversation in the Coordinator's tab. A session whose transcript it cannot find is never stopped,
+  since nothing shows that it no longer works. Each step goes to `start.log` in its folder. If that fails,
   the error above the box names the session and the two commands to run: `claude stop <id>`, then
   `herdr-projects coordinator restart`.
 - Its program, model and effort are settings (`coordinator.agent`, …): [roles and commands](roles-and-commands.md).

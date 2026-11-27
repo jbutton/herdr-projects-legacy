@@ -1,8 +1,9 @@
 //! A coordinator's conversation that Claude Code kept running in its background (its terminal was closed while it
 //! worked): a start or resume of it is refused with "That session is running in the background (<id>)". The board waits
 //! until that session's transcript stops growing, stops it there (`claude stop <id>`) and resumes it in the board's
-//! pane, each step written to the start log. When that fails, the error names the session and the two commands that
-//! do the same by hand.
+//! pane, each step written to the start log. A session whose transcript cannot be found is never stopped: nothing
+//! shows that it no longer works. When that or anything else fails, the error names the session and the two commands
+//! that do the same by hand.
 use super::co::{Co, Level};
 use super::state::{dir_of, home};
 use crate::agents::adapter::transcript;
@@ -34,14 +35,18 @@ pub fn held(api: &Herdr, kind: &str, pane: &str, said: &str) -> Option<String> {
 /// any start), else the words for the error box.
 pub fn take_back(r: &Refused, id: &str) -> Result<bool, String> {
     let log = dir_of(r.co).join("start.log");
-    let session = if r.session.is_empty() { id } else { r.session };
+    // Its transcript: of the session being started when that is the one Claude Code named, else of the one it named.
+    let ours = Some(r.session).filter(|s| !s.is_empty() && s.starts_with(id)).and_then(|s| transcript(r.kind, s, &home(r.co)));
+    let file = ours.or_else(|| running::transcript_of(id, &home(r.co)));
+    let session = file.as_ref().and_then(|f| f.file_stem()).map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| id.to_string());
+    let session = session.as_str();
     let fail = |why: String| { note(&log, &format!("Not taken back: {why}.")); Err(words(r.co, session, id, &why, &log)) };
     note(&log, &format!("{} was not started: Claude Code says session {session} is running in its background ({id}).", r.kind));
-    if let Some(f) = transcript(r.kind, session, &home(r.co)) {
-        note(&log, &format!("Waiting until its transcript stops growing ({}).", f.display()));
-        if !wait_still(r.kind, &f) { return fail(format!("its transcript still grew after {} minutes", WAIT_MS / 60_000)); }
-        note(&log, "Its transcript stopped growing.");
-    }
+    // Never stopped without seeing that it no longer works: with no transcript to watch, it is left running.
+    let Some(f) = file else { return fail("its transcript was not found, so whether it still works cannot be told; it was left running".into()) };
+    note(&log, &format!("Waiting until its transcript stops growing ({}).", f.display()));
+    if !wait_still(r.kind, &f) { return fail(format!("its transcript still grew after {} minutes", WAIT_MS / 60_000)); }
+    note(&log, "Its transcript stopped growing.");
     note(&log, &format!("Running `claude stop {id}`."));
     match running::stop(id) {
         Ok(out) => note(&log, &format!("`claude stop {id}` answered: {}", if out.is_empty() { "nothing" } else { out.as_str() })),

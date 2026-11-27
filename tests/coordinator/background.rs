@@ -3,7 +3,7 @@
 //! resumes it in its own pane, each step in the start log; when that fails, the error names the session and the two
 //! commands to run.
 use super::coord_world;
-use super::follow::{add, agents, at, file, get, resumed, tell};
+use super::follow::{add, agents, at, file, get, resumed, said, tell};
 use crate::common;
 use common::*;
 use serde_json::{json, Value};
@@ -90,4 +90,30 @@ fn when_the_stop_fails_the_error_names_the_session_and_the_two_commands_to_run()
     assert_eq!(get(&w).arr("queue").len(), 1);
     let log = start_log(&w);
     assert!(log.contains("`claude stop") && log.contains("Not taken back: `claude stop"), "{log}");
+}
+
+#[test]
+fn a_session_whose_transcript_cannot_be_found_is_never_stopped_and_one_named_by_its_short_id_is_waited_for_first() {
+    use sw::coordinator::background::{take_back, Refused};
+    let w = coord_world();
+    sw::clock::advance(0);
+    let stop = claude_stop(&w, None);
+    let (api, co) = (sw::herdr::Herdr::new(Some(w.socket.clone())), sw::coordinator::co::Co::top(&w.socket));
+    let r = Refused { api: &api, co: &co, kind: "claude", pane: "nowhere", name: "sw-coordinator", args: &[], session: "" };
+    // Nothing saved under the id Claude Code gave: whether it still works cannot be told, so it is left running and the
+    // two commands are named.
+    let e = take_back(&r, "eeeeeeee").unwrap_err();
+    assert!(stop.calls.borrow().is_empty(), "{:?}", stop.calls.borrow());
+    assert!(e.contains("Run `claude stop eeeeeeee`, then `herdr-projects coordinator restart`") && e.contains("transcript was not found"), "{e}");
+    assert!(start_log(&w).contains("Not taken back: its transcript was not found"), "{}", start_log(&w));
+    // Saved under the full id its short one begins: that transcript is found and watched until it is still, then stopped.
+    let full = "eeeeeeee-0000-4000-8000-000000000005";
+    add(&file(&w, full), said("Done in the background.", 0), 0);
+    let e = take_back(&r, "eeeeeeee").unwrap_err(); // its resume has no pane here
+    let calls = stop.calls.borrow().clone();
+    assert_eq!(calls.len(), 1, "{calls:?}"); assert_eq!(calls[0].0, "stop eeeeeeee");
+    assert!(e.contains(full) && e.contains("the resume failed"), "{e}");
+    let log = start_log(&w);
+    let (waits, stops) = (log.rfind("Waiting until its transcript stops growing").unwrap(), log.rfind("Running `claude stop eeeeeeee`").unwrap());
+    assert!(log.contains("Its transcript stopped growing.") && waits < stops, "{log}");
 }

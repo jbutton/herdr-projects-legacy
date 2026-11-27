@@ -5,12 +5,13 @@
 //! refused with "That session is running in the background (<id>)" until `claude stop <id>` ends it there. A test
 //! answers for `claude stop` (`set_fake`); under a fake herdr no real program is run.
 use super::homes::claude_home;
+use super::read_turn::find_file;
 use crate::clock::now;
 use crate::herdr::Herdr;
 use crate::json::*;
 use crate::store::files::read_json;
 use std::cell::RefCell;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::rc::Rc;
 use std::sync::LazyLock;
@@ -36,6 +37,14 @@ pub fn in_pane(api: &Herdr, pane: &str) -> Option<String> {
 static HELD: LazyLock<regex::Regex> = LazyLock::new(|| regex::Regex::new(r"(?i)session is running in the background \(([^)\s]+)\)").unwrap());
 /// The session Claude Code said runs in its background, as it named it, when that is why it did not start.
 pub fn held(text: &str) -> Option<String> { HELD.captures(text).map(|c| c[1].to_string()) }
+/// The transcript of the session Claude Code named as `id`: its full id, or the short one `claude agents` lists (the
+/// one saved conversation whose name starts with it). None: there is none, or more than one.
+pub fn transcript_of(id: &str, cwd: &Path) -> Option<PathBuf> {
+    if let Some(f) = super::adapter::transcript("claude", id, cwd) { return Some(f); }
+    if id.len() < 8 { return None; }
+    let found = find_file(&claude_home().join("projects"), &|n| n.starts_with(id) && n.ends_with(".jsonl"), 1);
+    (found.len() == 1).then(|| found[0].clone())
+}
 /// How long since the file was last written, in ms. None: there is no such file.
 pub fn still_for(file: &Path) -> Option<i64> {
     let at = std::fs::metadata(file).ok()?.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as i64;
