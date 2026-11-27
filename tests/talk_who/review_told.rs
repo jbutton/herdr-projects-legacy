@@ -1,6 +1,7 @@
 //! What people told a task after its description reaches its reviewers (finish/told_later.rs): the work's brief and
 //! the plan's carry each `tell` or reply, newest last and saying that it wins over the details; the board's own
-//! messages never; the newest kept within the cap; and a task nobody told anything has the brief it always had.
+//! messages never; the newest kept within the cap; nothing told before the description last changed; and a task
+//! nobody told anything has the brief it always had.
 use crate::common;
 use common::*;
 use serde_json::json;
@@ -96,4 +97,26 @@ fn a_task_nobody_told_anything_has_the_brief_it_always_had() {
         let after = &b[b.find(&format!("Details:\n{SPLIT}")).unwrap() + "Details:\n".len() + SPLIT.len()..];
         assert!(after.starts_with("\n\nWhat the agent says it did:") || after.starts_with("\n\nFirst answer one fixed question"), "{after}");
     }
+}
+
+#[test]
+fn what_was_told_before_the_description_last_changed_is_left_out() {
+    let w = world_with(Opts { repo: true, settings: json!({ "review.when": "never" }), ..Default::default() });
+    let id = split_task(&w);
+    sw::clock::set(Some(sw::clock::now()));
+    sw::actions::talk::reply(&id, "Keep only A.", "you").unwrap(); settle(&id);
+    assert!(section(&brief(&task(&id))).contains("Keep only A."));
+    // the description is rewritten after it: what was told before is behind it
+    sw::clock::advance(60_000);
+    sw::actions::filing::describe(&id, "A and B.").unwrap();
+    for b in [brief(&task(&id)), plan_brief(&task(&id))] {
+        assert!(b.contains("Details:\nA and B.") && !b.contains("Keep only A.") && !b.contains(HEAD), "{b}");
+    }
+    // the same words again move nothing; what is told after is read, and the one before counted as left out
+    sw::clock::advance(60_000);
+    sw::actions::talk::reply(&id, "Name the store file after what it keeps.", "coordinator").unwrap(); settle(&id);
+    sw::clock::advance(60_000);
+    sw::actions::filing::describe(&id, "A and B.").unwrap();
+    let s = section(&brief(&task(&id)));
+    assert!(s.contains("Name the store file") && !s.contains("Keep only A.") && s.contains("(One older instruction is left out.)"), "{s}");
 }
