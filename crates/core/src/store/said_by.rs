@@ -1,7 +1,8 @@
 //! Who typed what into a task's agent or reviewer: you (in the board's chat or with `tell`), the Coordinator, or the
 //! board itself (its brief, a review's findings, a word to go on). Each text the board types is kept by its words and
 //! the time, so that the conversation read back names who said each thing, in its order (flow/talk.rs). What nobody
-//! noted was typed into the program's own box, by you.
+//! noted was typed into the program's own box, by you. What a person told a task is also kept whole once it went in
+//! (`told`), for its reviewers (finish/told_later.rs).
 use super::files::{append_line, dir_of, read_lines};
 use crate::clock::now;
 use crate::json::*;
@@ -42,9 +43,24 @@ fn note(id: &str, by: &str, text: &str, typed: bool) {
 pub fn note_person(id: &str, by: &str, text: &str) { note(id, by, text, false); }
 /// A person's words, as they go on: to another task (an attempt of it), or inside the board's own words (a plan sent
 /// back with them). Whoever typed `typed` for `from` typed `words` for `to`.
-pub fn carry(from: &str, typed: &str, to: &str, words: &str) {
+pub fn carry(from: &str, typed: &str, to: &str, words: &str) -> Option<String> {
     let s = sum(typed);
-    if let Some(n) = noted(from).into_iter().rev().find(|n| !n.typed && n.by != BOARD && n.sum == s) { note(to, &n.by, words, false); }
+    let n = noted(from).into_iter().rev().find(|n| !n.typed && n.by != BOARD && n.sum == s)?;
+    note(to, &n.by, words, false);
+    Some(n.by)
+}
+/// Words a person (`by`: "you" or "coordinator") told the task with `tell` or a reply, kept whole once they went to it.
+/// The board's own messages (send the review back, retry, carry on) are never kept so.
+pub fn note_told(id: &str, by: &str, text: &str) {
+    let text = text.trim();
+    if text.is_empty() || by.is_empty() || by == BOARD { return; }
+    let _ = append_line(&file(id), &json!({ "by": by, "told": text, "at": now() }));
+}
+/// One thing a person told the task: who, when, the words.
+pub struct Told { pub by: String, pub at: i64, pub text: String }
+/// What people told the task, oldest first.
+pub fn told(id: &str) -> Vec<Told> {
+    read_lines(&file(id)).iter().map(|e| Told { by: e.t("by"), at: e.i("at"), text: e.t("told") }).filter(|t| !t.text.is_empty() && t.by != BOARD).collect()
 }
 /// Text the board typed into the box of the task's agent or reviewer. Where it starts with what a person typed since
 /// the board last typed anything, it is their words on their way in, and stays theirs.

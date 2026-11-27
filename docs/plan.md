@@ -21,7 +21,7 @@ task ─► the plan is written (nothing changes) ─► yes: you, or the review
 
 | Setting | Values | Means |
 |---|---|---|
-| `plan.approve` | `none` (built in), `you`, `reviewer` | `none`: no plan, the agent builds at once. `you`: the agent writes its plan and the task waits as **plan ready** for your yes. `reviewer`: the reviewer checks the plan against the task's description, and the build goes on by itself when the plan passes |
+| `plan.approve` | `none` (built in), `you`, `reviewer` | `none`: no plan, the agent builds at once. `you`: the agent writes its plan and the task waits as **plan ready** for your yes. `reviewer`: the reviewer checks the plan against the task's description and what you told it since, and the build goes on by itself when the plan passes |
 | `plan.agent` | `none` (built in), or a program with an optional model after a slash (`claude/claude-opus-5-5`) | who writes the plan. `none`: the working agent. A program: a planner of its own |
 
 - Both are work [settings](settings.md) like every other: looked up task → your entry for the repo → you → built in; set
@@ -51,8 +51,9 @@ the same part. You do one of two things:
 ## The reviewer's look
 
 With `plan.approve: reviewer`, the reviewer (`reviewer.agent`, in a tab named `Plan review`) reads the plan and the code
-it speaks of, and answers as it does for work: does building this plan do what the task asked, and a list of findings by
-severity. [The gate](gate.md) decides by the same rule (`review.mustFix`):
+it speaks of, against the task's description and what you or a coordinator told the task since (they win where they
+differ: [how work gets done](how-work-gets-done.md)), and answers as it does for work: does building this plan do what
+the task asked, and a list of findings by severity. [The gate](gate.md) decides by the same rule (`review.mustFix`):
 
 - the plan passes: the build goes on, and nobody is asked;
 - it fails: the plan goes back to its writer with the reviewer's points, by itself, up to `review.rounds` times;

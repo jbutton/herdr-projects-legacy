@@ -8,6 +8,9 @@ use sw::board::view::talk::talk;
 use sw::json::*;
 use sw::store::said_by::{note_board, note_person, senders};
 
+/// What people told a task, in its reviewers' briefs: newest last, over the details, never the board's own.
+mod review_told;
+
 fn sent_by(r: &Obj) -> Vec<(String, String)> { talk(r).parts.into_iter().filter(|p| p.sent).map(|p| (p.by, p.text.lines().next().unwrap_or("").to_string())).collect() }
 
 #[test]
