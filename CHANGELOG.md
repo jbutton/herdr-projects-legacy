@@ -118,3 +118,4 @@ each. This copy makes no version tags yet, so the list is one section.
   few minutes and the program is in another one. A conversation Claude Code kept running in its background is taken
   back by itself: the board waits until it is still, runs `claude stop` and resumes it in the Coordinator's tab, or
   names the two commands to run.
+  ([#40](https://github.com/jbutton/herdr-projects-legacy/pull/40))
